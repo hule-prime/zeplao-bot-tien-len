@@ -1,0 +1,77 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Tiến lên miền nam</title>
+<link rel="stylesheet" href="style.css">
+
+<!-- Four screens in one page, one of them showing at a time, inside a shell that never moves:
+     who you are and what you have at the top, what to do at the bottom, the game in between.
+     Built up front rather than written into innerHTML on every push — a hand of thirteen cards
+     redrawn from a string every time somebody else plays loses which card was half-selected
+     under the reader's thumb. -->
+<div id="app">
+
+  <!-- Always there, from the first frame, whatever screen is showing. What is in the purse is
+       the number every other number in here is about, and hunting for it is not a thing anybody
+       should have to do. -->
+  <header id="purse">
+    <span class="me-face" id="me-face"></span>
+    <span class="me-name" id="me-name"></span>
+    <span class="purse-gold" id="purse-gold"><i class="coin"></i><b class="amount" id="purse-amount">…</b></span>
+    <button class="purse-add" id="purse-add" hidden>+</button>
+  </header>
+
+  <main id="screen">
+    <!-- Choosing what to play, one question at a time.
+         Built in JS rather than written out here, because it is a *flow*: two ways in, then how
+         many seats, then what for. Laying all of that out at once was eleven buttons on the
+         first thing anybody sees. -->
+    <section id="menu" hidden>
+      <div id="menu-body"></div>
+    </section>
+
+    <!-- Tables anybody has open, and the board. -->
+    <section id="browse" hidden></section>
+
+    <!-- The advertisement. Its own screen because that is what an advertisement is: the thing
+         you are looking at instead of the thing you wanted. -->
+    <section id="ads" hidden></section>
+
+    <!-- A table: the felt, whoever is round it, and whatever is in the middle. The same element
+         through the waiting and the playing, because a seat filling up while you look at it is
+         what makes a waiting room feel like a table rather than a form. -->
+    <section id="table" hidden>
+      <div id="felt">
+        <div id="felt-top"></div>
+        <div id="seats"></div>
+        <!-- The pile and the line naming who played it, as one thing in the middle. Two
+             absolutely placed elements drifted apart the moment a fourth seat wanted the
+             bottom of the felt. -->
+        <div id="middle">
+          <div id="pile"></div>
+          <div id="pile-note"></div>
+        </div>
+        <div id="result" hidden></div>
+      </div>
+      <div id="mine">
+        <div id="mine-bar"></div>
+        <div id="hand"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- The only place anything can be said. A widget cannot open a dialog — `alert` and
+       `confirm` are blocked by the sandbox and hand back at once. -->
+  <div id="says"></div>
+
+  <div id="buttons"></div>
+
+  <!-- Where to go, at the bottom where a thumb is. Only while there is somewhere to go: in a
+       game there is one thing on this frame, which is the game. -->
+  <nav id="tabs"></nav>
+</div>
+
+<!-- Put into every bundle by the platform. Loaded before the game so window.Zeplao is there
+     whether this is running on a phone or in a browser. -->
+<script src="zeplao.js"></script>
+<script src="tienlen.js"></script>

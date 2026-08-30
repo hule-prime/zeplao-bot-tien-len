@@ -1,0 +1,721 @@
+// The bot played end to end against a stand-in for the app.
+//
+// The rules have their own suite and it deals a thousand hands. This is the other half: the
+// part that talks. Sessions, who may act on which screen, which push goes to whom, a table in
+// one group filling up with somebody from another — none of it is reachable from a pure
+// function, and all of it is where a card game goes wrong in the way that matters.
+//
+// The stand-in answers the methods this bot calls, writes down everything it was sent, and
+// **enforces the one rule the whole session design turns on**: a session may only be opened for
+// somebody who is in its conversation. Without that here, a test would happily prove that
+// people in different groups can play together while production refused it.
+//
+// Set before the module is loaded, and loaded by hand for that reason: an `import` at the top
+// of a file runs before any statement in it, so a static import would read the pauses from the
+// environment as it was — nine hundred milliseconds a move and ten seconds an advertisement,
+// which is right in a chat and is minutes of a test.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { writeFileSync } from 'node:fs';
+
+const LEDGER = '/tmp/tienlen-flow-scores.json';
+process.env.TIENLEN_THINK_MS = '1';
+process.env.TIENLEN_ADS_MS = '150';
+process.env.TIENLEN_SCORES = LEDGER;
+
+const {
+  run, chooseMove, shapeOf, nameOf, DAILY_GOLD, BOT_STAKE, ADS_GOLD, dayIn,
+} = await import('./tienlenbot.mjs');
+
+const nap = (ms) => new Promise((done) => setTimeout(done, ms));
+
+/// Everything the app would be, for as long as a game takes.
+function standIn(rooms = { c1: ['u1', 'u2'] }) {
+  const app = {
+    updates: [],
+    next: 1,
+    pushes: [],
+    sessions: new Map(),
+    said: [],
+    rooms,
+    refused: [],        // every showSession the conversation rule turned away
+    sessionNo: 0,
+  };
+
+  const server = createServer(async (request, reply) => {
+    const [path] = request.url.slice(1).split('?');
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    const sent = body ? JSON.parse(body) : {};
+
+    const answer = (value, status = 200) => {
+      reply.writeHead(status, { 'Content-Type': 'application/json' });
+      reply.end(JSON.stringify(value));
+    };
+
+    switch (path) {
+      case 'getMe':
+        return answer({ id: 'bot', username: 'tienlen', displayName: 'Tiến Lên' });
+
+      case 'getUpdates': {
+        // Answered from `offset`, the way the real one is: everything after that id, and the
+        // id is also the acknowledgement. Nothing is thrown away — which is the whole point,
+        // because a bot that starts again from nought is handed all of it back.
+        //
+        // A short poll rather than a long one. The bot is written for a server that holds the
+        // request open; a stand-in that did the same would make every assertion here wait.
+        const from = Number(new URL(request.url, 'http://x').searchParams.get('offset')) || 0;
+        const taking = app.updates.filter((one) => one.id > from);
+        if (!taking.length) await nap(10);
+        return answer(taking);
+      }
+
+      case 'createSession': {
+        const id = `s${++app.sessionNo}`;
+        app.sessions.set(id, { id, conversationId: sent.conversationId, live: true });
+        return answer({ id });
+      }
+
+      case 'showSession': {
+        const session = app.sessions.get(sent.sessionId);
+        // The rule the whole design is built round, enforced here so the design is actually
+        // tested against it.
+        if (sent.to && !(app.rooms[session.conversationId] ?? []).includes(sent.to)) {
+          app.refused.push({ sessionId: sent.sessionId, to: sent.to });
+          return answer({ error: 'not_in_conversation' }, 400);
+        }
+        return answer({ id: sent.sessionId });
+      }
+
+      case 'pushState':
+        app.pushes.push({ sessionId: sent.sessionId, to: sent.to ?? null, state: sent.state });
+        return answer({ sent: 1 });
+
+      case 'endSession': {
+        const session = app.sessions.get(sent.sessionId);
+        if (session) session.live = false;
+        return answer({ id: sent.sessionId });
+      }
+
+      case 'sendMessage':
+        app.said.push(sent);
+        return answer({ id: `m${app.said.length}` });
+
+      default:
+        // setCommands, setMe, endSessions, editMessage, deleteMessage, answerCallback. None of
+        // them tell this bot anything it acts on.
+        return answer({ ended: 0 });
+    }
+  });
+
+  server.listen(0, '127.0.0.1');
+  app.ready = once(server, 'listening').then(() => {
+    app.api = `http://127.0.0.1:${server.address().port}`;
+  });
+  app.close = () => new Promise((done) => server.close(done));
+
+  /// The last thing this person was sent by name — which, for anybody at a table, is the one
+  /// that has their hand in it.
+  app.mine = (userId) => {
+    for (let i = app.pushes.length - 1; i >= 0; i--) {
+      if (app.pushes[i].to === userId) return app.pushes[i].state;
+    }
+    return null;
+  };
+
+  app.say = (update) => { app.updates.push({ id: ++app.next, ...update }); };
+
+  /// Everything the app was ever told, kept — the ring the real server keeps per bot.
+  app.replayable = () => app.updates.length;
+
+  app.asks = (userId, conversationId = 'c1') => app.say({
+    kind: 'message',
+    message: {
+      conversationId,
+      conversationType: 'group',
+      from: { userId, displayName: NAMES[userId] },
+      command: 'tienlen',
+    },
+  });
+
+  /// A widget action, from the screen this person has open.
+  app.does = (userId, action) => {
+    const session = [...app.sessions.keys()].reverse().find((id) => app.opened[userId] === id);
+    app.say({
+      kind: 'widget_action',
+      widgetAction: {
+        sessionId: session,
+        conversationId: app.sessions.get(session).conversationId,
+        from: { userId, displayName: NAMES[userId] },
+        role: 'player',
+        action,
+      },
+    });
+  };
+
+  /// Which session belongs to whom, read off the pushes rather than guessed: a push addressed
+  /// to somebody is the bot saying which screen is theirs.
+  app.opened = new Proxy({}, {
+    get: (_, userId) => {
+      for (let i = app.pushes.length - 1; i >= 0; i--) {
+        if (app.pushes[i].to === userId) return app.pushes[i].sessionId;
+      }
+      return null;
+    },
+  });
+
+  /// Waits for the bot to have got somewhere rather than for a length of time.
+  app.until = async (what, why) => {
+    for (let waited = 0; waited < 8000; waited += 10) {
+      if (what()) return;
+      await nap(10);
+    }
+    assert.fail(`gave up waiting: ${why}`);
+  };
+
+  return app;
+}
+
+const NAMES = { u1: 'Thọ', u2: 'Lan Anh', u3: 'Minh', u9: 'Người lạ' };
+
+/// The ledger this run starts from. Written before the bot is started, because it is read once
+/// on the way up.
+function ledger(people = {}) {
+  // `offset` too, and explicitly. It is how far through the updates the last run got, and a
+  // leftover from the test before would make this bot ignore everything this one says.
+  writeFileSync(LEDGER, JSON.stringify({ people, offset: 0 }));
+}
+
+async function withBot(work, rooms) {
+  const app = standIn(rooms);
+  await app.ready;
+
+  const stopping = new AbortController();
+  const running = run('a1b2c3d4e5f6:test', { signal: stopping.signal, api: app.api });
+
+  try {
+    await work(app);
+  } finally {
+    stopping.abort();
+    await running.catch(() => {});
+    await app.close();
+  }
+}
+
+/// Takes the day's gold, the way somebody opening the game does.
+async function claim(app, userId) {
+  if (!app.mine(userId).daily) return;
+  const had = app.mine(userId).gold;
+  app.does(userId, { daily: true });
+  await app.until(() => app.mine(userId).gold > had, `the day's gold for ${userId}`);
+}
+
+/// Answers for whichever of these people is on the move. False when none of them is.
+async function oneMove(app, who) {
+  const turn = who.find((id) => {
+    const seen = app.mine(id);
+    return seen && seen.phase === 'playing' && seen.me
+      && seen.me.hand.length && seen.turn === seen.me.seat;
+  });
+  if (!turn) { await nap(15); return false; }
+
+  const now = app.mine(turn);
+  const cards = chooseMove(now.me.hand, now.pile ? shapeOf(now.pile.cards) : null, {
+    lowest: 13,
+    mustInclude: now.opensWith ?? null,
+  });
+
+  // Everything a move could change. Not just whose turn it is: passing last in a round leaves
+  // the turn where it was and clears the table instead, which is winning the round.
+  const was = JSON.stringify([now.turn, now.pile, now.me.hand.length, now.phase]);
+  app.does(turn, cards ? { play: cards } : { pass: true });
+
+  await app.until(() => {
+    const after = app.mine(turn);
+    return JSON.stringify([after.turn, after.pile, after.me.hand.length, after.phase]) !== was;
+  }, `the table to move after ${cards ? cards.map(nameOf) : 'a pass'}`);
+  return true;
+}
+
+/// Plays a table out, answering for all of these people until none of them is at it any more.
+async function playOut(app, who) {
+  for (let move = 0; move < 400; move++) {
+    // Somebody who went back to the lobby is not waiting for anything, so "over" is not the
+    // only way to be finished with a table.
+    const stillAt = who.filter((id) => (app.mine(id) ?? {}).phase === 'playing');
+    if (!stillAt.length) return;
+    await oneMove(app, who);
+  }
+  assert.fail('the table never finished');
+}
+
+// ---- the ordinary thing ------------------------------------------------------------------------
+
+test('a table against three machines is dealt, played, placed and paid', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+
+    const lobby = app.mine('u1');
+    assert.equal(lobby.phase, 'choosing');
+    assert.equal(lobby.gold, 0, 'nothing arrives by itself');
+    assert.equal(lobby.daily, DAILY_GOLD, 'the day\'s gold is there to be taken');
+
+    app.does('u1', { daily: true });
+    await app.until(() => app.mine('u1').gold === DAILY_GOLD, 'the day\'s gold');
+    assert.equal(app.mine('u1').daily, 0, 'and is not there to be taken twice');
+
+    app.does('u1', { solo: 4 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a hand');
+
+    const dealt = app.mine('u1');
+    assert.equal(dealt.seats.length, 4);
+    assert.equal(dealt.seats.filter((one) => one.bot).length, 3);
+    assert.equal(dealt.me.hand.length, 13);
+    assert.equal(dealt.stake, BOT_STAKE, 'the house\'s stake, not a room\'s');
+
+    await playOut(app, ['u1']);
+
+    const over = app.mine('u1');
+    assert.equal(over.ranking.length, 4, 'everybody gets a place');
+    assert.equal(over.ranking[0].place, 'Nhất');
+    assert.equal(over.ranking[3].place, 'Bét');
+
+    assert.equal(over.paid.length, 1, 'the machines are furniture and are not paid');
+    const paid = over.paid[0];
+    assert.equal(paid.userId, 'u1');
+    assert.ok([2000, 1000, -1000, -2000].includes(paid.change), `paid ${paid.change}`);
+    assert.equal(over.gold, DAILY_GOLD + paid.change, 'and the ledger says the same');
+  });
+});
+
+test('nothing sent to the room ever carries a hand', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { solo: 4 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a hand');
+
+    // Let the machines answer each other, so there are plenty of pushes to look through.
+    await nap(300);
+
+    for (const push of app.pushes) {
+      if (push.to === null) {
+        assert.equal(push.state.me, undefined, 'a push to everybody carried somebody\'s hand');
+        for (const seat of push.state.seats ?? []) {
+          assert.ok(typeof seat.cards === 'number' || seat.cards === null,
+            'a seat in the table everybody sees should carry a count, not cards');
+        }
+      } else {
+        assert.equal(push.to, 'u1', 'a hand went to somebody who is not at the table');
+      }
+    }
+
+    assert.ok(app.pushes.some((push) => push.to === 'u1' && push.state.me?.hand.length),
+      'and one of them did carry a hand, or this test proves nothing');
+  });
+});
+
+// ---- the world -----------------------------------------------------------------------------------
+
+test('two people in different groups sit at the same table', async () => {
+  // The point of one session per person. A session belongs to a conversation and cannot be
+  // opened for anybody outside it — the stand-in enforces that above — so a table with a
+  // session of its own could only ever be played by the room it was opened in.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen in c1');
+    await claim(app, 'u1');
+    app.asks('u2', 'c2');
+    await app.until(() => app.mine('u2'), 'a screen in c2');
+    await claim(app, 'u2');
+
+    assert.notEqual(app.opened.u1, app.opened.u2, 'two screens, not one shared table');
+    assert.equal(app.sessions.get(app.opened.u1).conversationId, 'c1');
+    assert.equal(app.sessions.get(app.opened.u2).conversationId, 'c2');
+
+    app.does('u1', { open: 2, stake: 1000 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'lobby', 'a table for two');
+
+    assert.equal(app.said.length, 1, 'one line, in the room it was opened from');
+    assert.equal(app.said[0].conversationId, 'c1');
+
+    // And somebody in a different group finds it, because the list is everybody's.
+    await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the table on u2\'s list');
+    const there = app.mine('u2').rooms[0];
+    assert.equal(there.stake, 1000);
+    assert.deepEqual(there.names, ['Thọ']);
+
+    app.does('u2', { join: there.id });
+    await app.until(() => (app.mine('u2') ?? {}).phase === 'playing', 'the table to deal');
+
+    const started = app.mine('u2');
+    assert.deepEqual(started.seats.map((one) => one.name).sort(), ['Lan Anh', 'Thọ']);
+    assert.ok(started.seats.every((one) => !one.bot), 'no machine at a table two people filled');
+    assert.equal(started.me.hand.length, 13);
+
+    assert.deepEqual(app.refused, [],
+      'nothing was ever shown to somebody outside its own conversation');
+
+    // Each of them was sent their own thirteen, and they are not the same thirteen.
+    const hands = ['u1', 'u2'].map((id) => app.mine(id).me.hand);
+    assert.equal(hands[0].filter((card) => hands[1].includes(card)).length, 0,
+      'the same card was dealt to both of them');
+
+    await playOut(app, ['u1', 'u2']);
+
+    const over = app.mine('u1');
+    assert.equal(over.paid.length, 2);
+    assert.deepEqual(over.paid.map((one) => one.change).sort((a, b) => a - b), [-1000, 1000],
+      'a stake, one way');
+  }, { c1: ['u1'], c2: ['u2'] });
+});
+
+test('a stake has to be in hand before sitting down, and again for a rematch', async () => {
+  ledger({ u2: { name: 'Lan Anh', gold: 400, games: 1, first: 0, last: 1, day: dayIn(), ads: 0 } });
+  await withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'u1');
+    await claim(app, 'u1');
+    app.asks('u2', 'c2');
+    await app.until(() => app.mine('u2'), 'u2');
+    assert.equal(app.mine('u2').gold, 400, 'no bonus twice in a day');
+
+    app.does('u1', { open: 2, stake: 1000 });
+    await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the table');
+
+    app.does('u2', { join: app.mine('u2').rooms[0].id });
+    await app.until(() => !!app.mine('u2').says, 'a refusal');
+
+    assert.match(app.mine('u2').says, /1\.000/);
+    assert.equal(app.mine('u2').phase, 'choosing', 'and they are still where they were');
+    assert.equal(app.mine('u1').seats.length, 1, 'and the seat is still free');
+  }, { c1: ['u1'], c2: ['u2'] });
+});
+
+// ---- the advertisement -----------------------------------------------------------------------------
+
+test('the advertisement pays after ten seconds, and the ten seconds are counted here', async () => {
+  // The page draws the clock; this decides whether it ran. A countdown a widget runs is a
+  // countdown a widget can skip, because a widget is a file anybody can edit.
+  ledger({ u1: { name: 'Thọ', gold: 0, games: 4, first: 0, last: 4, day: dayIn(), ads: 0 } });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+
+    assert.equal(app.mine('u1').gold, 0);
+    assert.equal(app.mine('u1').broke, true, 'and it says so, which is what shows the button');
+
+    app.does('u1', { ads: 'start' });
+    await app.until(() => !!app.mine('u1').adsEndsAt, 'the advertisement to start');
+
+    // Straight away, the way an edited page would ask.
+    app.does('u1', { ads: 'claim' });
+    await nap(120);
+    assert.equal(app.mine('u1').gold, 0, 'claiming early pays nothing');
+
+    await nap(200);
+    app.does('u1', { ads: 'claim' });
+    await app.until(() => app.mine('u1').gold === ADS_GOLD, 'the gold');
+
+    assert.equal(app.mine('u1').adsEndsAt, null, 'and the advertisement is over');
+    assert.equal(app.mine('u1').broke, false, 'and there is a table to sit at again');
+  });
+});
+
+test('an advertisement is not offered to somebody who has gold', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    assert.equal(app.mine('u1').broke, false);
+
+    app.does('u1', { ads: 'start' });
+    await nap(150);
+    assert.equal(app.mine('u1').adsEndsAt, null, 'and asking for one anyway does nothing');
+  });
+});
+
+// ---- whose screen is whose ---------------------------------------------------------------------------
+
+test('somebody who is only watching cannot play a card', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { solo: 4 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a hand');
+
+    const playing = app.mine('u1');
+
+    // The whole of the attack: a stranger, the cards they can see if they open the widget from
+    // the room's list of live sessions, and a session the server will happily call them a
+    // player of — because every session here has exactly one player.
+    app.say({
+      kind: 'widget_action',
+      widgetAction: {
+        sessionId: app.opened.u1,
+        conversationId: 'c1',
+        from: { userId: 'u9', displayName: 'Người lạ' },
+        role: 'player',
+        action: { play: playing.me.hand.slice(0, 1) },
+      },
+    });
+    await nap(150);
+
+    assert.equal(app.mine('u1').me.hand.length, playing.me.hand.length,
+      'somebody else\'s screen moved a hand');
+  });
+});
+
+test('the leaderboard is the world, counted in gold', async () => {
+  ledger({
+    u1: { name: 'Thọ', gold: 40_000, games: 9, first: 5, last: 1, day: dayIn(), ads: 0 },
+    u2: { name: 'Lan Anh', gold: 90_000, games: 3, first: 3, last: 0, day: dayIn(), ads: 0 },
+    u3: { name: 'Minh', gold: 0, games: 0, first: 0, last: 0, day: dayIn(), ads: 0 },
+  });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+
+    const board = app.mine('u1').table;
+    assert.deepEqual(board.map((one) => one.name), ['Lan Anh', 'Thọ'],
+      'most gold first, and nobody who has not played');
+    assert.equal(board[0].gold, 90_000);
+    assert.equal(app.mine('u1').worldTable, undefined, 'there is only the world now');
+  });
+});
+
+test('one person is one purse, whichever group they walk into', async () => {
+  // Said in as many words. A ledger keyed by anything but the person — the room, the screen,
+  // the session — would give somebody a different pile of gold in every group they are in, and
+  // the one they were looking at would always be the one that was wrong.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen in c1');
+    await claim(app, 'u1');
+    const first = app.opened.u1;
+
+    // A hand against the machines, so the gold has actually moved.
+    app.does('u1', { solo: 4 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a hand');
+    await playOut(app, ['u1']);
+    const after = app.mine('u1').gold;
+    assert.notEqual(after, DAILY_GOLD, 'the table should have paid or charged something');
+
+    // The same person, saying the bot's name in a completely different group.
+    app.asks('u1', 'c2');
+    await app.until(() => app.opened.u1 !== first, 'a screen in c2');
+
+    assert.equal(app.mine('u1').gold, after, 'the purse followed the person, not the room');
+    assert.equal(app.sessions.get(app.opened.u1).conversationId, 'c2');
+    assert.equal(app.sessions.get(first).live, false,
+      'and the screen they left behind is closed rather than left open in the old room');
+
+    // The day is not given twice for walking into a second group either — which the equality
+    // above already proves, since a second day's gold would have moved the number.
+    assert.equal(app.mine('u1').gold, after);
+  }, { c1: ['u1'], c2: ['u1'] });
+});
+
+test('and the table they were at comes with them', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { solo: 4 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a hand');
+
+    const hand = app.mine('u1').me.hand.length;
+    app.asks('u1', 'c2');
+    await app.until(() => app.mine('u1').phase === 'playing'
+      && app.sessions.get(app.opened.u1).conversationId === 'c2', 'the table, in the new room');
+
+    assert.equal(app.mine('u1').me.hand.length, hand,
+      'walking into another group should not cost somebody the hand they were holding');
+  }, { c1: ['u1'], c2: ['u1'] });
+});
+
+test('coming first is paid at once, and leaving after it is not walking out', async () => {
+  // The complaint this is for: somebody who went out first had to sit through however long the
+  // other two took, and the only button on the screen forfeited the hand they had just won.
+  ledger();
+  await withBot(async (app) => {
+    for (const [id, room] of [['u1', 'c1'], ['u2', 'c2'], ['u3', 'c3']]) {
+      app.asks(id, room);
+      await app.until(() => app.mine(id), `a screen for ${id}`);
+      await claim(app, id);
+    }
+
+    app.does('u1', { open: 3, stake: 1000 });
+    await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the table on the list');
+    const table = app.mine('u2').rooms[0].id;
+
+    app.does('u2', { join: table });
+    await app.until(() => (app.mine('u2') ?? {}).phase === 'lobby', 'u2 seated');
+    app.does('u3', { join: table });
+    await app.until(() => ['u1', 'u2', 'u3'].every((id) => app.mine(id).phase === 'playing'),
+      'the table to deal itself');
+
+    // Play until somebody is out of cards with the table still going. At three seats that is
+    // the first two people to finish, so it always happens.
+    let first = null;
+    for (let move = 0; move < 400 && !first; move++) {
+      first = ['u1', 'u2', 'u3'].find((id) => {
+        const seen = app.mine(id);
+        return seen.phase === 'playing' && seen.me && seen.me.hand.length === 0;
+      });
+      if (!first) await oneMove(app, ['u1', 'u2', 'u3']);
+    }
+    assert.ok(first, 'somebody should have gone out before the table finished');
+
+    const won = app.mine(first);
+    const paid = (won.paid ?? []).find((one) => one.userId === first);
+    assert.ok(paid, 'paid at the moment of going out, not at the end of the table');
+    assert.equal(paid.place, 'Nhất');
+    assert.equal(paid.change, 1000, 'a stake, off whoever comes last');
+    assert.equal(won.gold, DAILY_GOLD + 1000, 'and the purse already says so');
+
+    // And now they can put it down. This is not forfeiting.
+    app.does(first, { leave: true });
+    await app.until(() => app.mine(first).phase === 'choosing', 'back to the lobby');
+    assert.equal(app.mine(first).gold, DAILY_GOLD + 1000, 'and are not charged for leaving');
+
+    // The other two play it out, and the place stands.
+    const rest = ['u1', 'u2', 'u3'].filter((id) => id !== first);
+    await playOut(app, rest);
+
+    const over = app.mine(rest[0]);
+    assert.equal(over.phase, 'over');
+    assert.equal(over.ranking[0].id, first, 'whoever went out first is still first');
+    assert.equal(over.paid.find((one) => one.userId === first).change, 1000);
+    assert.equal(over.seats.find((one) => one.id === first).gone, false,
+      'and is not drawn as somebody who walked out');
+
+    // Nobody was paid twice, and the gold still adds to nothing.
+    const moved = over.paid.reduce((sum, one) => sum + one.change, 0);
+    assert.equal(moved, 0, `the table made ${moved} gold out of nothing`);
+  }, { c1: ['u1'], c2: ['u2'], c3: ['u3'] });
+});
+
+test('the day\'s gold is taken rather than given, and only once a day', async () => {
+  // Gold that arrives on the way in is gold nobody remembers arriving. It waits on the first
+  // screen with a button on it, and the button is the point.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+
+    assert.equal(app.mine('u1').gold, 0, 'opening the widget pays nobody');
+    assert.equal(app.mine('u1').daily, DAILY_GOLD, 'it is waiting to be taken');
+
+    app.does('u1', { daily: true });
+    await app.until(() => app.mine('u1').gold === DAILY_GOLD, 'the gold');
+    assert.equal(app.mine('u1').daily, 0);
+
+    // Pressed again, the way a button pressed twice before the first push lands is pressed.
+    app.does('u1', { daily: true });
+    app.does('u1', { daily: true });
+    await nap(200);
+    assert.equal(app.mine('u1').gold, DAILY_GOLD, 'and not once more for pressing again');
+
+    // And it is still gone after walking into another group, because it belongs to the person.
+    app.asks('u1', 'c2');
+    await app.until(() => app.sessions.get(app.opened.u1).conversationId === 'c2', 'a screen in c2');
+    assert.equal(app.mine('u1').daily, 0);
+    assert.equal(app.mine('u1').gold, DAILY_GOLD);
+  }, { c1: ['u1'], c2: ['u1'] });
+});
+
+test('somebody who took it yesterday is offered it again today', async () => {
+  ledger({
+    u1: { name: 'Thọ', gold: 300, games: 2, first: 0, last: 2, claimed: '2020-01-01', adsDay: '', ads: 0 },
+  });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+
+    assert.equal(app.mine('u1').daily, DAILY_GOLD);
+    // And it is the better of the two offers, so the advertisement waits its turn.
+    assert.equal(app.mine('u1').broke, true, 'three hundred is not a table');
+
+    app.does('u1', { daily: true });
+    await app.until(() => app.mine('u1').gold === 300 + DAILY_GOLD, 'the gold');
+    assert.equal(app.mine('u1').broke, false);
+  });
+});
+
+test('a row written before the reward was a button still works', async () => {
+  // The old shape had one field doing two jobs: the day the gold was given, and the day the
+  // advertisements were counted from. Rows in the file predate the split.
+  ledger({
+    u1: { name: 'Thọ', gold: 5000, games: 3, first: 1, last: 1, day: dayIn(), ads: 4 },
+  });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+
+    assert.equal(app.mine('u1').gold, 5000, 'and nobody is paid twice by the migration');
+    assert.equal(app.mine('u1').daily, 0, 'today\'s was already taken under the old name');
+    assert.equal(app.mine('u1').adsLeft, 16, 'and the four they had watched still count');
+  });
+});
+
+test('a restart carries on rather than replaying everything anybody ever said', async () => {
+  // What this is for, exactly as it happened on the first deploy anybody was using: seven
+  // `opening for thuongd` in a row and four `answerCallback answered 404`. `offset` is both the
+  // question and the acknowledgement and there is no other one, so a bot starting again from
+  // nought is handed the whole ring back — every `/tienlen` said that hour replayed, every
+  // button pressed answered long after its id had expired. From the room's side that is a
+  // widget opening itself on your screen because somebody deployed.
+  ledger();
+  const app = standIn();
+  await app.ready;
+
+  const first = new AbortController();
+  const running = run('a1b2c3d4e5f6:test', { signal: first.signal, api: app.api });
+
+  app.asks('u1');
+  await app.until(() => app.mine('u1'), 'a screen');
+  app.does('u1', { daily: true });
+  await app.until(() => app.mine('u1').gold === DAILY_GOLD, 'the day\'s gold');
+
+  const said = app.replayable();
+  assert.ok(said >= 2, 'the ring should be holding what was said');
+  const sessionsMade = app.sessions.size;
+  const pushesBefore = app.pushes.length;
+
+  first.abort();
+  await running.catch(() => {});
+
+  // Up again, on the same ledger, with everything still sitting in the ring.
+  const second = new AbortController();
+  const again = run('a1b2c3d4e5f6:test', { signal: second.signal, api: app.api });
+  try {
+    await nap(400);
+    assert.equal(app.replayable(), said, 'nothing new was said in between');
+    assert.equal(app.sessions.size, sessionsMade,
+      'and nothing was opened again — a deploy should not put a widget on somebody\'s screen');
+
+    // The one thing that should have happened is the sweep of sessions left by the dead run.
+    assert.ok(app.pushes.length >= pushesBefore);
+
+    // And it still works: a new thing said is still heard.
+    app.asks('u1');
+    await app.until(() => app.sessions.size > sessionsMade, 'a screen when actually asked for');
+  } finally {
+    second.abort();
+    await again.catch(() => {});
+    await app.close();
+  }
+});

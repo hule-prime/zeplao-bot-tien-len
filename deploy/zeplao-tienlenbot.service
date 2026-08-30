@@ -1,0 +1,50 @@
+# The tiến lên bot, running as its own service.
+#
+# This is the point of deploying it at all: a bot is a client of the public API, not part of
+# it, and must not be able to take it down. Its own container, its own restart loop, no share
+# in the blue-green handover. A deploy of the API neither restarts this nor waits for it, and
+# if this crashes in a loop the thing that suffers is this.
+#
+# In a container because the server has no Node and should not grow one for a bot — and
+# because a bot from a stranger would run this way too. It reaches the API over the public
+# hostname the same as a bot on somebody's laptop; there is no inside route.
+#
+# On the server at /etc/systemd/system/zeplao-tienlenbot.service.
+#
+# The token is not in this file and not in git. It is in /opt/zeplao/tienlenbot/.env, readable
+# only by root, because a bot token is the whole of that bot.
+#
+# /opt/zeplao/tienlenbot/data is the one place this may write. A bot keeps its own state on its
+# own side — the app stores nothing for it — and a table of who has come first is worth nothing
+# if it starts again at every deploy.
+
+[Unit]
+Description=Zeplao tiến lên bot
+After=network-online.target docker.service
+Requires=docker.service
+# In [Unit], not [Service]. systemd on this host does not know it there and says so on every
+# single daemon-reload — a warning printed at every deploy is a warning nobody reads.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# --rm so a restart is not a pile of dead containers; --network host is deliberately not used,
+# because this has no business on the host's network stack.
+ExecStartPre=-/usr/bin/docker rm -f zeplao-tienlenbot
+ExecStart=/usr/bin/docker run --rm --name zeplao-tienlenbot \
+  --env-file /opt/zeplao/tienlenbot/.env \
+  -v /opt/zeplao/tienlenbot/tienlenbot.mjs:/app/tienlenbot.mjs:ro \
+  -v /opt/zeplao/tienlenbot/data:/app/data \
+  -w /app \
+  --memory 192m --cpus 0.25 \
+  node:22-alpine node /app/tienlenbot.mjs
+# Stopped rather than killed. The bot has somewhere for SIGTERM to land and finishes the push
+# it is in the middle of; without the wait, a deploy lands on four screens as a card that was
+# played and a turn that never moved.
+ExecStop=/usr/bin/docker stop -t 10 zeplao-tienlenbot
+Restart=always
+RestartSec=5
+SyslogIdentifier=zeplao-tienlenbot
+
+[Install]
+WantedBy=multi-user.target

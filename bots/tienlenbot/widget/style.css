@@ -1,0 +1,1000 @@
+/* Everything the table needs and nothing loaded from anywhere else — a widget cannot reach
+   the network at all, so a font or an image from a CDN would simply never arrive. The suits
+   are characters in every system font, which is the whole reason the cards are type rather
+   than pictures. */
+
+:root {
+  /* A card table is a card table. The frame around this is drawn by the app in the reader's
+     own theme, and a felt that went pale to match it would stop being a felt — so this one
+     palette is the whole of it, and it is dark in both. */
+  --felt: #17694a;
+  --felt-deep: #0d3d2b;
+  --rim: #072318;
+  --ink: #f2f8f4;
+  --muted: #9dbcac;
+  --gold: #e9c46a;
+  --gold-deep: #c99b3c;
+  --card: #fbf8f2;
+  --card-edge: #d9d2c4;
+  --red: #c0392b;
+  --black: #23302a;
+  --danger: #e2807a;
+
+  --card-w: 44px;
+  --card-h: 62px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+/* Above everything, and load-bearing. `hidden` is a rule in the browser's own stylesheet, and
+   every screen in here sets a `display` of its own — which wins, so `hidden` did nothing at all
+   and the menu, the list and the table were drawn on top of each other. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--rim);
+  user-select: none;
+}
+
+/* The frame is a fixed box, so something has to give when the room runs out. This says what:
+   the felt shrinks and the hand and the buttons keep the room they need. Before this the felt
+   took what it wanted and pushed the buttons below the bottom edge, where nothing said they
+   were there. */
+#app {
+  height: 100%;
+  padding: 7px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  position: relative;
+}
+
+/* The one part that never scrolls and never moves. Everything that changes happens between the
+   purse and the tabs. */
+#screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- the purse ---------------------------------------------------------------------------- */
+
+/* A bar, from the first frame, on every screen. Somebody opening this should not have to go
+   anywhere to find out what they have — the whole game is played for it. */
+#purse {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 5px;
+  border-radius: 13px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.me-face {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 750;
+  color: var(--rim);
+  background: linear-gradient(160deg, #f6d98a, var(--gold-deep));
+}
+
+.me-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.purse-gold {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px 4px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(233, 196, 106, 0.28);
+}
+
+.purse-gold .amount {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
+}
+
+.coin {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #f6d98a, var(--gold-deep));
+  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* The way back when there is no table left to sit at, reachable from wherever they are rather
+   than only from the screen that happens to show the card. */
+.purse-add {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  color: #2a1e05;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* What this table costs, beside the purse while there is a table. */
+#purse .stake {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* ---- the two screens, and which one is showing ------------------------------------------- */
+
+#tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 13px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+#tabs button {
+  flex: 1;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 650;
+  font-size: 11.5px;
+  padding: 7px 4px 6px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+#tabs button i {
+  font-style: normal;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+#tabs button.on {
+  color: var(--rim);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+}
+
+#tabs button.on i { opacity: 1; }
+
+/* A count, when there is something to count — and a bare dot when the thing waiting on a tab
+   has no number to it. */
+#tabs button u.dot {
+  font-size: 0;
+  min-width: 8px;
+  height: 8px;
+  padding: 0;
+  background: var(--gold);
+  margin: -7px 0 0 18px;
+}
+
+#tabs button u {
+  position: absolute;
+  margin: -9px 0 0 16px;
+  text-decoration: none;
+  font-size: 9px;
+  font-weight: 800;
+  min-width: 14px;
+  padding: 1px 3px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #2a0d0b;
+}
+
+/* ---- choosing what to play ---------------------------------------------------------------- */
+
+#menu {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Centred while there is room and pinned to the top when there is not. Plain `center` on a
+     scrolling box puts the overflow *above* the scroll origin, where it cannot be reached. */
+  justify-content: center;
+  justify-content: safe center;
+  gap: 9px;
+  overflow-y: auto;
+  padding: 2px 1px;
+}
+
+#menu-body { display: flex; flex-direction: column; gap: 9px; }
+
+.brand {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: 0.3px;
+  color: var(--gold);
+  margin: 2px 0 4px;
+}
+
+/* One way in, big enough to be the only thing anybody has to decide about. */
+.big {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 13px 13px 13px 12px;
+  border-radius: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.big i {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 17px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.big span { flex: 1; min-width: 0; display: block; }
+.big b { display: block; font-size: 14.5px; font-weight: 750; }
+.big em { display: block; font-style: normal; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.big u { flex: none; text-decoration: none; font-size: 17px; color: var(--muted); }
+
+/* The one that pays for itself. */
+.big.gold {
+  border-color: transparent;
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  color: #2a1e05;
+}
+
+.big.gold i { background: rgba(0, 0, 0, 0.14); border-color: rgba(0, 0, 0, 0.12); }
+.big.gold em { color: rgba(42, 30, 5, 0.72); }
+.big.gold u { color: rgba(42, 30, 5, 0.6); }
+
+.big:disabled { opacity: 0.45; cursor: default; }
+
+/* ---- one question at a time ------------------------------------------------------------------ */
+
+.step-head { display: flex; align-items: center; gap: 10px; padding: 0 2px 2px; }
+
+.back {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.step-head b { display: block; font-size: 15px; font-weight: 750; }
+.step-head em { display: block; font-style: normal; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* An answer. Tapping one is the whole of the step — no picking a value and then confirming it. */
+.pick {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  width: 100%;
+  padding: 13px 13px 13px 15px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pick b { font-size: 15px; font-weight: 750; }
+.pick em { flex: 1; font-style: normal; font-size: 11px; color: var(--muted); }
+.pick u { text-decoration: none; font-size: 16px; color: var(--muted); }
+.pick:disabled { opacity: 0.42; cursor: default; }
+.pick.on { border-color: var(--gold); background: rgba(233, 196, 106, 0.14); }
+
+.step-note {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 6px 0;
+  line-height: 1.45;
+}
+
+
+/* ---- the tables other people have open ----------------------------------------------------- */
+
+#browse {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px;
+}
+
+
+/* Said even when the answer is none. Hidden on an empty room, "there are no tables" and "this
+   does not work" look exactly alike, and the person who cannot tell them apart is the one who
+   came looking for a game. */
+.heading {
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 0 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 42px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-names {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.row-seats {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.row-go {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--rim);
+  background: var(--gold);
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+/* A place in the table. Rank, name, score — three columns, so the numbers line up down the
+   page rather than sitting wherever the name happens to end. */
+.rank { flex: none; width: 16px; text-align: right; color: var(--muted); font-size: 11px; }
+.score { flex: none; color: var(--muted); font-size: 11px; }
+.row.me { background: rgba(233, 196, 106, 0.13); border-color: rgba(233, 196, 106, 0.35); }
+
+/* ---- the advertisement ---------------------------------------------------------------------- */
+
+/* Deliberately plain. This is a demonstration of the mechanism and not a pretence at an
+   advertisement — the word, a clock, and a way out. Dressing it up would only make it harder to
+   tell which part of this is the mechanism. */
+#ads {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #05130d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 18px;
+}
+
+.ads-mark {
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: 7px;
+  color: rgba(255, 255, 255, 0.14);
+  text-indent: 7px;
+}
+
+.ads-note { font-size: 11px; color: var(--muted); text-align: center; }
+
+.ads-clock {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
+  margin-bottom: 2px;
+}
+
+#ads .go { max-width: 240px; }
+
+/* ---- the table ------------------------------------------------------------------------------ */
+
+#table {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#felt {
+  flex: 1;
+  min-height: 120px;
+  position: relative;
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 90% at 50% 38%, var(--felt) 0%, var(--felt-deep) 70%, #0a3122 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 18px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+/* What this table is, written across the top of it. A waiting room that says nothing about the
+   stake is a waiting room somebody sits down at and then finds out. */
+#felt-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 8px 0;
+  font-size: 10.5px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+#felt-top span {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+#felt-top span.bet { color: var(--gold); border-color: rgba(233, 196, 106, 0.35); }
+
+/* Everybody else, laid round the edges. Absolute rather than a grid, because the three
+   positions are left, top and right and a grid that produced them would be three rules
+   describing one picture. */
+/* Below the strip that names the table, not behind it. The top chair sits at the top of the
+   felt and the strip is drawn across it, so the two were in the same place — an empty chair
+   showing through "5.000 vàng". */
+#seats { position: absolute; inset: 22px 0 0; }
+
+.seat {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 78px;
+  transition: opacity 0.2s;
+}
+
+.seat[data-at="top"] { top: 3px; left: 50%; transform: translateX(-50%); }
+.seat[data-at="left"] { top: 50%; left: 4px; transform: translateY(-58%); }
+.seat[data-at="right"] { top: 50%; right: 4px; transform: translateY(-58%); }
+.seat[data-at="bottom"] { bottom: 4px; left: 50%; transform: translateX(-50%); }
+
+/* Your own chair. No little stack of card backs on it — the hand is right underneath and
+   saying it twice takes room the felt has better uses for. */
+.seat.self .backs { display: none; }
+.seat.self .face { width: 30px; height: 30px; font-size: 11px; }
+
+.seat.out { opacity: 0.45; }
+
+/* The ring is the clock. A conic gradient wound by one variable, so a phone that has been
+   asleep comes back to the right sweep rather than one a minute behind — the angle is worked
+   out from a deadline every second, not counted down from wherever it happened to be. */
+.face {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
+}
+
+.seat.turn .face {
+  border-color: transparent;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.45)) padding-box,
+    conic-gradient(var(--gold) calc(var(--left, 1) * 360deg), rgba(255, 255, 255, 0.16) 0)
+      border-box;
+  border: 2.5px solid transparent;
+  box-shadow: 0 0 12px rgba(233, 196, 106, 0.4);
+}
+
+.seat.bot .face::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+  border: 1.5px solid var(--felt-deep);
+}
+
+.seat-name {
+  max-width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.seat-note {
+  font-size: 9.5px;
+  color: var(--muted);
+  min-height: 12px;
+}
+
+.seat-note.pass { color: var(--danger); }
+.seat-note.place { color: var(--gold); font-weight: 700; }
+
+/* How many cards they are holding, as cards. A number would do and would say less: the point
+   of the picture is that somebody down to two is visible without reading anything. */
+.backs { display: flex; height: 13px; }
+.backs i {
+  width: 8px;
+  height: 12px;
+  margin-left: -5px;
+  border-radius: 2px;
+  background: linear-gradient(150deg, #b4453f, #7d2723);
+  border: 0.5px solid rgba(0, 0, 0, 0.4);
+}
+.backs i:first-child { margin-left: 0; }
+
+/* An empty chair, while the table is filling. Dashed rather than faint: it is a seat that
+   could be taken, not a seat that has gone. And breathing, because a waiting room that is
+   perfectly still is a waiting room that looks stuck. */
+@keyframes waiting {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.06); }
+}
+
+.seat.empty .face {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.34);
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 400;
+  animation: waiting 1.9s ease-in-out infinite;
+}
+
+.seat.empty .seat-name { color: var(--muted); font-weight: 500; }
+
+/* Whose table it is. One mark, on the chair, rather than a line of text somewhere else. */
+.seat .crown {
+  position: absolute;
+  top: -7px;
+  right: -5px;
+  font-size: 11px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+
+/* What going out was worth, kept under the name once it has been won. The number floats up
+   and goes; this is what stays, so somebody who looked away can still see it. */
+.seat-gold {
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  min-height: 12px;
+}
+
+.seat-gold.up { color: #6fd39a; }
+.seat-gold.down { color: var(--danger); }
+
+/* ---- gold arriving and leaving ---------------------------------------------------------------
+ *
+ * The number lifts off whoever it belongs to and fades. Money changing hands is the one thing at
+ * this table that happens *to* somebody rather than being done by them, and a purse that simply
+ * held a different number afterwards is a thing nobody notices until they wonder where it went.
+ */
+
+@keyframes lift {
+  0%   { transform: translateY(8px) scale(0.85); opacity: 0; }
+  16%  { transform: translateY(0) scale(1.08); opacity: 1; }
+  30%  { transform: translateY(-2px) scale(1); opacity: 1; }
+  72%  { opacity: 1; }
+  100% { transform: translateY(-30px); opacity: 0; }
+}
+
+.float {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  width: 96px;
+  margin-left: -48px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
+  pointer-events: none;
+  z-index: 6;
+  animation: lift 1.6s cubic-bezier(0.22, 0.9, 0.3, 1) forwards;
+}
+
+.float.up { color: #7fe0a8; }
+.float.down { color: #ff9a92; }
+
+/* Every chip lives in `#app`, which is the one element nothing rebuilds, and is measured into
+   place over whatever it is about. */
+#app { position: relative; }
+
+/* And a flash on the number itself, so the purse is where the eye lands after the float. */
+@keyframes struck {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+
+#purse .amount.moved { animation: struck 0.5s ease-out; }
+
+/* ---- what is in the middle ------------------------------------------------------------------ */
+
+#middle {
+  position: absolute;
+  /* Below the middle, not on it. The chair at the top of the felt is a face, a stack of card
+     backs, a name and a line saying what they just did — near a hundred pixels of it — and on a
+     shorter felt the pile was landing on the last line of that. There is more room under the
+     pile than over it, so this is where the spare room is. */
+  top: 57%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  /* Narrower than the felt by exactly the two chairs beside it. The chairs sit at the same
+     height as this does, so a line long enough to fill the felt ran underneath them — which is
+     every line the table shows while it is still filling up. */
+  width: calc(100% - 172px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+}
+
+#pile {
+  display: flex;
+  justify-content: center;
+  min-height: var(--card-h);
+  align-items: center;
+}
+
+#pile .card + .card { margin-left: -22px; }
+
+#pile-note {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 0 8px;
+  max-width: 100%;
+}
+
+#pile-note b { color: var(--gold); font-weight: 700; }
+
+/* ---- a card --------------------------------------------------------------------------------- */
+
+.card {
+  position: relative;
+  flex: none;
+  width: var(--card-w);
+  height: var(--card-h);
+  border-radius: 5px;
+  background: linear-gradient(160deg, #fff, var(--card));
+  border: 1px solid var(--card-edge);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  color: var(--black);
+  font-weight: 700;
+  cursor: default;
+  transition: transform 0.12s ease-out;
+}
+
+.card.red { color: var(--red); }
+
+.card .pip {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  font-size: 12px;
+  line-height: 1.05;
+  letter-spacing: -0.4px;
+}
+
+/* Rank over suit, the way a card in a fan shows itself: the corner is all of a card anybody
+   ever sees once there is another one on top of it. */
+.card .pip b,
+.card .pip i { display: block; font-style: normal; }
+.card .pip i { font-size: 11px; }
+
+.card .big {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 19px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+/* The card the opening play has to hold. A rule that refuses a play without saying which card
+   it wanted reads as a board that is broken. */
+.card.opens { box-shadow: 0 0 0 2px var(--gold), 0 2px 5px rgba(0, 0, 0, 0.35); }
+
+/* ---- your own hand --------------------------------------------------------------------------- */
+
+#mine { flex: none; display: flex; flex-direction: column; gap: 5px; }
+
+#mine-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 3px;
+  font-size: 11.5px;
+  color: var(--muted);
+  min-height: 16px;
+}
+
+#mine-bar .who { color: var(--ink); font-weight: 700; }
+#mine-bar .clock { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+#mine-bar .clear {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: none;
+  color: var(--gold);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 650;
+  padding: 1px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+#mine-bar .clock.low { color: var(--danger); font-weight: 700; }
+
+#hand { display: flex; flex-direction: column; }
+
+.fan {
+  display: flex;
+  justify-content: center;
+  height: calc(var(--card-h) + 14px);
+  align-items: flex-end;
+  padding-top: 14px;
+}
+
+.fan .card { cursor: pointer; }
+.fan .card + .card { margin-left: var(--step, -18px); }
+
+/* Lifted rather than outlined. Picking cards up is what hands do, and it survives the card
+   being three quarters covered by the one after it. */
+.fan .card.up {
+  transform: translateY(-13px);
+  box-shadow: 0 0 0 2px var(--gold), 0 7px 12px rgba(0, 0, 0, 0.45);
+  z-index: 2;
+}
+
+.fan .card.dim { opacity: 0.5; }
+
+/* ---- what to do next -------------------------------------------------------------------------- */
+
+#buttons {
+  flex: none;
+  display: flex;
+  gap: 7px;
+  min-height: 40px;
+}
+
+/* An empty row still holds its forty pixels, which on the lobby was a band of nothing between
+   the last card and the tabs. */
+#buttons:empty { display: none; }
+
+#buttons button {
+  flex: 1;
+  min-height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+#buttons button.primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  color: #2a1e05;
+}
+
+#buttons button.quiet { flex: 0 0 auto; padding: 0 14px; color: var(--muted); }
+
+/* Said rather than offered. Somebody who cannot start the table has nothing to press, and a
+   dark button saying "waiting" is a thing people tap at until they give up. */
+.waiting-note {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--muted);
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+}
+#buttons button:disabled { opacity: 0.4; cursor: default; }
+
+/* One line, under everything, for whatever the table has just refused or announced. A widget
+   cannot open a dialog — `alert` and `confirm` are blocked by the sandbox and hand back at
+   once — so this is the only place anything can be said. */
+#says {
+  flex: none;
+  min-height: 0;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--gold);
+  transition: min-height 0.15s;
+}
+
+#says:not(:empty) {
+  min-height: 26px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(233, 196, 106, 0.13);
+  border: 1px solid rgba(233, 196, 106, 0.28);
+}
+
+/* ---- how it ended ------------------------------------------------------------------------------ */
+
+#result {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 26, 18, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px;
+}
+
+/* The places arrive one after another rather than all at once. A result that appears whole is
+   a screen change; one that lands a row at a time is the table being read out. */
+@keyframes dealt {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: none; }
+}
+
+#result h2, #result .placed { animation: dealt 0.34s ease-out both; }
+
+#result h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  color: var(--gold);
+  letter-spacing: 0.3px;
+}
+
+/* Last place is not a win and should not be lit like one. */
+#result h2.last { color: var(--danger); }
+
+/* What the hand was worth, for the one person it is being told to. Big, because at this moment
+   it is the only thing on the screen worth reading. */
+.finished-gold {
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+  margin-bottom: 2px;
+}
+
+.finished-gold.up { color: #7fe0a8; }
+.finished-gold.down { color: var(--danger); }
+
+.finished-buttons {
+  display: flex;
+  gap: 7px;
+  width: 100%;
+  max-width: 260px;
+  margin-top: 8px;
+}
+
+#result .ads-note { max-width: 240px; }
+
+.placed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 220px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.placed.me { background: rgba(233, 196, 106, 0.16); font-weight: 700; }
+.placed .where-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.placed .where-place { flex: none; color: var(--muted); font-weight: 650; font-size: 11px; }
+.placed.last .where-place { color: var(--danger); }
+
+/* What the hand was worth. Green up, red down, and nothing at all for the machines — they are
+   furniture and paying them would be printing gold. */
+.placed .where-gold {
+  flex: none;
+  width: 62px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.placed .where-gold.up { color: #6fd39a; }
+.placed .where-gold.down { color: var(--danger); }

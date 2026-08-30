@@ -1,0 +1,14 @@
+{
+  "name": "zeplao-tienlenbot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A C\u00fac Cu bot that deals ti\u1ebfn l\u00ean mi\u1ec1n nam",
+  "scripts": {
+    "start": "node tienlenbot.mjs",
+    "test": "node --test --test-concurrency=1 tienlenbot.test.mjs tienlenbot.flow.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
