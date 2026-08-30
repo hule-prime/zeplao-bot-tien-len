@@ -99,6 +99,9 @@ function standIn(rooms = { c1: ['u1', 'u2'] }) {
         return answer({ id: sent.sessionId });
       }
 
+      case 'getConversations':
+        return answer(app.rooms ? Object.keys(app.rooms).map((id) => ({ id, type: 'group' })) : []);
+
       case 'sendMessage':
         app.said.push(sent);
         return answer({ id: `m${app.said.length}` });
@@ -718,4 +721,53 @@ test('a restart carries on rather than replaying everything anybody ever said', 
     await again.catch(() => {});
     await app.close();
   }
+});
+
+test('it says hello once, and not again because somebody deployed', async () => {
+  // `bot_added` sits in the ring like everything else, so anything that replays the ring says
+  // hello again — which for a while was every deploy, in every room this bot was in. Being
+  // greeted by a program you added last week because somebody pushed a fix is worse than never
+  // being greeted at all.
+  ledger();
+  await withBot(async (app) => {
+    app.say({
+      kind: 'bot_added',
+      membership: { conversationId: 'c9', title: 'Nhóm mới', by: { userId: 'u1' } },
+    });
+    await app.until(() => app.said.length === 1, 'a hello');
+    assert.match(app.said[0].text, /Chào cả nhà/);
+    assert.equal(app.said[0].conversationId, 'c9');
+
+    // The same update again, which is what a replay is.
+    app.say({
+      kind: 'bot_added',
+      membership: { conversationId: 'c9', title: 'Nhóm mới', by: { userId: 'u1' } },
+    });
+    await nap(250);
+    assert.equal(app.said.length, 1, 'it said hello twice');
+
+    // Taken out and put back is really arriving, so that one counts.
+    app.say({ kind: 'bot_removed', membership: { conversationId: 'c9' } });
+    await nap(150);
+    app.say({
+      kind: 'bot_added',
+      membership: { conversationId: 'c9', title: 'Nhóm mới', by: { userId: 'u1' } },
+    });
+    await app.until(() => app.said.length === 2, 'a hello on being put back');
+  }, {});
+});
+
+test('and never to a room it was already in when it started', async () => {
+  // The rooms it joined before anybody wrote down that it had said hello. Losing the ledger
+  // must not mean greeting four rooms full of people all over again.
+  ledger();
+  await withBot(async (app) => {
+    app.say({
+      kind: 'bot_added',
+      membership: { conversationId: 'c1', title: 'Nhóm cũ', by: { userId: 'u1' } },
+    });
+    await nap(300);
+    assert.equal(app.said.length, 0,
+      'c1 is a room it is already in, so there is no hello owed');
+  }, { c1: ['u1'] });
 });

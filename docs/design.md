@@ -135,6 +135,9 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | `justify-content: center` trên hộp cuộn | Phần tràn nằm **trên** gốc cuộn, không cuộn tới được. Dòng "+10.000 vàng" bị cắt mất đầu |
 | Một lệnh thay thế nuốt cả khối CSS quảng cáo | Màn ADS mất nền, mất căn giữa. Chỉ ảnh chụp mới thấy — nên giờ có `tools/css-check.mjs` |
 | Nút thoát duy nhất tính là **bỏ ván** | Về nhất xong bấm thoát thì ghế ghi "đã rời" thay vì "Nhất" |
+| `offset` khởi lại từ 0 mỗi lần restart | Mỗi lần deploy là **đọc lại cả trăm update cũ**: chào lại cả nhà ở mọi phòng, mở lại widget trên màn hình người ta, và trả lời những cái nút đã hết hạn (`answerCallback 404`). Người dùng thấy được, tôi thì phải đọc log production mới thấy |
+| Sổ ghi trễ 2 giây, SIGTERM tới trước | Mất ván vừa thắng và mất cả `offset` — tức là lần deploy sau replay tiếp |
+| Chào hỏi chỉ dựa vào việc không replay | Một lớp bảo vệ là không đủ cho thứ gửi tin nhắn tới phòng đầy người. Giờ ghi nhớ phòng nào đã chào, và đánh dấu sẵn mọi phòng đang ở lúc khởi động |
 | `enable --now` rồi `restart` ngay | Deploy **lần nào cũng fail một lần** rồi tự lành sau 5 giây — tức là log failure không còn ai đọc |
 | `seat.conversationId` | Ghi ở ba chỗ, đọc ở không chỗ nào. Đúng loại field sẽ mốc rồi có ngày bị tin |
 

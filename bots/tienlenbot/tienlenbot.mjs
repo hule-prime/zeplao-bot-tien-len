@@ -734,6 +734,7 @@ export async function run(token, { signal, api = API } = {}) {
   const swept = await call('endSessions', {}).catch(() => ({ ended: 0 }));
   if (swept.ended) console.log(`cleared ${swept.ended} session(s) from a previous run`);
 
+
   /**
    * Which seat this person is in, or nothing if they are only watching.
    *
@@ -793,12 +794,14 @@ export async function run(token, { signal, api = API } = {}) {
   const scores = (() => {
     try {
       const read = JSON.parse(readFileSync(SCORES, 'utf8'));
-      return read && read.people ? read : { people: {}, offset: 0 };
+      const kept = read && read.people ? read : { people: {}, offset: 0 };
+      kept.greeted = kept.greeted ?? {};
+      return kept;
     } catch {
       // No file yet, or one somebody edited into nonsense. An empty ledger is the honest
       // starting point — refusing to run because a scoreboard is missing would take the games
       // down with it.
-      return { people: {}, offset: 0 };
+      return { people: {}, offset: 0, greeted: {} };
     }
   })();
 
@@ -967,6 +970,24 @@ export async function run(token, { signal, api = API } = {}) {
     if (openBy.get(screen.userId) === screen.sessionId) openBy.delete(screen.userId);
   }
 
+  // Rooms it is already in have already met it, whether or not anybody wrote that down. Marked
+  // once on the way up, so rooms joined before there *was* a note of it can never be greeted a
+  // second time either.
+  //
+  // Down here rather than up with the other start-up calls, because it reads `scores` — and
+  // `scores` is a `const` declared further down, which up there is the temporal dead zone and
+  // a bot that cannot start.
+  const already = await call('getConversations').catch(() => []);
+  if (Array.isArray(already)) {
+    let fresh = 0;
+    for (const room of already) {
+      if (scores.greeted[room.id]) continue;
+      scores.greeted[room.id] = true;
+      fresh++;
+    }
+    if (fresh) { saveScores(); console.log(`already in ${fresh} room(s), no hellos owed`); }
+  }
+
   // Armed here, above the loop, because nothing below the loop is ever executed. Carobot had
   // this line under its loop for weeks: every part of the sweep existed and was correct, and
   // the one statement that started it never ran, so no clock ever ticked.
@@ -1027,8 +1048,11 @@ export async function run(token, { signal, api = API } = {}) {
 
       try {
         if (update.kind === 'bot_added') {
-          await send(update.membership.conversationId, SAY.greeting(me.username), OPEN,
-            update.membership.by?.userId);
+          await greet(update.membership);
+        } else if (update.kind === 'bot_removed') {
+          // Taken out of the room. If it is put back it is a new arrival and may say so.
+          delete scores.greeted[update.membership.conversationId];
+          saveScores();
         } else if (update.kind === 'message') {
           await onMessage(update.message);
         } else if (update.kind === 'callback_query') {
@@ -1040,6 +1064,26 @@ export async function run(token, { signal, api = API } = {}) {
         console.error(String(problem));
       }
     }
+  }
+
+  /**
+   * Says hello, once, the first time it is put in a room.
+   *
+   * Written down on disk, and that is the whole point of it. `bot_added` is one of the updates
+   * sitting in the ring, and anything that replays the ring says hello again — which for a
+   * while was every deploy, in every room this bot is in. Being greeted by a program you added
+   * last week because somebody pushed a fix is worse than never being greeted at all.
+   *
+   * Kept beside the gold because that is the file that survives a deploy; forgotten again on
+   * `bot_removed`, because being put back really is arriving.
+   */
+  async function greet(membership) {
+    const room = membership.conversationId;
+    if (scores.greeted[room]) return;
+
+    scores.greeted[room] = true;
+    saveScores();
+    await send(room, SAY.greeting(me.username), OPEN, membership.by?.userId);
   }
 
   async function onMessage(message) {
