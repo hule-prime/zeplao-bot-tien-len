@@ -460,20 +460,46 @@ export const DAILY_GOLD = 10_000;
 ///
 /// Fixed, and deliberately not the room's stake. A table anybody can open at any stake and then
 /// fill with machines is a table that prints gold — the machines do not mind what they lose.
-export const BOT_STAKE = 2_000;
+///
+/// The ladder scales with it on its own: `payouts` is a share of one stake, so nhất takes this
+/// and nhì takes half of it whatever this number is.
+export const BOT_STAKE = 4_000;
 
-/// What a table between people may be played for. The first of them is the floor.
+/// The three a table can be opened at with one tap. Anything between the floor and the ceiling
+/// can be typed instead — these are the common answers, not the only ones.
 export const STAKES = [1_000, 5_000, 20_000];
-export const MIN_STAKE = STAKES[0];
+
+/// The floor and the ceiling for a table between people.
+///
+/// A floor because a table for nothing is not a table. A ceiling because the number arrives
+/// from a page anybody can edit, and a stake nobody could ever cover is a room on everybody's
+/// list that nobody can sit at.
+export const MIN_STAKE = 1_000;
+export const MAX_STAKE = 1_000_000;
+
+/// What somebody may open a table at, whatever they typed.
+export function asStake(asked) {
+  const want = Math.round(Number(asked));
+  if (!Number.isFinite(want)) return MIN_STAKE;
+  return Math.max(MIN_STAKE, Math.min(MAX_STAKE, want));
+}
 
 /// The advertisement: how long it runs, what it pays, and how many in a day.
 ///
 /// The ten seconds are counted here and not in the page. A widget is a file anybody can edit,
 /// so a countdown it runs is a countdown it can skip — the page shows the clock and the bot
 /// decides whether it ran.
+///
+/// What it pays is one hand against the machines, and that is not a coincidence: this exists to
+/// get somebody who has run out back to a table, and an advertisement that leaves them still
+/// short of the cheapest thing on the screen has not done its one job. It used to pay two
+/// thousand against a two thousand table; when the table went to four, this had to follow.
+///
+/// The count came down as the payment went up, so a day's worth of watching is worth the same
+/// forty thousand it was — twice the gold in half the advertisements.
 export const ADS_MS = Number(process.env.TIENLEN_ADS_MS ?? 10_000);
-export const ADS_GOLD = 2_000;
-export const ADS_PER_DAY = 20;
+export const ADS_GOLD = BOT_STAKE;
+export const ADS_PER_DAY = 10;
 
 /// Below this there is no table anybody can sit at. Not a gate on anything — the way to more
 /// gold is beside the purse at every balance — but the widget draws the two ways in dark and
@@ -1389,7 +1415,7 @@ export async function run(token, { signal, api = API } = {}) {
         return;
       }
 
-      const stake = STAKES.includes(Number(action.stake)) ? Number(action.stake) : MIN_STAKE;
+      const stake = asStake(action.stake);
       if (goldOf(who.userId) < stake) return pushTo(screen, { says: SAY.tooPoor(stake) });
 
       const table = newGame(screen, asked, stake);
@@ -1734,6 +1760,11 @@ export async function run(token, { signal, api = API } = {}) {
       adsGold: ADS_GOLD,
       broke: row.gold < BROKE,
       stakes: STAKES,
+      minStake: MIN_STAKE,
+      // The most this person could open a table at: they have to cover the stake to sit at
+      // their own table, so their purse is the real ceiling and the page should say so rather
+      // than take a number and refuse it.
+      maxStake: Math.min(MAX_STAKE, row.gold),
       botStake: BOT_STAKE,
       rooms: openTables(),
       playing: running(),

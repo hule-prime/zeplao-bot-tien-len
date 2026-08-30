@@ -52,10 +52,15 @@ sẽ cho người ta thấy một tay bài và không có cái bàn nào.
 | --- | --- |
 | Vốn ban đầu | **20.000**, một lần, lần đầu mở widget. Đủ để ngồi bất kỳ bàn nào trên danh sách và thua vài ván mà chưa phải đi xem quảng cáo |
 | Quà mỗi ngày | **+10.000**, và phải **bấm nhận**. Ngày sang lúc nửa đêm giờ Việt Nam, không phải giờ UTC |
-| Bàn với máy | Cược cố định **2.000**, bất kể bàn mở ở mức nào. Nhất +2.000, nhì +1.000, ba −1.000, bét −2.000 |
-| Bàn giữa người | Cược của phòng — **1.000**, 5.000 hoặc 20.000 |
-| Kiếm thêm | Quảng cáo 10 giây, **2.000**, tối đa 20 lần/ngày. Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** — không phải chỉ khi hết |
+| Bàn với máy | Cược cố định **4.000**, bất kể bàn mở ở mức nào. Nhất +4.000, nhì +2.000, ba −2.000, bét −4.000 |
+| Bàn giữa người | Cược của phòng — **tự đặt**, từ 1.000 tới 1.000.000 và không quá số tiền người mở đang có. Ba mức có sẵn chỉ là câu trả lời thường gặp |
+| Kiếm thêm | Quảng cáo 10 giây, **4.000** — đúng một ván với máy — tối đa 10 lần/ngày. Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** |
 | Bảng xếp hạng | Vàng, của cả thế giới |
+
+**Quảng cáo trả đúng một ván với máy**, không phải trùng hợp: nó tồn tại để đưa người hết tiền
+quay lại bàn, mà một quảng cáo xem xong vẫn không đủ ngồi thứ rẻ nhất trên màn hình là một quảng
+cáo không làm được việc của nó. Nâng cược máy lên 4.000 thì cái này phải theo — và số lượt trong
+ngày giảm xuống một nửa để một ngày xem vẫn đáng đúng bốn mươi nghìn như cũ.
 
 **Tổng bằng không.** `payouts` cho nhất ăn một cược của bét, và ở bàn đủ bốn thì nhì ăn nửa cược
 của ba; giữa bàn lẻ thì hoà. Vàng chuyển giữa những người ngồi đó và không sinh ra từ đâu — đây là

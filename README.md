@@ -88,9 +88,9 @@ A few things that are the way they are on purpose:
 | --- | --- |
 | Starting purse | **20.000**, once, the first time somebody opens it. Enough to sit down at anything on the list and lose a couple of hands without being sent to an advertisement |
 | Turning up | **+10.000** a day, **taken by pressing for it** rather than credited on the way in. The day turns over at midnight in Vietnam, not in UTC |
-| A table against the machines | Fixed **2.000** a stake, whatever the table was opened at. Nhất +2.000, nhì +1.000, ba −1.000, bét −2.000 |
-| A table between people | The room's stake — **1.000**, 5.000 or 20.000. The floor is a thousand |
-| More gold | A ten second advertisement, worth **2.000**, up to twenty a day — behind the `+` beside the purse, at any balance |
+| A table against the machines | Fixed **4.000** a stake, whatever the table was opened at. Nhất +4.000, nhì +2.000, ba −2.000, bét −4.000 |
+| A table between people | Whatever the room was opened at — **1.000** to 1.000.000, and never more than the opener has. Three presets for the common answers, and a field for anything else |
+| More gold | A ten second advertisement, worth **4.000**, up to ten a day — behind the `+` beside the purse, at any balance |
 | The board | Gold, the world's, everybody |
 
 **One person is one purse.** The ledger is keyed by the person and by nothing else — not the
@@ -99,7 +99,8 @@ place on the board, and walking into another group carries the table they were s
 them.
 
 **It adds to nothing.** `payouts` gives first a stake off last and, at a full table, second half
-a one off third; the middle of an odd table breaks even. Gold moves between the people at the
+a one off third; the middle of an odd table breaks even. The ladder is a *share of one stake*,
+so raising what a table costs raises everything about it at once. Gold moves between the people at the
 table and none is made, which is the only shape that stays sane when the same four people play
 all evening.
 
@@ -122,6 +123,10 @@ not leaving at all. The two are different buttons saying different things — `B
 
 **The stake is taken before sitting down**, not after losing. Otherwise one stake's worth of
 gold plays four tables at once and loses all four. Nobody goes into debt.
+
+**An advertisement pays exactly one hand against the machines**, and that is not a coincidence:
+it exists to get somebody who has run out back to a table, and one that leaves them still short
+of the cheapest thing on the screen has not done its job.
 
 **The ten seconds of the advertisement are counted by the bot.** The page draws the clock; a
 claim that arrives early is refused. A countdown a widget runs is a countdown a widget can skip,

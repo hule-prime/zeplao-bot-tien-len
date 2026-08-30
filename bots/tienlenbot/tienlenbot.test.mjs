@@ -9,7 +9,7 @@ import {
   movesFrom, canAnswer, costOf, chooseMove,
   nextInRound, nextActive, opensGame, stillIn, lowestElsewhere, placeName,
   payouts, settlement, dayIn, gold,
-  STARTING_GOLD, DAILY_GOLD, BOT_STAKE, MIN_STAKE, STAKES, BROKE,
+  STARTING_GOLD, DAILY_GOLD, BOT_STAKE, MIN_STAKE, MAX_STAKE, STAKES, BROKE, ADS_GOLD, asStake,
 } from './tienlenbot.mjs';
 
 /// A card by name, which is how anybody talks about one.
@@ -407,10 +407,11 @@ test('the numbers asked for: nhất takes two thousand off a table of machines',
     return settlement(seats, order, BOT_STAKE)[0];
   };
 
-  assert.equal(at(0).change, 2000, 'nhất');
-  assert.equal(at(1).change, 1000, 'nhì');
-  assert.equal(at(2).change, -1000, 'ba');
-  assert.equal(at(3).change, -2000, 'bét');
+  assert.equal(at(0).change, BOT_STAKE, 'nhất takes a stake');
+  assert.equal(at(1).change, BOT_STAKE / 2, 'nhì takes half of one');
+  assert.equal(at(2).change, -BOT_STAKE / 2, 'ba pays it');
+  assert.equal(at(3).change, -BOT_STAKE, 'bét pays a whole one');
+  assert.equal(BOT_STAKE, 4000, 'and the number itself');
 });
 
 test('two people and two machines is a table of two, and the machines are furniture', () => {
@@ -461,10 +462,25 @@ test('gold is written the way it is read', () => {
   assert.equal(gold(-2000), '-2.000');
 });
 
-test('the stakes start at a thousand and the machines are not one of them', () => {
+test('a table can be opened at anything between the floor and the ceiling', () => {
   assert.equal(MIN_STAKE, 1000);
-  assert.ok(STAKES.every((one) => one >= MIN_STAKE));
+  assert.ok(STAKES.every((one) => one >= MIN_STAKE && one <= MAX_STAKE));
   assert.equal(STAKES[0], MIN_STAKE, 'the floor is the default');
+
+  // The three presets are the common answers, not the only ones — anything typed is taken.
+  assert.equal(asStake(7500), 7500);
+  assert.equal(asStake('12345'), 12345);
+  assert.equal(asStake(1500.6), 1501, 'rounded rather than refused');
+
+  // And whatever a page anybody can edit sends is brought back inside.
+  assert.equal(asStake(0), MIN_STAKE);
+  assert.equal(asStake(-99), MIN_STAKE);
+  assert.equal(asStake(MAX_STAKE * 10), MAX_STAKE);
+  assert.equal(asStake('lots'), MIN_STAKE);
+  assert.equal(asStake(undefined), MIN_STAKE);
+  // Not a number is not a stake, however large it looks.
+  assert.equal(asStake(Infinity), MIN_STAKE);
+  assert.equal(asStake(NaN), MIN_STAKE);
   assert.equal(STARTING_GOLD, 20_000);
   assert.equal(DAILY_GOLD, 10_000);
   assert.ok(STARTING_GOLD >= STAKES[STAKES.length - 2],
@@ -473,6 +489,8 @@ test('the stakes start at a thousand and the machines are not one of them', () =
     'and survive a few hands against the machines before an advertisement is the only way on');
   assert.ok(DAILY_GOLD > BOT_STAKE * 2, 'a day of gold should be worth more than one hand');
   assert.equal(BROKE, BOT_STAKE, 'the moment there is no table to sit at is the moment to offer an ad');
+  assert.ok(ADS_GOLD >= BROKE,
+    'an advertisement that leaves somebody still short of the cheapest table has not helped');
 });
 
 test('nothing but declarations sits below the endless loop', () => {

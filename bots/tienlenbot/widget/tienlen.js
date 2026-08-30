@@ -1014,6 +1014,9 @@ function drawMenu() {
   }
 
   if (step === 'stake') {
+    const floor = state.minStake || 1000;
+    const roof = state.maxStake || purse;
+
     body.append(stepHead('Cược bao nhiêu?', `Bàn ${seatsWanted} người`, 'open'));
     for (const one of bets) {
       body.append(pick(`${gold(one)} vàng`,
@@ -1021,8 +1024,56 @@ function drawMenu() {
         purse >= one,
         () => z.send({ open: seatsWanted, stake: one })));
     }
-    body.append(stepNote(`Bạn có ${gold(purse)} vàng.`));
+
+    // Anything else. The three above are the common answers, not the only ones — and a game
+    // where the stake is one of three numbers somebody else chose is a game two friends cannot
+    // play for what they actually want to play for.
+    body.append(customStake(floor, roof));
+    body.append(stepNote(roof < floor
+      ? `Cần ít nhất ${gold(floor)} vàng mới mở được bàn.`
+      : `Tự nhập từ ${gold(floor)} đến ${gold(roof)} vàng. Bạn có ${gold(purse)}.`));
   }
+}
+
+/// A stake somebody types, with the one button that opens it.
+///
+/// A field and a button rather than a slider: the numbers here span three orders of magnitude
+/// and a slider over that is a slider nobody can land on a round number with.
+function customStake(floor, roof) {
+  const row = document.createElement('div');
+  row.className = 'custom';
+
+  const box = document.createElement('input');
+  box.className = 'amount-in';
+  box.type = 'number';
+  box.inputMode = 'numeric';
+  box.min = String(floor);
+  box.max = String(roof);
+  box.step = '1000';
+  box.placeholder = 'Tự nhập';
+
+  const go = document.createElement('button');
+  go.className = 'go-custom';
+  go.textContent = 'Mở bàn';
+  go.disabled = true;
+
+  const asked = () => Math.round(Number(box.value));
+  const ok = () => Number.isFinite(asked()) && box.value !== ''
+    && asked() >= floor && asked() <= roof;
+
+  // Checked as it is typed, so the button is dark until the number is one the bot will take.
+  // The bot brings anything else back inside the range anyway — this is so nobody has to find
+  // that out by opening a table for a number they did not mean.
+  box.oninput = () => { go.disabled = !ok(); };
+  box.onkeydown = (event) => { if (event.key === 'Enter' && ok()) go.onclick(); };
+  go.onclick = () => {
+    if (!ok()) return;
+    go.disabled = true;
+    z.send({ open: seatsWanted, stake: asked() });
+  };
+
+  row.append(box, go);
+  return row;
 }
 
 /**

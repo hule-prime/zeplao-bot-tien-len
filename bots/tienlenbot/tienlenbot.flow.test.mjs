@@ -295,7 +295,8 @@ test('a table against three machines is dealt, played, placed and paid', async (
     assert.equal(over.paid.length, 1, 'the machines are furniture and are not paid');
     const paid = over.paid[0];
     assert.equal(paid.userId, 'u1');
-    assert.ok([2000, 1000, -1000, -2000].includes(paid.change), `paid ${paid.change}`);
+    assert.ok([BOT_STAKE, BOT_STAKE / 2, -BOT_STAKE / 2, -BOT_STAKE].includes(paid.change),
+      `paid ${paid.change}`);
     assert.equal(over.gold, STARTING_GOLD + DAILY_GOLD + paid.change,
       'and the ledger says the same');
   });
@@ -465,7 +466,7 @@ test('and it stops when the day\'s are used up', async () => {
   ledger({
     u1: {
       name: 'Thọ', gold: 40_000, games: 3, first: 2, last: 0,
-      claimed: dayIn(), adsDay: dayIn(), ads: 20,
+      claimed: dayIn(), adsDay: dayIn(), ads: 10,
     },
   });
   await withBot(async (app) => {
@@ -706,7 +707,7 @@ test('a row written before the reward was a button still works', async () => {
 
     assert.equal(app.mine('u1').gold, 5000, 'and nobody is paid twice by the migration');
     assert.equal(app.mine('u1').daily, 0, 'today\'s was already taken under the old name');
-    assert.equal(app.mine('u1').adsLeft, 16, 'and the four they had watched still count');
+    assert.equal(app.mine('u1').adsLeft, 6, 'and the four they had watched still count');
   });
 });
 

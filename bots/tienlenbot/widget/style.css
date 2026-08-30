@@ -343,6 +343,47 @@ body {
 .pick:disabled { opacity: 0.42; cursor: default; }
 .pick.on { border-color: var(--gold); background: rgba(233, 196, 106, 0.14); }
 
+/* A stake somebody types. Sits under the three quick answers and looks like one of them. */
+.custom { display: flex; gap: 6px; }
+
+.amount-in {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.amount-in::placeholder { color: var(--muted); font-weight: 500; font-size: 13px; }
+.amount-in:focus { outline: none; border-color: var(--gold); }
+
+/* The spinners are two four-pixel arrows next to a number three orders of magnitude wide. */
+.amount-in::-webkit-outer-spin-button,
+.amount-in::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.go-custom {
+  flex: none;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 0;
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  color: #2a1e05;
+  font: inherit;
+  font-weight: 750;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.go-custom:disabled { opacity: 0.4; cursor: default; }
+
 .step-note {
   text-align: center;
   font-size: 11px;
