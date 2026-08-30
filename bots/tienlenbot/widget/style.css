@@ -834,12 +834,18 @@ body {
 .fan .card { cursor: pointer; }
 .fan .card + .card { margin-left: var(--step, -18px); }
 
-/* Lifted rather than outlined. Picking cards up is what hands do, and it survives the card
-   being three quarters covered by the one after it. */
+/* Lifted, and lifted only.
+ *
+ * No `z-index`. Raising a card *and* bringing it to the front pulls it over the corner of every
+ * card after it — the rank and the suit, which is the whole of what anybody reads off a card in
+ * a fan — so picking one up hid the ones you had not picked yet.
+ *
+ * Left where it is in the stack, the lift is still the whole signal: the cards after it start
+ * thirteen pixels lower, so a raised card stands clear of the row along its full width and
+ * nothing underneath it moves. */
 .fan .card.up {
   transform: translateY(-13px);
-  box-shadow: 0 0 0 2px var(--gold), 0 7px 12px rgba(0, 0, 0, 0.45);
-  z-index: 2;
+  box-shadow: 0 0 0 2px var(--gold), 0 5px 10px rgba(0, 0, 0, 0.4);
 }
 
 .fan .card.dim { opacity: 0.5; }
