@@ -446,6 +446,13 @@ export const lowestElsewhere = (hands, seat) => Math.min(
 
 // ---- the gold -------------------------------------------------------------------------------
 
+/// What somebody has the first time they open this.
+///
+/// Enough to sit down at anything on the list and lose a couple of hands without being sent to
+/// an advertisement — a first table that has to be paid for before it can be played is a game
+/// nobody gets to the middle of.
+export const STARTING_GOLD = 20_000;
+
 /// What turning up is worth, once a day.
 export const DAILY_GOLD = 10_000;
 
@@ -841,7 +848,10 @@ export async function run(token, { signal, api = API } = {}) {
   /// Somebody's row, made the first time they are seen.
   function rowFor(userId, displayName) {
     const row = scores.people[userId]
-      ?? { name: '', gold: 0, games: 0, first: 0, last: 0, claimed: '', adsDay: '', ads: 0 };
+      ?? {
+        name: '', gold: STARTING_GOLD, started: true, games: 0, first: 0, last: 0,
+        claimed: '', adsDay: '', ads: 0,
+      };
     if (displayName) row.name = displayName;
 
     // Rows written before the day's gold became something you take rather than something you
@@ -849,6 +859,15 @@ export async function run(token, { signal, api = API } = {}) {
     // presses the button should still get their advertisements back the next morning.
     if (row.claimed === undefined) row.claimed = row.day ?? '';
     if (row.adsDay === undefined) row.adsDay = row.day ?? '';
+
+    // And rows written before there was a purse to start with. Given it once and marked, so a
+    // restart cannot give it twice — the mark is the whole of what makes this safe to run on
+    // every load.
+    if (!row.started) {
+      row.started = true;
+      row.gold += STARTING_GOLD;
+      saveScores();
+    }
 
     scores.people[userId] = row;
     return row;
@@ -977,6 +996,15 @@ export async function run(token, { signal, api = API } = {}) {
   // Down here rather than up with the other start-up calls, because it reads `scores` — and
   // `scores` is a `const` declared further down, which up there is the temporal dead zone and
   // a bot that cannot start.
+  // Everybody who was already playing, given the starting purse the people after them get.
+  // `rowFor` would do it the next time each of them opened the widget anyway; done here so it
+  // has happened by the time anybody looks, and so the log says how many.
+  {
+    const owed = Object.keys(scores.people).filter((id) => !scores.people[id].started);
+    for (const id of owed) rowFor(id);
+    if (owed.length) console.log(`gave ${owed.length} earlier player(s) their starting purse`);
+  }
+
   const already = await call('getConversations').catch(() => []);
   if (Array.isArray(already)) {
     let fresh = 0;

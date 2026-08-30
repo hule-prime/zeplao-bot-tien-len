@@ -9,7 +9,7 @@ import {
   movesFrom, canAnswer, costOf, chooseMove,
   nextInRound, nextActive, opensGame, stillIn, lowestElsewhere, placeName,
   payouts, settlement, dayIn, gold,
-  DAILY_GOLD, BOT_STAKE, MIN_STAKE, STAKES, BROKE,
+  STARTING_GOLD, DAILY_GOLD, BOT_STAKE, MIN_STAKE, STAKES, BROKE,
 } from './tienlenbot.mjs';
 
 /// A card by name, which is how anybody talks about one.
@@ -465,7 +465,12 @@ test('the stakes start at a thousand and the machines are not one of them', () =
   assert.equal(MIN_STAKE, 1000);
   assert.ok(STAKES.every((one) => one >= MIN_STAKE));
   assert.equal(STAKES[0], MIN_STAKE, 'the floor is the default');
+  assert.equal(STARTING_GOLD, 20_000);
   assert.equal(DAILY_GOLD, 10_000);
+  assert.ok(STARTING_GOLD >= STAKES[STAKES.length - 2],
+    'a first purse should open more than the cheapest table on the list');
+  assert.ok(STARTING_GOLD > BOT_STAKE * 4,
+    'and survive a few hands against the machines before an advertisement is the only way on');
   assert.ok(DAILY_GOLD > BOT_STAKE * 2, 'a day of gold should be worth more than one hand');
   assert.equal(BROKE, BOT_STAKE, 'the moment there is no table to sit at is the moment to offer an ad');
 });

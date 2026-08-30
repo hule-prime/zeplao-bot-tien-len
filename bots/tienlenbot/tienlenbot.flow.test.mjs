@@ -26,7 +26,7 @@ process.env.TIENLEN_ADS_MS = '150';
 process.env.TIENLEN_SCORES = LEDGER;
 
 const {
-  run, chooseMove, shapeOf, nameOf, DAILY_GOLD, BOT_STAKE, ADS_GOLD, dayIn,
+  run, chooseMove, shapeOf, nameOf, STARTING_GOLD, DAILY_GOLD, BOT_STAKE, ADS_GOLD, dayIn,
 } = await import('./tienlenbot.mjs');
 
 const nap = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -186,6 +186,11 @@ const NAMES = { u1: 'Thọ', u2: 'Lan Anh', u3: 'Minh', u9: 'Người lạ' };
 /// The ledger this run starts from. Written before the bot is started, because it is read once
 /// on the way up.
 function ledger(people = {}) {
+  // Rows are stamped as having had their starting purse unless a test says otherwise, so a
+  // crafted balance stays the balance it was crafted to be.
+  for (const row of Object.values(people)) {
+    if (row.started === undefined) row.started = true;
+  }
   // `offset` too, and explicitly. It is how far through the updates the last run got, and a
   // leftover from the test before would make this bot ignore everything this one says.
   writeFileSync(LEDGER, JSON.stringify({ people, offset: 0 }));
@@ -264,11 +269,11 @@ test('a table against three machines is dealt, played, placed and paid', async (
 
     const lobby = app.mine('u1');
     assert.equal(lobby.phase, 'choosing');
-    assert.equal(lobby.gold, 0, 'nothing arrives by itself');
-    assert.equal(lobby.daily, DAILY_GOLD, 'the day\'s gold is there to be taken');
+    assert.equal(lobby.gold, STARTING_GOLD, 'a purse to start with');
+    assert.equal(lobby.daily, DAILY_GOLD, 'and the day\'s gold on top of it, to be taken');
 
     app.does('u1', { daily: true });
-    await app.until(() => app.mine('u1').gold === DAILY_GOLD, 'the day\'s gold');
+    await app.until(() => app.mine('u1').gold === STARTING_GOLD + DAILY_GOLD, 'the day\'s gold');
     assert.equal(app.mine('u1').daily, 0, 'and is not there to be taken twice');
 
     app.does('u1', { solo: 4 });
@@ -291,7 +296,8 @@ test('a table against three machines is dealt, played, placed and paid', async (
     const paid = over.paid[0];
     assert.equal(paid.userId, 'u1');
     assert.ok([2000, 1000, -1000, -2000].includes(paid.change), `paid ${paid.change}`);
-    assert.equal(over.gold, DAILY_GOLD + paid.change, 'and the ledger says the same');
+    assert.equal(over.gold, STARTING_GOLD + DAILY_GOLD + paid.change,
+      'and the ledger says the same');
   });
 });
 
@@ -513,7 +519,8 @@ test('one person is one purse, whichever group they walk into', async () => {
     await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a hand');
     await playOut(app, ['u1']);
     const after = app.mine('u1').gold;
-    assert.notEqual(after, DAILY_GOLD, 'the table should have paid or charged something');
+    assert.notEqual(after, STARTING_GOLD + DAILY_GOLD,
+      'the table should have paid or charged something');
 
     // The same person, saying the bot's name in a completely different group.
     app.asks('u1', 'c2');
@@ -587,12 +594,13 @@ test('coming first is paid at once, and leaving after it is not walking out', as
     assert.ok(paid, 'paid at the moment of going out, not at the end of the table');
     assert.equal(paid.place, 'Nhất');
     assert.equal(paid.change, 1000, 'a stake, off whoever comes last');
-    assert.equal(won.gold, DAILY_GOLD + 1000, 'and the purse already says so');
+    assert.equal(won.gold, STARTING_GOLD + DAILY_GOLD + 1000, 'and the purse already says so');
 
     // And now they can put it down. This is not forfeiting.
     app.does(first, { leave: true });
     await app.until(() => app.mine(first).phase === 'choosing', 'back to the lobby');
-    assert.equal(app.mine(first).gold, DAILY_GOLD + 1000, 'and are not charged for leaving');
+    assert.equal(app.mine(first).gold, STARTING_GOLD + DAILY_GOLD + 1000,
+      'and are not charged for leaving');
 
     // The other two play it out, and the place stands.
     const rest = ['u1', 'u2', 'u3'].filter((id) => id !== first);
@@ -619,24 +627,25 @@ test('the day\'s gold is taken rather than given, and only once a day', async ()
     app.asks('u1');
     await app.until(() => app.mine('u1'), 'a screen');
 
-    assert.equal(app.mine('u1').gold, 0, 'opening the widget pays nobody');
-    assert.equal(app.mine('u1').daily, DAILY_GOLD, 'it is waiting to be taken');
+    assert.equal(app.mine('u1').gold, STARTING_GOLD, 'opening the widget pays nothing extra');
+    assert.equal(app.mine('u1').daily, DAILY_GOLD, 'the day\'s gold is waiting to be taken');
 
     app.does('u1', { daily: true });
-    await app.until(() => app.mine('u1').gold === DAILY_GOLD, 'the gold');
+    await app.until(() => app.mine('u1').gold === STARTING_GOLD + DAILY_GOLD, 'the gold');
     assert.equal(app.mine('u1').daily, 0);
 
     // Pressed again, the way a button pressed twice before the first push lands is pressed.
     app.does('u1', { daily: true });
     app.does('u1', { daily: true });
     await nap(200);
-    assert.equal(app.mine('u1').gold, DAILY_GOLD, 'and not once more for pressing again');
+    assert.equal(app.mine('u1').gold, STARTING_GOLD + DAILY_GOLD,
+      'and not once more for pressing again');
 
     // And it is still gone after walking into another group, because it belongs to the person.
     app.asks('u1', 'c2');
     await app.until(() => app.sessions.get(app.opened.u1).conversationId === 'c2', 'a screen in c2');
     assert.equal(app.mine('u1').daily, 0);
-    assert.equal(app.mine('u1').gold, DAILY_GOLD);
+    assert.equal(app.mine('u1').gold, STARTING_GOLD + DAILY_GOLD);
   }, { c1: ['u1'], c2: ['u1'] });
 });
 
@@ -691,7 +700,7 @@ test('a restart carries on rather than replaying everything anybody ever said', 
   app.asks('u1');
   await app.until(() => app.mine('u1'), 'a screen');
   app.does('u1', { daily: true });
-  await app.until(() => app.mine('u1').gold === DAILY_GOLD, 'the day\'s gold');
+  await app.until(() => app.mine('u1').gold === STARTING_GOLD + DAILY_GOLD, 'the day\'s gold');
 
   const said = app.replayable();
   assert.ok(said >= 2, 'the ring should be holding what was said');
@@ -770,4 +779,38 @@ test('and never to a room it was already in when it started', async () => {
     assert.equal(app.said.length, 0,
       'c1 is a room it is already in, so there is no hello owed');
   }, { c1: ['u1'] });
+});
+
+test('somebody who was already playing is given the same start, once', async () => {
+  // Asked for in as many words: the people who were here before there was a starting purse get
+  // it too. Once — the mark is what makes running this on every load safe, and a bot restarts
+  // more often than anybody thinks.
+  ledger({
+    u1: { name: 'Thọ', gold: 3000, games: 4, first: 0, last: 4, claimed: dayIn(), adsDay: dayIn(), ads: 0, started: false },
+    u2: { name: 'Lan Anh', gold: 11000, games: 1, first: 1, last: 0, claimed: dayIn(), adsDay: dayIn(), ads: 0, started: false },
+  });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    assert.equal(app.mine('u1').gold, 3000 + STARTING_GOLD);
+
+    // Everybody, not only whoever happened to open it — the top-up runs on the way up.
+    const board = app.mine('u1').table;
+    assert.equal(board.find((one) => one.name === 'Lan Anh').gold, 11000 + STARTING_GOLD);
+
+    // And nothing owed on the second look.
+    const had = app.mine('u1').gold;
+    app.asks('u1');
+    await nap(250);
+    assert.equal(app.mine('u1').gold, had, 'given twice');
+  });
+});
+
+test('and a row that already had one is left alone', async () => {
+  ledger({ u1: { name: 'Thọ', gold: 500, games: 2, first: 0, last: 2, claimed: dayIn(), adsDay: dayIn(), ads: 0 } });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    assert.equal(app.mine('u1').gold, 500);
+  });
 });

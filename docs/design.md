@@ -50,6 +50,7 @@ sẽ cho người ta thấy một tay bài và không có cái bàn nào.
 
 | | |
 | --- | --- |
+| Vốn ban đầu | **20.000**, một lần, lần đầu mở widget. Đủ để ngồi bất kỳ bàn nào trên danh sách và thua vài ván mà chưa phải đi xem quảng cáo |
 | Quà mỗi ngày | **+10.000**, và phải **bấm nhận**. Ngày sang lúc nửa đêm giờ Việt Nam, không phải giờ UTC |
 | Bàn với máy | Cược cố định **2.000**, bất kể bàn mở ở mức nào. Nhất +2.000, nhì +1.000, ba −1.000, bét −2.000 |
 | Bàn giữa người | Cược của phòng — **1.000**, 5.000 hoặc 20.000 |
@@ -76,6 +77,10 @@ bàn. Hai việc là hai nút khác nhau — `Bỏ ván` và `Về sảnh` — v
 
 **Mười giây quảng cáo do bot đếm.** Trang vẽ đồng hồ; đòi tiền sớm thì bị từ chối. Một đồng hồ do
 widget đếm là một đồng hồ widget bỏ qua được, vì widget là file ai cũng sửa được.
+
+**Người chơi cũ cũng được vốn ban đầu**, một lần, có dấu `started` trên từng dòng sổ. Cái dấu
+mới là thứ làm việc này chạy được ở mỗi lần khởi động mà không cộng hai lần — và bot khởi động
+lại nhiều hơn người ta tưởng.
 
 **Một người là một ví.** Sổ khoá theo người và không theo gì khác — không theo phòng, không theo
 màn hình, không theo phiên. Ai ở năm nhóm cũng chỉ một đống vàng và một chỗ trên bảng.
