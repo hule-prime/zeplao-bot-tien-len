@@ -779,14 +779,13 @@ function drawPurse() {
   const amount = $('purse-amount');
   amount.textContent = state ? gold(state.gold) : '…';
 
-  // The way back when there is nothing left to sit at, reachable from wherever they are — not
-  // only from the screen that happens to be showing the card about it.
+  // The way to more gold, beside the gold, on every screen and at every balance. A `+` that
+  // came and went depending on how much somebody had is a `+` nobody learns is there — and the
+  // moment they want it is not always the moment they have run out.
   //
-  // Not while the day's gold is still there to be taken, though: ten thousand on one tap beats
-  // two thousand on a ten second advertisement, and offering both at once is offering somebody
-  // the worse of two things.
+  // It goes only when there is nothing behind it: no advertisements left today.
   const add = $('purse-add');
-  add.hidden = !state || !state.broke || state.daily > 0 || (state.adsLeft ?? 0) <= 0;
+  add.hidden = !state || (state.adsLeft ?? 0) <= 0;
   add.onclick = () => { screen = 'play'; step = 'gold'; render(); };
 
   // What this table costs, beside what is in the purse, so the two are read together.

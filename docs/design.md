@@ -54,7 +54,7 @@ sẽ cho người ta thấy một tay bài và không có cái bàn nào.
 | Quà mỗi ngày | **+10.000**, và phải **bấm nhận**. Ngày sang lúc nửa đêm giờ Việt Nam, không phải giờ UTC |
 | Bàn với máy | Cược cố định **2.000**, bất kể bàn mở ở mức nào. Nhất +2.000, nhì +1.000, ba −1.000, bét −2.000 |
 | Bàn giữa người | Cược của phòng — **1.000**, 5.000 hoặc 20.000 |
-| Hết vàng | Quảng cáo 10 giây, **2.000**, tối đa 20 lần/ngày |
+| Kiếm thêm | Quảng cáo 10 giây, **2.000**, tối đa 20 lần/ngày. Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** — không phải chỉ khi hết |
 | Bảng xếp hạng | Vàng, của cả thế giới |
 
 **Tổng bằng không.** `payouts` cho nhất ăn một cược của bét, và ở bàn đủ bốn thì nhì ăn nửa cược
@@ -113,7 +113,8 @@ trong đó là do quyết định chứ không phải xếp bừa rồi mong nó
 - **Kiếm thêm vàng nằm sau dấu `+` cạnh ví**, không nằm trên màn đầu. Từng làm sai đúng chỗ này:
   dọn màn đầu xuống hai thẻ xong lại nhét thẻ quảng cáo trở vào đó khi hết vàng — tức là thêm
   một thứ thứ ba để đọc, đúng cái vừa bỏ đi. Dấu `+` cạnh số tiền là chỗ ai cũng biết tìm, và nó
-  có mặt trên mọi màn.
+  có mặt trên mọi màn **ở mọi mức tiền**: một dấu `+` lúc có lúc không là một dấu `+` không ai
+  học được là nó ở đó, mà lúc người ta muốn nó không phải lúc nào cũng là lúc hết sạch tiền.
 - **Chạm một lá là nhặt cả bộ.** Đối thủ ra sảnh ba, chạm một lá thì sảnh ba hiện lên. Lá được
   chạm bị *ghim* — mọi bộ đều dựng quanh nó — nên chạm 5♥ ra `3♥ 4♥ 5♥` chứ không ra bộ dựng từ
   chất thấp nhất rồi thua.

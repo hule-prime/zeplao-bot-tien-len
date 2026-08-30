@@ -475,8 +475,9 @@ export const ADS_MS = Number(process.env.TIENLEN_ADS_MS ?? 10_000);
 export const ADS_GOLD = 2_000;
 export const ADS_PER_DAY = 20;
 
-/// Below this there is no table anybody can sit at, which is what makes it the moment to offer
-/// the advertisement rather than a number to nag about.
+/// Below this there is no table anybody can sit at. Not a gate on anything — the way to more
+/// gold is beside the purse at every balance — but the widget draws the two ways in dark and
+/// says what they cost, and this is the number it says it about.
 export const BROKE = BOT_STAKE;
 
 /**
@@ -1329,7 +1330,11 @@ export async function run(token, { signal, api = API } = {}) {
       const row = rowFor(who.userId, who.displayName);
 
       if (action.ads === 'start') {
-        if (row.gold >= BROKE || adsLeft(who.userId) <= 0) return;
+        // At any balance. It used to be refused to anybody who could still afford a table,
+        // which made the `+` beside the purse a button that worked or did nothing depending on
+        // a number — and a button that sometimes does nothing is a broken button. What limits
+        // this is the count per day, and that is the only thing that should.
+        if (adsLeft(who.userId) <= 0) return;
         screen.adsAt = Date.now();
       } else if (action.ads === 'claim') {
         if (!screen.adsAt || Date.now() - screen.adsAt < ADS_MS) return;

@@ -90,7 +90,7 @@ A few things that are the way they are on purpose:
 | Turning up | **+10.000** a day, **taken by pressing for it** rather than credited on the way in. The day turns over at midnight in Vietnam, not in UTC |
 | A table against the machines | Fixed **2.000** a stake, whatever the table was opened at. Nhất +2.000, nhì +1.000, ba −1.000, bét −2.000 |
 | A table between people | The room's stake — **1.000**, 5.000 or 20.000. The floor is a thousand |
-| Out of gold | A ten second advertisement, worth **2.000**, up to twenty a day |
+| More gold | A ten second advertisement, worth **2.000**, up to twenty a day — behind the `+` beside the purse, at any balance |
 | The board | Gold, the world's, everybody |
 
 **One person is one purse.** The ledger is keyed by the person and by nothing else — not the

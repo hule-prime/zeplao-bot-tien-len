@@ -438,17 +438,44 @@ test('the advertisement pays after ten seconds, and the ten seconds are counted 
   });
 });
 
-test('an advertisement is not offered to somebody who has gold', async () => {
+test('an advertisement is there at any balance, and only the daily count stops it', async () => {
+  // It used to be refused to anybody who could still afford a table, which made the `+` beside
+  // the purse a button that worked or did nothing depending on a number.
   ledger();
   await withBot(async (app) => {
     app.asks('u1');
     await app.until(() => app.mine('u1'), 'a screen');
     await claim(app, 'u1');
-    assert.equal(app.mine('u1').broke, false);
+
+    const rich = app.mine('u1');
+    assert.equal(rich.broke, false, 'plenty of gold');
+    assert.ok(rich.adsLeft > 0);
 
     app.does('u1', { ads: 'start' });
-    await nap(150);
-    assert.equal(app.mine('u1').adsEndsAt, null, 'and asking for one anyway does nothing');
+    await app.until(() => !!app.mine('u1').adsEndsAt, 'the advertisement to start anyway');
+
+    await nap(250);
+    app.does('u1', { ads: 'claim' });
+    await app.until(() => app.mine('u1').gold === rich.gold + ADS_GOLD, 'the gold');
+    assert.equal(app.mine('u1').adsLeft, rich.adsLeft - 1, 'and one fewer left today');
+  });
+});
+
+test('and it stops when the day\'s are used up', async () => {
+  ledger({
+    u1: {
+      name: 'Thọ', gold: 40_000, games: 3, first: 2, last: 0,
+      claimed: dayIn(), adsDay: dayIn(), ads: 20,
+    },
+  });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    assert.equal(app.mine('u1').adsLeft, 0, 'which is what takes the + away');
+
+    app.does('u1', { ads: 'start' });
+    await nap(200);
+    assert.equal(app.mine('u1').adsEndsAt, null);
   });
 });
 
