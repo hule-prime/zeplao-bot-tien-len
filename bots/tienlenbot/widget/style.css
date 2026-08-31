@@ -976,12 +976,21 @@ body {
 
 /* The places arrive one after another rather than all at once. A result that appears whole is
    a screen change; one that lands a row at a time is the table being read out. */
+/* Hàng kết quả rơi xuống chỗ của nó.
+ *
+ * `backwards` chứ không phải `both`, và **không** bắt đầu từ `opacity: 0`. Đúng cái bẫy đã bắt
+ * được ở con xúc xắc và ở đây thì tệ hơn: `both` giữ khung đầu tiên suốt quãng chờ, nên nếu
+ * animation không chạy — trình duyệt tiết kiệm pin, tab bị ẩn, người dùng bật giảm chuyển động —
+ * thì cả bảng kết quả **vô hình vĩnh viễn**. Animation được quyền quyết định một thứ *đến* thế
+ * nào; không được là lý do duy nhất nhìn thấy nó.
+ *
+ * Mờ dần thì vẫn giữ, nhưng bắt đầu từ 0,3 chứ không từ 0: không chạy thì hàng vẫn đọc được. */
 @keyframes dealt {
-  from { opacity: 0; transform: translateY(9px); }
+  from { opacity: 0.3; transform: translateY(9px); }
   to { opacity: 1; transform: none; }
 }
 
-#result h2, #result .placed { animation: dealt 0.34s ease-out both; }
+#result h2, #result .placed { animation: dealt 0.34s ease-out backwards; }
 
 #result h2 {
   margin: 0 0 4px;
@@ -1044,6 +1053,37 @@ body {
 }
 
 .placed .where-gold.up { color: #6fd39a; }
+
+/* What the figure on the row above is made of. A hand pays four ways now — where you came,
+   what you cut, what you were left holding, and whether you are paying for the table — and one
+   number that is the sum of four unnamed things reads as money taken rather than money lost. */
+.where-why {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  justify-content: flex-end;
+  padding: 1px 8px 4px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.where-why .up { color: #6fd39a; }
+.where-why .down { color: var(--danger); }
+
+/* The hand that never had to be played, and the cuts that decided the rest. Written down
+   because these are the two things a table argues about afterwards. */
+.blanche,
+.chopline {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 3px 8px;
+}
+
+.blanche {
+  color: var(--gold);
+  font-weight: 700;
+}
 .placed .where-gold.down { color: var(--danger); }
 
 /* ---- bầu cua tôm cá ---------------------------------------------------------------------- */
@@ -1467,4 +1507,59 @@ body {
   color: var(--muted);
   font-size: 11.5px;
   padding: 18px 8px;
+}
+
+/* ---- phỏm ------------------------------------------------------------------------------------
+
+   Cùng cái bàn, cùng ghế, cùng tay bài của tiến lên — khác ở giữa bàn và ở cách xếp tay. Không
+   dựng thêm một màn riêng: hai trò này ngồi cùng một kiểu bàn, và một màn thứ hai gần giống màn
+   thứ nhất là hai chỗ để sửa mỗi khi đổi một thứ. */
+
+/* Nọc: một chồng bài úp, có số. Sáng lên đúng lúc nó là nước duy nhất đi được. */
+.stock {
+  width: var(--card-w);
+  height: var(--card-h);
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.72);
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0 4px, transparent 4px 8px),
+    linear-gradient(180deg, #12513a, #0b3826);
+  background-color: #0f4530;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.3), 4px 4px 0 rgba(0, 0, 0, 0.18);
+}
+
+.stock.live { box-shadow: 0 0 0 2px var(--gold), 2px 2px 0 rgba(0, 0, 0, 0.3); }
+
+/* Lá vừa có người đánh ra. To nhất giữa bàn, vì nó là toàn bộ quyết định của người kế tiếp. */
+.card.thrown { transform: rotate(-4deg); }
+.card.thrown.takeable { box-shadow: 0 0 0 2px var(--gold), 0 6px 16px rgba(0, 0, 0, 0.4); }
+
+.phom-round { color: var(--muted); font-weight: 600; }
+
+/* Tay bài: phỏm sáng, rác mờ. Nhìn phát biết mình đang ôm bao nhiêu điểm. */
+.card.melded { box-shadow: 0 0 0 1.5px rgba(111, 211, 154, 0.9), 0 2px 6px rgba(0, 0, 0, 0.35); }
+.card.junk { filter: saturate(0.55) brightness(0.86); }
+
+.phom-score {
+  color: var(--danger);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.phom-score.clean { color: #6fd39a; }
+
+/* Những lá một người đã ăn. Công khai, và là nửa cái thú của việc nhìn bàn phỏm. */
+.ate {
+  font-size: 9.5px;
+  color: var(--gold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 96px;
 }

@@ -115,21 +115,45 @@ function shapeOf(cards) {
   return null;
 }
 
+// >>> luật chung với bot — có test đối chiếu từng cặp, đừng sửa một bên <<<
+const isBomb = (shape) =>
+  !!shape && (shape.kind === 'quad' || (shape.kind === 'pairs_run' && shape.pairs >= 3));
+
+/**
+ * The ladder of chặt, and it is the same seven rungs the bot plays to.
+ *
+ * Two copies of a rule is two rules, and this is the one place the widget is allowed a copy: it
+ * is what decides whether a card lights up as playable, and asking the bot that would put a
+ * round trip between a tap and a card lifting. **The bot decides; this only draws.** Anything
+ * this gets wrong shows up as a card that will not light or one that lights and is refused —
+ * which is exactly what happened when the bot's ladder grew to seven rungs and this one did not.
+ */
+function bombRank(shape) {
+  if (!shape) return null;
+  if (shape.kind === 'single' && rankOf(shape.top) === TWO) return 0;
+  if (shape.kind === 'pair' && rankOf(shape.top) === TWO) return 1;
+  if (shape.kind === 'quad') return 3;
+  if (shape.kind === 'pairs_run' && shape.pairs >= 3) {
+    return shape.pairs === 3 ? 2 : Math.min(shape.pairs, 6);
+  }
+  return null;
+}
+
 function beats(mine, theirs) {
   if (!mine) return false;
   if (!theirs) return true;
   if (mine.kind === theirs.kind && mine.size === theirs.size) return mine.top > theirs.top;
 
-  const lone2 = theirs.kind === 'single' && rankOf(theirs.top) === TWO;
-  const pair2 = theirs.kind === 'pair' && rankOf(theirs.top) === TWO;
-  const three = (s) => s.kind === 'pairs_run' && s.pairs === 3;
-  const four = (s) => s.kind === 'pairs_run' && s.pairs === 4;
-
-  if (three(mine)) return lone2;
-  if (mine.kind === 'quad') return lone2 || pair2 || three(theirs);
-  if (four(mine)) return lone2 || pair2 || three(theirs) || theirs.kind === 'quad';
-  return false;
+  if (!isBomb(mine)) return false;
+  const rung = bombRank(mine);
+  const under = bombRank(theirs);
+  if (under === null) return false;
+  if (rung === 2) return under === 0;        // ba đôi thông chỉ chặt heo lẻ
+  return under < rung;
 }
+// >>> hết luật chung <<<
+
+
 
 /// What is on the table, said the way somebody at a table says it.
 ///
@@ -223,6 +247,20 @@ const SHAPES = {
 
 // ---- drawing a card -----------------------------------------------------------------------
 
+/**
+ * Phỏm reads the same number differently, and this is the only place that shows.
+ *
+ * Tiến lên puts 3 at the bottom and 2 at the top; phỏm puts A at the bottom and K at the top.
+ * Same 0–51, same `hạng * 4 + chất` — a different alphabet over it. Everything that draws a
+ * card asks here rather than indexing RANKS, so a phỏm hand never comes out reading like a
+ * tiến lên one.
+ */
+const PHOM_RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+
+const phom = () => !!state && state.kind === 'phom';
+const rankName = (card) => (phom() ? PHOM_RANKS : RANKS)[rankOf(card)];
+const nameOfCard = (card) => rankName(card) + SUITS[suitOf(card)];
+
 function cardOf(card, extra) {
   const el = document.createElement('div');
   el.className = 'card' + (suitOf(card) >= 2 ? ' red' : '') + (extra ? ' ' + extra : '');
@@ -230,7 +268,7 @@ function cardOf(card, extra) {
   const pip = document.createElement('span');
   pip.className = 'pip';
   const rank = document.createElement('b');
-  rank.textContent = RANKS[rankOf(card)];
+  rank.textContent = rankName(card);
   const suit = document.createElement('i');
   suit.textContent = SUITS[suitOf(card)];
   pip.append(rank, suit);
@@ -371,6 +409,15 @@ function chairOf(seat, at, announce) {
 
   chair.append(face, backs, name, note);
 
+  // What they have taken off the table. Half of reading a phỏm table is this: somebody who ate
+  // a 7♥ is collecting round there, and the card you were about to throw might be theirs.
+  if (phom() && (seat.eaten || []).length) {
+    const ate = document.createElement('div');
+    ate.className = 'ate';
+    ate.textContent = `ăn ${seat.eaten.map(nameOfCard).join(' ')}`;
+    chair.append(ate);
+  }
+
   // What going out was worth. Shown the moment they went out rather than at the end, because
   // that is the moment it was won — waiting for the last two to finish makes the number a
   // summary of something that happened rather than the thing happening.
@@ -380,8 +427,14 @@ function chairOf(seat, at, announce) {
     money.textContent = change(seat.won);
     chair.append(money);
 
+    // Not once the hand is over.
+    //
+    // A chip floating off a chair is for the moment somebody goes out while the rest play on —
+    // that is when the money moves and nothing else on screen says so. When the hand has ended
+    // the result panel is up saying the figure in words, and the chip rises straight through
+    // it: at a phỏm table it landed exactly on "Bét · 82 điểm" and made it unreadable.
     const once = `${state.gameId}:${seat.seat}`;
-    if (announce && !floated.has(once)) {
+    if (announce && state.phase !== 'over' && !floated.has(once)) {
       floated.add(once);
       announce.push([chair, seat.won]);
     }
@@ -427,6 +480,8 @@ function drawPile() {
   note.replaceChildren();
 
   if (!state) return;
+
+  if (phom() && state.phase === 'playing') { drawPhomMiddle(box, note); return; }
 
   if (state.phase === 'lobby') {
     const host = state.host === z.viewer.id;
@@ -487,13 +542,63 @@ function drawHand() {
     : width;
   fan.style.setProperty('--step', `${step - width}px`);
 
-  for (const card of cards) {
+  // Phỏm sorts itself into what it is worth, not into what order it was dealt.
+  //
+  // The whole of the game is "how many points am I still holding", and a hand fanned by rank
+  // makes somebody work that out by eye, every turn, from cards that are half behind each
+  // other. So the phỏm are drawn first and lit, the junk after and dimmed, and the answer is
+  // the row itself.
+  const inMeld = new Set();
+  if (phom() && state.me && state.me.melds) {
+    for (const meld of state.me.melds) for (const card of meld) inMeld.add(card);
+  }
+  const order = phom() && state.me && state.me.melds
+    ? [...state.me.melds.flat(), ...cards.filter((card) => !inMeld.has(card))]
+    : cards;
+
+  for (const card of order) {
     const el = cardOf(card, picked.has(card) ? 'up' : '');
     if (state.opensWith === card) el.classList.add('opens');
+    if (phom()) el.classList.add(inMeld.has(card) ? 'melded' : 'junk');
     el.onclick = () => tap(card);
     fan.append(el);
   }
   box.append(fan);
+}
+
+/**
+ * The middle of a phỏm table: the nọc, and the card somebody has just thrown away.
+ *
+ * That second card is the whole of the decision in front of whoever is next, so it is the
+ * biggest thing on the felt and it says whether it can be taken. Everything else — how many
+ * turns are left, how deep the nọc is — is a line under it.
+ */
+function drawPhomMiddle(box, note) {
+  const mine = state.me && state.turn === state.me.seat;
+  const taking = mine && state.step === 'take';
+
+  const stock = document.createElement('div');
+  stock.className = 'stock' + (taking && !state.me.canEat ? ' live' : '');
+  stock.textContent = state.stock;
+  box.append(stock);
+
+  if (state.table !== null && state.table !== undefined) {
+    const thrown = cardOf(state.table, 'thrown' + (taking && state.me.canEat ? ' takeable' : ''));
+    box.append(thrown);
+  }
+
+  const line = document.createElement('b');
+  if (!mine) line.textContent = `Lượt ${state.turnName}`;
+  else if (state.step === 'take') {
+    line.textContent = state.me.canEat ? 'Ăn được lá này, hoặc bốc' : 'Bốc một lá';
+  } else line.textContent = 'Chọn một lá để đánh';
+
+  const round = document.createElement('span');
+  round.className = 'phom-round';
+  round.textContent = ` · vòng ${Math.min(state.round, state.turns)}/${state.turns}`
+    + ` · nọc ${state.stock}`;
+
+  note.append(line, round);
 }
 
 /**
@@ -514,6 +619,18 @@ function tap(card) {
   if (!state || state.phase !== 'playing') return;
   if (!state.me) { say('Bạn đang xem bàn này'); return; }
   if (state.turn !== state.me.seat) { say(`Đang tới lượt ${state.turnName}`); return; }
+
+  // Phỏm throws one card and only one, so a tap is a choice rather than the start of building
+  // a play. Tapping a second card moves the choice instead of adding to it.
+  if (phom()) {
+    if (state.step !== 'throw') { say('Lấy một lá trước đã'); return; }
+    picked = picked.has(card) ? new Set() : new Set([card]);
+    say('');
+    drawHand();
+    drawButtons();
+    drawBar();
+    return;
+  }
 
   if (picked.has(card)) {
     picked.delete(card);
@@ -642,6 +759,8 @@ function drawButtons() {
   // "thoát" and quietly costing somebody a stake.
   button('Bỏ ván', 'quiet', (el) => { el.disabled = true; z.send({ leave: true }); });
 
+  if (phom()) { drawPhomButtons(); return; }
+
   const mine = state.turn === state.me.seat;
   const pass = button('Bỏ lượt', '', (el) => {
     el.disabled = true;
@@ -661,6 +780,38 @@ function drawButtons() {
   // whole of this scope, so the button's handler reached for the button rather than the move.
   const go = button(labelFor(cards, shape, legal), 'primary', () => play());
   go.disabled = !mine || !legal;
+}
+
+/**
+ * A phỏm turn is two halves, and the buttons are the halves.
+ *
+ * Take, then throw. Never both at once: a row that offered "ăn", "bốc" and "đánh" together
+ * would be offering two of them at a moment when they cannot be done, and a button that is
+ * there and refuses is worse than a button that is not there.
+ */
+function drawPhomButtons() {
+  const mine = state.turn === state.me.seat;
+
+  if (state.step === 'take') {
+    const eat = button('Ăn', 'primary', (el) => { el.disabled = true; z.send({ eat: true }); });
+    eat.disabled = !mine || !state.me.canEat;
+    const draw = button(state.stock ? `Bốc · ${state.stock}` : 'Hết nọc', '',
+      (el) => { el.disabled = true; z.send({ draw: true }); });
+    draw.disabled = !mine;
+    return;
+  }
+
+  const one = [...picked][0];
+  const out = button(
+    one === undefined ? 'Chọn lá để đánh' : `Đánh ${nameOfCard(one)}`,
+    'primary',
+    (el) => {
+      el.disabled = true;
+      const card = [...picked][0];
+      picked = new Set();
+      z.send({ throw: card });
+    });
+  out.disabled = !mine || one === undefined;
 }
 
 /// Out of cards, with the table still going. Their place is taken and their gold is paid — what
@@ -713,16 +864,34 @@ function play() {
 
 function drawResult() {
   const box = $('result');
-  box.replaceChildren();
 
   // Their own result, as soon as they have one — not when the last two have finished arguing
   // over a pair of threes. Coming first and then being made to sit and watch is the game
   // holding on to somebody it has finished with.
   const early = finishedHere() && watchingRest !== state.gameId;
   box.hidden = !state || (state.phase !== 'over' && !early);
-  if (box.hidden) return;
+  if (box.hidden) { box.dataset.done = ''; box.replaceChildren(); return; }
 
-  if (early) { drawFinished(box); return; }
+  if (early) {
+    // Built once a hand, and then left alone.
+    //
+    // The rest of the table plays on for a minute after somebody goes out, and every move of it
+    // arrives as a push. Rebuilding this screen on each one restarted the heading, the count-up
+    // and the whole announcement — a dozen times at a table of four, and never at a table of
+    // two, which is why it only ever showed up with more than two people in it. It read as the
+    // game telling somebody they had won, over and over.
+    const once = `done:${state.gameId}`;
+    if (box.dataset.done === once) return;
+    box.replaceChildren();
+    // Only once there is a place to announce. The push that empties a hand can arrive a beat
+    // before the one that says where it came, and "Bạn về " with nothing after it is not a
+    // sentence.
+    if (drawFinished(box)) box.dataset.done = once;
+    return;
+  }
+
+  box.dataset.done = '';
+  box.replaceChildren();
 
   const ranking = state.ranking || [];
   const paid = state.paid || [];
@@ -762,7 +931,16 @@ function drawResult() {
 
     const place = document.createElement('span');
     place.className = 'where-place';
-    place.textContent = one.place;
+    // Phỏm được xếp hạng bằng điểm rác, nên hạng mà không có điểm là hạng không giải thích được
+    // gì. Móm nói thẳng ra chữ móm — nó là một cách thua riêng, không phải điểm cao.
+    const score = phom()
+      ? (paid.find((row) => row.userId === one.id) ?? {})
+      : null;
+    place.textContent = score && score.mom
+      ? `${one.place} · móm`
+      : score && typeof score.points === 'number'
+        ? `${one.place} · ${score.points} điểm`
+        : one.place;
 
     // What it was worth. A machine has nothing in this column at all.
     const took = owed(one.id);
@@ -784,7 +962,50 @@ function drawResult() {
 
     row.append(name, place, money);
     box.append(row);
+
+    // What the number is made of, under the row it belongs to.
+    //
+    // A hand now pays four different ways — where you came, what you cut, what you were still
+    // holding, and whether you are paying for the table — and a single figure that is the sum
+    // of four things nobody was told about is a figure people assume was taken from them. Only
+    // shown when there is something to say: an ordinary hand still reads as one number.
+    if (took) {
+      const parts = [];
+      if (took.chop) parts.push([took.chop, took.chop > 0 ? 'chặt' : 'bị chặt']);
+      if (took.rot) parts.push([took.rot, took.rot > 0 ? 'người ta thối' : 'thối bài']);
+      if (took.blanche) parts.push([took.blanche, 'tới trắng']);
+      if (took.owes) parts.push([took.owes, state.owesWhy === 'ôm hàng' ? 'ôm hàng' : 'cóng']);
+      if (parts.length) {
+        const why = document.createElement('div');
+        why.className = 'where-why';
+        for (const [amount, label] of parts) {
+          const bit = document.createElement('span');
+          bit.className = amount > 0 ? 'up' : 'down';
+          bit.textContent = `${label} ${change(amount)}`;
+          why.append(bit);
+        }
+        box.append(why);
+      }
+    }
   });
+
+  // The hand that never had to be played.
+  if (state.blancheWith) {
+    const white = document.createElement('div');
+    white.className = 'blanche';
+    const who = (state.seats.find((one) => one.id === state.blanche) || {}).name || 'Ai đó';
+    white.textContent = `${who} tới trắng · ${state.blancheWith}`;
+    box.append(white);
+  }
+
+  // And every chặt of it, in the order they landed. The one part of a hand people argue about
+  // afterwards, so it is written down rather than remembered.
+  for (const cut of state.chopped || []) {
+    const line = document.createElement('div');
+    line.className = 'chopline';
+    line.textContent = `${cut.byName} chặt ${cut.fromName} · ${cut.cards.map(nameOfCard).join(' ')}`;
+    box.append(line);
+  }
 }
 
 // ---- choosing what to play ------------------------------------------------------------------------
@@ -833,12 +1054,19 @@ function drawPurse() {
   // thousand are different things, and only one of them happened.
   const moved = purseWas === null || showing === null ? 0 : showing - purseWas;
   purseWas = showing;
+
+  // Not twice for the same money. The seat it was won at floats its own chip, and two of the
+  // same number rising off the same screen at the same instant reads as a fault rather than as
+  // emphasis — it was the ghế that meant something, so the ghế keeps it.
+  const alsoOnTable = !!state && state.kind !== 'baucua' && !!state.me
+    && (state.seats[state.me.seat] || {}).won === moved;
+
   if (moved) {
     amount.classList.remove('moved');
     void amount.offsetWidth;          // so the same class re-animates rather than sitting still
     amount.classList.add('moved');
     // Over the number rather than over the row it is in, so it reads as that number changing.
-    floatGold(amount, moved);
+    if (!alsoOnTable) floatGold(amount, moved);
   }
 }
 
@@ -847,6 +1075,7 @@ function drawFinished(box) {
   const seat = state.seats[state.me.seat];
   const mine = (state.paid || []).find((one) => one.userId === z.viewer.id);
   const place = (mine && mine.place) || (seat && seat.place) || '';
+  if (!place) return false;
 
   const title = document.createElement('h2');
   title.textContent = `Bạn về ${place.toLowerCase()}`;
@@ -881,6 +1110,8 @@ function drawFinished(box) {
 
   row.append(leave, stay);
   box.append(row);
+
+  return true;
 }
 
 /// Which question is being asked. Nothing at all on the first screen, which is two ways in.
@@ -892,6 +1123,10 @@ const DAILY = 10000;
 /// The answer to the one question that is asked before another one is. Everything else is a tap
 /// that does the thing, so nothing else has to be remembered between screens.
 let seatsWanted = 4;
+
+/// Which card game the seat count and the stake are being chosen for. Two games share those two
+/// questions exactly, so they share the two screens that ask them.
+let gameWanted = 'tienlen';
 
 /// A row that is a whole answer: tapping it does the thing rather than selecting a value that
 /// then has to be confirmed somewhere else.
@@ -996,7 +1231,12 @@ function drawMenu() {
     body.append(bigCard('♠', 'Tiến lên miền nam',
       purse < cheapest ? `Cần ${gold(cheapest)} vàng` : 'Đánh bài, 2 đến 4 người',
       waiting ? '' : 'gold', purse >= cheapest,
-      () => { step = 'tienlen'; render(); }));
+      () => { gameWanted = 'tienlen'; step = 'tienlen'; render(); }));
+
+    body.append(bigCard('🀄', 'Đánh phỏm',
+      purse < cheapest ? `Cần ${gold(cheapest)} vàng` : 'Ăn, gửi, hạ phỏm · ít điểm nhất thắng',
+      '', purse >= cheapest,
+      () => { step = 'phom'; render(); }));
 
     body.append(bigCard('⚄', 'Bầu cua tôm cá',
       purse < cheapest ? `Cần ${gold(cheapest)} vàng` : 'Đặt cửa, ba con xúc xắc',
@@ -1028,12 +1268,43 @@ function drawMenu() {
       !noBot, () => { step = 'solo'; render(); }));
     body.append(pick('Tạo bàn',
       noTable ? `cần ${gold(cheapest)} vàng` : 'mời cả thế giới',
-      !noTable, () => { step = 'open'; render(); }));
+      !noTable, () => { gameWanted = 'tienlen'; step = 'open'; render(); }));
 
     body.append(stepNote(noBot
       ? `Bạn có ${gold(purse)} vàng. Bấm dấu + cạnh số vàng ở trên để xem quảng cáo nhận `
         + `${gold(state.adsGold)} vàng.`
       : 'Bàn tự mở ra cho mọi nhóm — ai cũng tìm thấy và vào được.'));
+    return;
+  }
+
+  if (step === 'phom') {
+    const noBot = purse < state.botStake;
+    const noTable = purse < cheapest;
+
+    body.append(stepHead('Đánh phỏm', 'Chơi kiểu nào?', null));
+    body.append(pick('Đấu với máy',
+      noBot ? `cần ${gold(state.botStake)} vàng` : `cược ${gold(state.botStake)}`,
+      !noBot, () => { step = 'phomSolo'; render(); }));
+    body.append(pick('Tạo bàn',
+      noTable ? `cần ${gold(cheapest)} vàng` : 'mời cả thế giới',
+      !noTable, () => { gameWanted = 'phom'; step = 'open'; render(); }));
+
+    body.append(stepNote(noBot
+      ? `Bạn có ${gold(purse)} vàng. Bấm dấu + cạnh số vàng ở trên để xem quảng cáo nhận `
+        + `${gold(state.adsGold)} vàng.`
+      : 'Mỗi người chín lá, cái mười. Bốn vòng, mỗi vòng ăn một lá hoặc bốc một lá rồi đánh đi '
+        + 'một lá. Hết ván ai còn ít điểm rác nhất thì thắng.'));
+    return;
+  }
+
+  if (step === 'phomSolo') {
+    body.append(stepHead('Đấu với máy', 'Ghế trống là máy ngồi', 'phom'));
+    for (const many of [2, 3, 4]) {
+      body.append(pick(`${many} người`, many === 4 ? 'đủ bàn' : many === 2 ? 'nhanh nhất' : '',
+        true, () => z.send({ phomSolo: many })));
+    }
+    body.append(stepNote('Ù ăn gấp đôi của từng người. Móm — hết ván không có phỏm nào — '
+      + 'thua gấp đôi.'));
     return;
   }
 
@@ -1068,7 +1339,7 @@ function drawMenu() {
   }
 
   if (step === 'open') {
-    body.append(stepHead('Tạo bàn', 'Bàn mấy người?', 'tienlen'));
+    body.append(stepHead('Tạo bàn', 'Bàn mấy người?', gameWanted));
     for (const many of [2, 3, 4]) {
       body.append(pick(`${many} người`, many === 4 ? 'đủ bàn' : many === 2 ? 'nhanh nhất' : '',
         true, () => { seatsWanted = many; step = 'stake'; render(); }));
@@ -1091,12 +1362,13 @@ function drawMenu() {
     const floor = state.minStake || 1000;
     const roof = state.maxStake || purse;
 
-    body.append(stepHead('Cược bao nhiêu?', `Bàn ${seatsWanted} người`, 'open'));
+    body.append(stepHead('Cược bao nhiêu?',
+      `${gameWanted === 'phom' ? 'Phỏm' : 'Tiến lên'} · bàn ${seatsWanted} người`, 'open'));
     for (const one of bets) {
       body.append(pick(`${gold(one)} vàng`,
         purse < one ? 'thiếu vàng' : `nhất ăn ${gold(one)}`,
         purse >= one,
-        () => z.send({ open: seatsWanted, stake: one })));
+        () => z.send(openTable(one))));
     }
 
     // Anything else. The three above are the common answers, not the only ones — and a game
@@ -1108,6 +1380,11 @@ function drawMenu() {
       : `Tự nhập từ ${gold(floor)} đến ${gold(roof)} vàng. Bạn có ${gold(purse)}.`));
   }
 }
+
+/// Opening a table, for whichever of the two games the menu walked in from.
+const openTable = (stake) => (gameWanted === 'phom'
+  ? { phom: seatsWanted, stake }
+  : { open: seatsWanted, stake });
 
 /// A stake somebody types, with the one button that opens it.
 ///
@@ -1143,7 +1420,7 @@ function customStake(floor, roof) {
   go.onclick = () => {
     if (!ok()) return;
     go.disabled = true;
-    z.send({ open: seatsWanted, stake: asked() });
+    z.send(openTable(asked()));
   };
 
   row.append(box, go);
@@ -1252,12 +1529,16 @@ function drawBrowse() {
     names.className = 'row-names';
     // Which game, before the names. Two kinds of table on one list and no way to tell them
     // apart is somebody sitting down to the wrong one.
-    names.textContent = (room.kind === 'baucua' ? '⚄ ' : '♠ ') + room.names.join(', ');
+    // Ba trò, ba dấu. Ngồi vào một bàn tiến lên trong khi định chơi phỏm là chuyện xảy ra
+    // đúng một lần rồi người ta thôi bấm vào danh sách này.
+    const mark = { baucua: '⚄ ', phom: '🀄 ' }[room.kind] ?? '♠ ';
+    names.textContent = mark + room.names.join(', ');
     // The stake before the seats. It is the first thing worth knowing about a table and the
     // only one that can refuse you.
     const bet = document.createElement('span');
     bet.className = 'row-seats';
-    bet.textContent = room.kind === 'baucua' ? 'bầu cua' : gold(room.stake);
+    bet.textContent = room.kind === 'baucua' ? 'bầu cua'
+      : room.kind === 'phom' ? `phỏm · ${gold(room.stake)}` : gold(room.stake);
     const many = document.createElement('span');
     many.className = 'score';
     many.textContent = `${room.names.length}/${room.size}`;
@@ -1374,6 +1655,18 @@ function drawBar() {
 
   who.textContent = state.turn === state.me.seat ? 'Tới lượt bạn' : `Lượt ${state.turnName}`;
   bar.append(who);
+
+  // What this hand is worth right now. The whole of phỏm is that number, and working it out by
+  // eye from cards half behind each other every turn is work the screen can do once.
+  if (phom()) {
+    const score = document.createElement('span');
+    score.className = 'phom-score' + (state.me.points === 0 ? ' clean' : '');
+    score.textContent = state.me.points === 0
+      ? '· không còn rác'
+      : `· rác ${state.me.points} điểm`;
+    bar.append(score);
+    return;
+  }
 
   if (picked.size) {
     const chosen = document.createElement('span');

@@ -42,679 +42,52 @@ const SCORES = process.env.TIENLEN_SCORES ?? '/app/data/scores.json';
 /// How many names a table shows.
 export const TABLE_SIZE = 20;
 
-// ---- the cards ------------------------------------------------------------------------------
-
-/// Low to high, which is the whole of the ordering.
-///
-/// A card is one number, `rank * 4 + suit`, and that number *is* its strength: 3♠ is 0 and 2♥
-/// is 51. Every comparison in the game — a higher single, a higher pair, a longer run — is
-/// then `>` on an integer, and there is no second place for the ordering to be written down
-/// differently.
-export const RANKS = ['3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A', '2'];
-
-/// Bích, chuồn, rô, cơ. The suit breaks a tie between equal ranks and nothing else.
-export const SUITS = ['♠', '♣', '♦', '♥'];
-
-/// The rank that cannot be in a run, and the one every bomb exists to cut.
-export const TWO = 12;
-
-export const rankOf = (card) => Math.floor(card / 4);
-export const suitOf = (card) => card % 4;
-export const nameOf = (card) => RANKS[rankOf(card)] + SUITS[suitOf(card)];
-
-export const deck = () => Array.from({ length: 52 }, (_, i) => i);
-
-/**
- * A number in [0, 1), from the operating system rather than from V8.
- *
- * `Math.random` is xorshift128+. It is fast, it is fine for anything nobody is betting on, and
- * its internal state can be recovered from its own output — which is the whole of the problem
- * here. The dice are thrown *after* the bets are down, this bot plays for gold, and its source
- * is public: three of these decide a throw, and a throw happens in front of everybody every
- * twenty-five seconds. That is an oracle handed to anybody who wants one.
- *
- * There was a comment on the shuffle saying `Math.random` was fine because a deal happens in
- * one go and predicting it predicts nothing that has not already happened. That was true of the
- * deal and was never true of the dice, and it stopped being a safe thing to write down at all
- * the moment the repository went public.
- */
-/// Forty-seven bits of it. `randomInt` will not span more than 2⁴⁸ − 1 in one call, and a
-/// number of bits that fits well inside that is worth more than a number that sits on the edge
-/// of it.
-const SPREAD = 2 ** 47;
-export const chance = () => randomInt(0, SPREAD) / SPREAD;
-
-/**
- * A deal, shuffled.
- *
- * Thirteen each however many are sitting down, and the rest of the deck is simply not used.
- * That is how the game is played at a short table: three people are not dealt seventeen
- * cards, they are dealt thirteen and the game is quicker.
- */
-export function deal(players, random = chance) {
-  const cards = deck();
-  for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [cards[i], cards[j]] = [cards[j], cards[i]];
-  }
-
-  return Array.from({ length: players }, (_, seat) =>
-    cards.slice(seat * 13, seat * 13 + 13).sort((a, b) => a - b));
-}
-
-// ---- what may be put down ---------------------------------------------------------------
-
-/**
- * What this set of cards is, or nothing if it is not anything.
- *
- * Returns `{ kind, size, top }`. `top` is the highest card, which is what every comparison
- * between two plays of the same shape comes down to.
- *
- * The six shapes are the whole game: a card, a pair, a triple, four of a kind, a run of three
- * or more, and a run of three or more pairs. Everything else — chặt, who beats what — is
- * `beats` below, and is about two of these rather than about one.
- */
-export function shapeOf(cards) {
-  if (!Array.isArray(cards) || cards.length === 0) return null;
-
-  // Anything a stranger typed. A duplicate card is the interesting one: without this check a
-  // widget could send the same card four times and call it a tứ quý.
-  const seen = new Set();
-  for (const card of cards) {
-    if (!Number.isInteger(card) || card < 0 || card > 51) return null;
-    if (seen.has(card)) return null;
-    seen.add(card);
-  }
-
-  const sorted = [...cards].sort((a, b) => a - b);
-  const top = sorted[sorted.length - 1];
-  const ranks = sorted.map(rankOf);
-  const same = ranks.every((r) => r === ranks[0]);
-
-  if (sorted.length === 1) return { kind: 'single', size: 1, top };
-  if (same) {
-    if (sorted.length === 2) return { kind: 'pair', size: 2, top };
-    if (sorted.length === 3) return { kind: 'triple', size: 3, top };
-    if (sorted.length === 4) return { kind: 'quad', size: 4, top };
-    return null;
-  }
-
-  // A run, and a run of pairs. Neither may hold a 2 — that is the rule the whole endgame is
-  // built on, and without it a hand with two 2s in it could simply be walked out in a sảnh.
-  if (ranks.includes(TWO)) return null;
-
-  if (sorted.length >= 3) {
-    const consecutive = ranks.every((r, i) => i === 0 || r === ranks[i - 1] + 1);
-    if (consecutive) return { kind: 'straight', size: sorted.length, top };
-  }
-
-  if (sorted.length >= 6 && sorted.length % 2 === 0) {
-    const pairs = [];
-    for (let i = 0; i < sorted.length; i += 2) {
-      if (ranks[i] !== ranks[i + 1]) return null;
-      pairs.push(ranks[i]);
-    }
-    const consecutive = pairs.every((r, i) => i === 0 || r === pairs[i - 1] + 1);
-    // Every rank distinct as well as consecutive: three pairs of the same rank is impossible
-    // with four suits, but four pairs across two ranks is not, and it is not a đôi thông.
-    if (consecutive) return { kind: 'pairs_run', size: sorted.length, top, pairs: pairs.length };
-  }
-
-  return null;
-}
-
-export const isBomb = (shape) =>
-  !!shape && (shape.kind === 'quad' || (shape.kind === 'pairs_run' && shape.pairs >= 3));
-
-/// A single 2, and a pair of them. The two things a bomb is allowed to cut out of turn.
-const isLoneTwo = (shape) => shape.kind === 'single' && rankOf(shape.top) === TWO;
-const isPairOfTwos = (shape) => shape.kind === 'pair' && rankOf(shape.top) === TWO;
-
-/**
- * Whether `mine` may be put on top of `theirs`.
- *
- * Two ways: the same shape but higher, or a chặt. The ladder of chặt is the one every table
- * in the south plays to —
- *
- *   ba đôi thông   cuts a lone 2
- *   tứ quý         cuts a lone 2, a pair of 2s, and ba đôi thông
- *   bốn đôi thông  cuts all of those and tứ quý
- *
- * Nothing cuts bốn đôi thông but a higher one. Two bombs of the same kind are compared by
- * their highest card like anything else, which the first branch already does — so the ladder
- * only ever has to answer about bombs of *different* kinds.
- */
-export function beats(mine, theirs) {
-  if (!mine) return false;
-  if (!theirs) return true;
-
-  if (mine.kind === theirs.kind && mine.size === theirs.size) return mine.top > theirs.top;
-
-  const threePairs = (s) => s.kind === 'pairs_run' && s.pairs === 3;
-  const fourPairs = (s) => s.kind === 'pairs_run' && s.pairs === 4;
-
-  if (threePairs(mine)) return isLoneTwo(theirs);
-  if (mine.kind === 'quad') {
-    return isLoneTwo(theirs) || isPairOfTwos(theirs) || threePairs(theirs);
-  }
-  if (fourPairs(mine)) {
-    return isLoneTwo(theirs) || isPairOfTwos(theirs) || threePairs(theirs)
-      || theirs.kind === 'quad';
-  }
-
-  return false;
-}
-
-/// Whether a hand really holds these cards. A widget is a file anybody can edit, so the cards
-/// somebody says they are playing are checked against the ones they were dealt.
-export const holdsAll = (hand, cards) => cards.every((card) => hand.includes(card));
-
-// ---- everything a hand could put down ----------------------------------------------------
-
-/// Cards of a rank, low suit first.
-function byRank(hand) {
-  const groups = new Map();
-  for (const card of [...hand].sort((a, b) => a - b)) {
-    const rank = rankOf(card);
-    if (!groups.has(rank)) groups.set(rank, []);
-    groups.get(rank).push(card);
-  }
-  return groups;
-}
-
-const pick = (cards, take) => {
-  // Every way of taking `take` cards out of at most four. Written out rather than recursed
-  // because the four suits are the whole of the problem and a general combination generator
-  // would be more code than the thing it generates.
-  const out = [];
-  const walk = (start, chosen) => {
-    if (chosen.length === take) { out.push([...chosen]); return; }
-    for (let i = start; i < cards.length; i++) {
-      chosen.push(cards[i]);
-      walk(i + 1, chosen);
-      chosen.pop();
-    }
-  };
-  walk(0, []);
-  return out;
-};
-
-/**
- * Every play worth considering out of this hand.
- *
- * Not every play there is. A run of five has up to 4⁵ ways of being made and all but two of
- * them are the same move played with better cards thrown away — so a run is offered twice:
- * once made of the lowest card at each rank, and once with the top rank's highest card
- * instead. The second is not an optimisation, it is the difference between beating a run by a
- * suit and not being able to.
- *
- * Sorted by size then by top card, so whoever reads this list first sees the cheapest thing
- * in it.
- */
-export function movesFrom(hand) {
-  const groups = byRank(hand);
-  const moves = [];
-  const add = (cards) => {
-    const shape = shapeOf(cards);
-    if (shape) moves.push({ cards: [...cards].sort((a, b) => a - b), shape });
-  };
-
-  for (const [, cards] of groups) {
-    for (const card of cards) add([card]);
-    for (const take of [2, 3, 4]) {
-      if (cards.length >= take) for (const some of pick(cards, take)) add(some);
-    }
-  }
-
-  // Runs, and runs of pairs. Both stop at the ace: a 2 cannot be in either, so a run that
-  // would reach one simply ends before it.
-  for (let start = 0; start < TWO; start++) {
-    for (let length = 3; start + length <= TWO; length++) {
-      const ranks = Array.from({ length }, (_, i) => start + i);
-      if (!ranks.every((rank) => (groups.get(rank)?.length ?? 0) >= 1)) break;
-
-      const low = ranks.map((rank) => groups.get(rank)[0]);
-      add(low);
-      const highest = groups.get(ranks[length - 1]).at(-1);
-      if (highest !== low[length - 1]) add([...low.slice(0, -1), highest]);
-    }
-
-    for (let pairs = 3; start + pairs <= TWO; pairs++) {
-      const ranks = Array.from({ length: pairs }, (_, i) => start + i);
-      if (!ranks.every((rank) => (groups.get(rank)?.length ?? 0) >= 2)) break;
-
-      const low = ranks.flatMap((rank) => groups.get(rank).slice(0, 2));
-      add(low);
-      const top = groups.get(ranks[pairs - 1]);
-      if (top.length > 2) add([...low.slice(0, -2), ...top.slice(-2)]);
-    }
-  }
-
-  return moves.sort((a, b) => a.cards.length - b.cards.length || a.shape.top - b.shape.top);
-}
-
-/// Whether anything in this hand answers what is on the table.
-export const canAnswer = (hand, pile) =>
-  movesFrom(hand).some((move) => beats(move.shape, pile));
-
-/**
- * How much it costs to play these cards now.
- *
- * Lower is better, and the whole of the machine's judgement is here. Three things are traded
- * off: getting rid of cards is the point of the game, a 2 is the card that wins a round
- * nobody else can, and a bomb is the last word in a hand and worth nothing once spent.
- *
- * Breaking up a bomb to make a smaller play is the mistake a greedy player makes and the one
- * that loses the endgame — a tứ quý split into a pair is a pair, and the 2 it was being kept
- * for goes down unanswered.
- */
-export function costOf(move, hand) {
-  let cost = move.shape.top - move.cards.length * 6;
-
-  if (rankOf(move.shape.top) === TWO) cost += 60;
-  if (isBomb(move.shape)) cost += 120;
-
-  // What this leaves behind. A pair taken out of four of a kind is four cards' worth of bomb
-  // spent on two cards' worth of play.
-  const groups = byRank(hand);
-  for (const [rank, cards] of groups) {
-    const taken = move.cards.filter((card) => rankOf(card) === rank).length;
-    if (taken === 0 || taken === cards.length) continue;
-    if (cards.length === 4) cost += 100;
-    else if (cards.length === 3 && taken === 1) cost += 15;
-  }
-
-  return cost;
-}
-
-/**
- * What the machine does with its turn.
- *
- * Returns the cards to play, or null to pass. `lowest` is the fewest cards anybody else is
- * holding, which is the only thing that makes spending a 2 or a bomb worth it: somebody about
- * to go out takes the game with them, and a bomb kept for later is a bomb kept for nobody.
- *
- * Not a search. Tiến lên rewards holding on to the right cards rather than reading three
- * moves ahead, and a machine that plays its cheapest legal card and keeps its weapons for
- * somebody who is nearly out is a machine that beats most people at the table.
- */
-export function chooseMove(hand, pile, { lowest = 13, mustInclude = null } = {}) {
-  let moves = movesFrom(hand).filter((move) => beats(move.shape, pile));
-
-  if (mustInclude !== null) {
-    moves = moves.filter((move) => move.cards.includes(mustInclude));
-  }
-  if (!moves.length) return null;
-
-  // Anything that empties the hand ends the game for this player, and nothing else is worth
-  // comparing against that.
-  const out = moves.find((move) => move.cards.length === hand.length);
-  if (out) return out.cards;
-
-  const scored = moves
-    .map((move) => ({ move, cost: costOf(move, hand) }))
-    .sort((a, b) => a.cost - b.cost);
-
-  const cheapest = scored[0];
-
-  if (!pile) {
-    // Leading. A bomb led into an empty table cuts nothing — it is four cards traded for one
-    // round — so it is never the opening unless it is also the way out, which was answered
-    // above.
-    const ordinary = scored.find(({ move }) => !isBomb(move.shape));
-    return (ordinary ?? cheapest).move.cards;
-  }
-
-  // Following, and able to. Whether it is worth it is the only question left.
-  const expensive = isBomb(cheapest.move.shape) || rankOf(cheapest.move.shape.top) === TWO;
-  if (expensive && lowest > 2) return null;
-
-  return cheapest.move.cards;
-}
-
-// ---- the table, as functions with no opinions about chat ---------------------------------
-
-/// How long somebody may think before the bot takes their turn.
-///
-/// A table with somebody asleep at it looks exactly like a table where somebody is counting
-/// their cards, and the other three have no way to tell which they are in. Shorter than caro's
-/// minute because three people are waiting rather than one.
-export const TURN_MS = 30_000;
-
-/// How long a finished table waits for everybody to say they want another.
-export const REMATCH_MS = 120_000;
-
-/// How long a table nobody ever sat down at stays open.
-export const LOBBY_MS = 300_000;
-
-/// How long the machine pauses before it plays.
-///
-/// A card that lands in the same instant as your own does not read as somebody playing, it
-/// reads as the screen redrawing. Three machines answering together at a four-handed table is
-/// the case this is really for.
-export const THINK_MS = Number(process.env.TIENLEN_THINK_MS ?? 900);
-
-/// Where somebody came in the order. Fourth is "bét" whatever the table size — the name is for
-/// the person left holding cards, not for a place number.
-export const PLACES = ['Nhất', 'Nhì', 'Ba', 'Bét'];
-
-export const placeName = (place, players) =>
-  place === players - 1 ? 'Bét' : PLACES[place] ?? `Thứ ${place + 1}`;
-
-/// The names the machines play under.
-///
-/// Names rather than "Máy 1", because three rows reading Máy 1, Máy 2, Máy 3 is a list of
-/// processes and the point of sitting down is that it should feel like a table.
-export const MACHINES = ['Tư Ròm', 'Út Mập', 'Ba Gà', 'Năm Lì', 'Sáu Bảnh'];
-
-/**
- * The next seat that still has to answer what is on the table.
- *
- * Never the seat it is asked about — the loop stops one short of a full turn — which is what
- * makes "nobody left to answer" a real answer rather than the same player being handed the
- * turn back for ever.
- */
-export function nextInRound(hands, passed, from) {
-  for (let step = 1; step < hands.length; step++) {
-    const seat = (from + step) % hands.length;
-    if (hands[seat].length && !passed.has(seat)) return seat;
-  }
-  return null;
-}
-
-/// The next seat still holding cards, wrapping all the way round to `from` itself.
-export function nextActive(hands, from) {
-  for (let step = 1; step <= hands.length; step++) {
-    const seat = (from + step) % hands.length;
-    if (hands[seat].length) return seat;
-  }
-  return null;
-}
-
-/**
- * Who opens, and the card their first play has to contain.
- *
- * Whoever holds the three of spades, which is the rule everybody knows. But at a table of two
- * or three only twenty-six or thirty-nine cards are dealt and the three of spades may be in
- * the half of the deck nobody got — so it is really *the lowest card in play*, which at a full
- * table is the three of spades and at a short one is whatever took its place.
- *
- * Returning both together on purpose. They were two lookups in two places to begin with, and
- * a short table opened on the seat holding the lowest card while demanding a card nobody had.
- */
-export function opensGame(hands) {
-  let seat = -1;
-  let card = 52;
-  hands.forEach((hand, index) => {
-    // Hands are dealt sorted, so the first card is the lowest one.
-    if (hand.length && hand[0] < card) { card = hand[0]; seat = index; }
-  });
-  return { seat, card };
-}
-
-/// How many people are still holding cards.
-export const stillIn = (hands) => hands.filter((hand) => hand.length).length;
-
-/// The fewest cards anybody but this seat is holding — what tells the machine whether to spend
-/// a bomb now or keep it for a round that may not come.
-export const lowestElsewhere = (hands, seat) => Math.min(
-  ...hands.map((hand, i) => (i === seat || !hand.length ? 99 : hand.length)), 99);
-
-// ---- the gold -------------------------------------------------------------------------------
-
-/// What somebody has the first time they open this.
-///
-/// Enough to sit down at anything on the list and lose a couple of hands without being sent to
-/// an advertisement — a first table that has to be paid for before it can be played is a game
-/// nobody gets to the middle of.
-export const STARTING_GOLD = 20_000;
-
-/// What turning up is worth, once a day.
-export const DAILY_GOLD = 10_000;
-
-/// What a table against the machines is played for.
-///
-/// Fixed, and deliberately not the room's stake. A table anybody can open at any stake and then
-/// fill with machines is a table that prints gold — the machines do not mind what they lose.
-///
-/// The ladder scales with it on its own: `payouts` is a share of one stake, so nhất takes this
-/// and nhì takes half of it whatever this number is.
-export const BOT_STAKE = 4_000;
-
-/// The three a table can be opened at with one tap. Anything between the floor and the ceiling
-/// can be typed instead — these are the common answers, not the only ones.
-export const STAKES = [1_000, 5_000, 20_000];
-
-/// The floor and the ceiling for a table between people.
-///
-/// A floor because a table for nothing is not a table. A ceiling because the number arrives
-/// from a page anybody can edit, and a stake nobody could ever cover is a room on everybody's
-/// list that nobody can sit at.
-export const MIN_STAKE = 1_000;
-export const MAX_STAKE = 1_000_000;
-
-/// What somebody may open a table at, whatever they typed.
-export function asStake(asked) {
-  const want = Math.round(Number(asked));
-  if (!Number.isFinite(want)) return MIN_STAKE;
-  return Math.max(MIN_STAKE, Math.min(MAX_STAKE, want));
-}
-
-/// The advertisement: how long it runs, what it pays, and how many in a day.
-///
-/// The ten seconds are counted here and not in the page. A widget is a file anybody can edit,
-/// so a countdown it runs is a countdown it can skip — the page shows the clock and the bot
-/// decides whether it ran.
-///
-/// What it pays is one hand against the machines, and that is not a coincidence: this exists to
-/// get somebody who has run out back to a table, and an advertisement that leaves them still
-/// short of the cheapest thing on the screen has not done its one job. It used to pay two
-/// thousand against a two thousand table; when the table went to four, this had to follow.
-///
-/// The count is deliberately huge. It is not there to ration anything — ten seconds a time is
-/// the rationing, and somebody willing to sit through a thousand of them has earned whatever
-/// that comes to. It is there so a bug in the counting cannot run away with the ledger.
-export const ADS_MS = Number(process.env.TIENLEN_ADS_MS ?? 10_000);
-export const ADS_GOLD = BOT_STAKE;
-export const ADS_PER_DAY = 1_000;
-
-/// Below this there is no table anybody can sit at. Not a gate on anything — the way to more
-/// gold is beside the purse at every balance — but the widget draws the two ways in dark and
-/// says what they cost, and this is the number it says it about.
-export const BROKE = BOT_STAKE;
-
-/**
- * What each place takes, as a share of one stake.
- *
- * First takes a stake off last; at a full table second takes half a one off third. It adds to
- * nothing — gold moves between the people at the table and none is made — which is the only
- * shape that stays sane when the same four people play all evening.
- *
- * The middle of an odd table breaks even, because second of three is neither winning nor
- * losing and paying it either way would make one of those a lie.
- */
-export function payouts(count) {
-  if (count === 2) return [1, -1];
-  if (count === 3) return [1, 0, -1];
-  if (count >= 4) return [1, 0.5, -0.5, -1];
-  return [0];
-}
-
-/// The day, in Vietnam.
-///
-/// A day that turns over in UTC turns over at seven in the morning here, so somebody playing
-/// after dinner gets tomorrow's gold and somebody playing at breakfast does not get today's.
-export const dayIn = (at = Date.now()) =>
-  new Date(at + 7 * 3600_000).toISOString().slice(0, 10);
-
-/// Gold, written the way it is read here: 12.500.
-export function gold(amount) {
-  const digits = String(Math.abs(Math.round(amount))).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return (amount < 0 ? '-' : '') + digits;
-}
-
-/**
- * Who pays whom at the end of a table, and how much.
- *
- * Two different tables wearing the same clothes, and the difference is how many people are at
- * them.
- *
- * **Two or more people**: played for the room's stake, between the people, in the order they
- * went out. The machines sitting in the empty seats are furniture — whoever went out first of
- * the people has won, whatever the machines did, so two people and two machines is a table of
- * two and first takes a stake off second.
- *
- * **One person**: a table against the machines, whatever it was opened as. The ranking is the
- * whole table, and the stake is the house's rather than the room's.
- *
- * Pure, and given the seats rather than a game, because this is the part that is worth being
- * able to run a hundred finishing orders through without a chat anywhere near it.
- */
-export function settlement(seats, finished, stake) {
-  const people = seats.filter((one) => !one.bot);
-  if (!people.length) return [];
-
-  // How many are being paid comes from who is *at* the table, not from who has finished — so
-  // this answers the same way after one person is out as it will at the end. That is what lets
-  // the table show somebody what they won at the moment they won it rather than a minute later
-  // when the last two have stopped arguing over a pair of threes.
-  const alone = people.length < 2;
-  const share = payouts(alone ? seats.length : people.length);
-  const worth = alone ? BOT_STAKE : stake;
-
-  const order = finished.map((seat) => seats[seat]).filter(Boolean);
-  const ranked = alone ? order : order.filter((one) => !one.bot);
-
-  const paid = [];
-  ranked.forEach((who, place) => {
-    if (who.bot) return;
-    paid.push({
-      userId: who.userId,
-      displayName: who.displayName,
-      // Where they came *among the people who are being paid*, which at a table of two people
-      // and two machines is first or second and never third.
-      place: placeName(place, alone ? seats.length : people.length),
-      change: Math.round((share[place] ?? 0) * worth),
-    });
-  });
-  return paid;
-}
-
-// ---- bầu cua tôm cá ---------------------------------------------------------------------------
-
-/**
- * The six faces, in the order they sit on a board.
- *
- * Kept as names rather than numbers because the widget draws each of them and the state has to
- * say which is which. Three dice, six faces, and everything below is counting.
- */
-export const FACES = ['bau', 'cua', 'tom', 'ca', 'ga', 'nai'];
-
-export const FACE_NAMES = {
-  bau: 'Bầu', cua: 'Cua', tom: 'Tôm', ca: 'Cá', ga: 'Gà', nai: 'Nai',
-};
-
-/// How many dice are thrown. Three, and the whole shape of the game is that number.
-export const DICE = 3;
-
-/// How long the bowl is shaking for.
-///
-/// Long enough to be a throw rather than a number appearing, short enough that nobody watching
-/// four rounds in a row starts wishing it were shorter. The dice are decided at the end of it
-/// and not the start: what the bot has not worked out yet is not in any push anybody could read.
-export const ROLL_MS = Number(process.env.TIENLEN_ROLL_MS ?? 1_600);
-
-/// How long a finished throw stays up before the next round opens.
-///
-/// Longer than it needs to be for reading a result, because the result is under a plate that
-/// somebody has to lift. Whoever does not lift it has it lifted for them after a moment; this
-/// is the room the two of those need between them.
-export const SHOW_MS = Number(process.env.TIENLEN_SHOW_MS ?? 5_000);
-
-/// How many throws the board of past throws remembers.
-///
-/// Thirty, which is about ten minutes of a sòng and as many columns as fit across a phone. Old
-/// throws say nothing about new ones — the dice have no memory — but reading the run of them is
-/// half of what people are doing while they wait, and a game that hides it is a game pretending
-/// its players are somebody else.
-export const HISTORY = 30;
-
-/// How long a table with more than one person at it takes bets for.
-export const BETTING_MS = Number(process.env.TIENLEN_BETTING_MS ?? 25_000);
-
-/// What may be put on a face in one tap.
-export const CHIPS = [1_000, 5_000, 20_000];
-
-/// The one sòng everybody shares. A fixed name rather than a counted one, because there is
-/// exactly one of it and it has to be findable without being looked up.
-export const WORLD = 'world';
-
-/// How many people fit round one board. Wider than a card table because nobody takes turns —
-/// everybody is betting on the same three dice at the same time.
-export const BAUCUA_SEATS = 8;
-
-/**
- * Three dice.
- *
- * Takes nothing. It cannot see who is at the table, what is on the board, or how much of it —
- * there is no argument through which it could, and it is called after the betting has closed.
- * That is the whole of the guarantee and it is worth being able to read it in four lines.
- *
- * `randomInt(6)` rather than `floor(chance() * 6)`. Six does not divide a power of two, so
- * scaling a float leaves two of the faces very slightly likelier than the other four — about
- * seven parts in a thousand million million, which nobody could ever measure and which there is
- * no reason to carry. `randomInt` rejects and re-draws instead, and is exactly uniform.
- */
-export function roll() {
-  return Array.from({ length: DICE }, () => FACES[randomInt(FACES.length)]);
-}
-
-/**
- * What one stake on one face is worth once the dice have landed.
- *
- * The rule everybody at a pavement table knows: the stake comes back with as much again for
- * every die showing that face, and goes if none of them do. So a thousand on cua is worth a
- * thousand, two, or three — or nothing at all, three times out of four.
- *
- * Returned as the *change* to somebody's gold, which is what the ledger moves by: `+n × stake`
- * on a hit and `−stake` on a miss. Not "stake back plus winnings", because there is no moment
- * here where the stake has left and might come back — nothing is taken until this says so.
- */
-export function faceWorth(stake, face, dice) {
-  if (!stake) return 0;
-  const hits = dice.filter((one) => one === face).length;
-  return hits ? stake * hits : -stake;
-}
-
-/**
- * What a whole board of stakes is worth to one person.
- *
- * `bets` is a face-to-stake object, and faces nobody put anything on are simply not in it.
- */
-export function boardWorth(bets, dice) {
-  let change = 0;
-  for (const face of FACES) change += faceWorth(bets?.[face] ?? 0, face, dice);
-  return change;
-}
-
-/// Everything staked on this board, which is the most it can lose.
-export const staked = (bets) =>
-  FACES.reduce((sum, face) => sum + (bets?.[face] ?? 0), 0);
-
-/// Which faces came up, and how many times each. What the widget lights up.
-export function tally(dice) {
-  const counted = {};
-  for (const face of dice) counted[face] = (counted[face] ?? 0) + 1;
-  return counted;
-}
+// ---- luật, ở nơi luật sống --------------------------------------------------------------------
+//
+// Ba trò và một cái ví. Mỗi luật chơi là một file thuần, không biết gì về mạng, và cái file này
+// chỉ còn lại phần nói chuyện với ứng dụng. Tái xuất hết ở đây vì hai lý do: mọi thứ bên dưới
+// gọi thẳng như trước, và bộ test — vốn nhập từ `tienlenbot.mjs` — không phải đổi một dòng nào
+// chỉ vì bài được dọn sang phòng khác.
+export * from './rules/cards.mjs';
+export * from './rules/tienlen.mjs';
+export * from './rules/phom.mjs';
+export * from './rules/baucua.mjs';
+export * from './economy.mjs';
+
+import {
+  RANKS, SUITS, TWO, rankOf, suitOf, nameOf, deck, deal, chance,
+} from './rules/cards.mjs';
+import {
+  shapeOf, beats, isBomb, holdsAll, movesFrom, canAnswer, costOf, chooseMove,
+  isChop, worthOf, rotting, instantWin, INSTANT,
+  TURN_MS, REMATCH_MS, LOBBY_MS, THINK_MS, PLACES, placeName, MACHINES,
+  nextInRound, nextActive, opensGame, stillIn, lowestElsewhere,
+} from './rules/tienlen.mjs';
+import {
+  PHOM_DEAL, PHOM_TURNS, PHOM_THINK_MS, phomDeal, bestSplit, junkOf, isU,
+  canEat, eatOptions, phomChoose, phomDiscard, phomScores, phomSettle, points as phomPoints,
+} from './rules/phom.mjs';
+import {
+  FACES, FACE_NAMES, DICE, ROLL_MS, SHOW_MS, HISTORY, BETTING_MS, CHIPS, WORLD,
+  BAUCUA_SEATS, roll, faceWorth, boardWorth, staked, tally,
+} from './rules/baucua.mjs';
+import {
+  STARTING_GOLD, DAILY_GOLD, BOT_STAKE, STAKES, MIN_STAKE, MAX_STAKE, asStake,
+  ADS_MS, ADS_GOLD, ADS_PER_DAY, BROKE, payouts, dayIn, gold, settlement,
+} from './economy.mjs';
 
 // ---- what the room is told ----------------------------------------------------------------
 
 export const SAY = {
-  greeting: (handle) => `Chào cả nhà. Gõ @${handle} để mở bàn tiến lên miền nam.`,
-  opened: (who, size, stake) =>
-    `${who} mở bàn tiến lên ${size} người · cược ${gold(stake)} vàng.`,
-  started: (names) => `Bàn tiến lên đã bắt đầu: ${names.join(', ')}.`,
+  greeting: (handle) => `Chào cả nhà. Gõ @${handle} để mở bàn: tiến lên miền nam, đánh phỏm, `
+    + 'hoặc bầu cua tôm cá.',
+  // Which game, by name. A room can hold a table of each at once, and a line that only said
+  // "mở bàn" would have somebody sitting down at phỏm expecting thirteen cards.
+  opened: (who, size, stake, kind = 'tienlen') =>
+    `${who} mở bàn ${kind === 'phom' ? 'phỏm' : 'tiến lên'} ${size} người `
+    + `· cược ${gold(stake)} vàng.`,
+  started: (names, kind = 'tienlen') =>
+    `Bàn ${kind === 'phom' ? 'phỏm' : 'tiến lên'} đã bắt đầu: ${names.join(', ')}.`,
   noGame: 'Bàn này không còn nữa.',
   full: 'Bàn này đã đủ người — bạn vào xem nhé.',
   startedAlready: 'Bàn này đã vào ván rồi — bạn vào xem nhé.',
@@ -742,6 +115,7 @@ export const JOIN = (gameId) => ({
 });
 export const WATCH = (gameId) => ({
   rows: [[{ text: 'Xem', callbackData: `watch:${gameId}` }]],
+
 });
 
 // ---- the turn, as functions with no opinions about chat -------------------------------------
@@ -772,19 +146,66 @@ export function applyPlay(game, seat, cards) {
   // knows; at a short one it is whatever was dealt in its place.
   if (game.first && !cards.includes(game.opensWith)) return false;
 
+  // Chặt, and what it costs whoever is being cut.
+  //
+  // Paid the moment it lands rather than at the end, because that is when it happened and a
+  // table that shows the money a minute later is a table nobody connects to the card.
+  if (game.pile && isChop(shape, game.pile.shape)) chop(game, seat, game.pile);
+
   const played = new Set(cards);
   game.hands[seat] = game.hands[seat].filter((card) => !played.has(card));
   game.pile = { cards: [...cards].sort((a, b) => a - b), shape, seat };
   game.first = false;
   game.touched = Date.now();
+  if (game.play) game.play.add(seat);
+  // Everything that has gone face up in front of everybody. The machine is allowed this and
+  // nothing else — it is what anybody sitting there has been watching all hand.
+  if (game.seen) game.seen.push(...cards);
 
-  if (!game.hands[seat].length) game.finished.push(seat);
+  if (!game.hands[seat].length) {
+    game.finished.push(seat);
+    // What they went out on. Needed at the end for đền: going out on a 2 that somebody at the
+    // table could have cut is the one way to lose a hand you had already won.
+    game.wonWith = [...cards];
+  }
 
   // One person left holding cards is the end of it — there is nobody for them to beat.
   if (stillIn(game.hands) <= 1) { finish(game); return true; }
 
   advance(game, seat);
   return true;
+}
+
+/**
+ * Somebody's bomb landing on somebody else's, and the money that moves.
+ *
+ * The pot is what the person now holding the pile stands to lose if they in turn are cut: what
+ * they collected when they cut, plus what their own bomb is worth. So the ladder pays the way a
+ * real table pays — every chặt takes the whole run of them, and whoever is cut last carries all
+ * of it. Three chops deep, the first person is down what their 2 was worth and no more; it is
+ * the middle two who bleed.
+ *
+ * Only between people. A machine neither collects nor pays — it does not at the end of the hand
+ * either, and money that came out of furniture would be money made out of nothing.
+ */
+function chop(game, seat, pile) {
+  const mine = game.seats[seat];
+  const theirs = game.seats[pile.seat];
+  if (!mine || !theirs || mine.bot || theirs.bot) return;
+  if (game.seats.filter((one) => !one.bot).length < 2) return;
+
+  const take = worthOf(pile.cards) + (game.pot ?? 0);
+  if (!take) return;
+
+  game.chops = game.chops ?? new Map();
+  game.chops.set(mine.userId, (game.chops.get(mine.userId) ?? 0) + take);
+  game.chops.set(theirs.userId, (game.chops.get(theirs.userId) ?? 0) - take);
+  game.pot = take;
+  game.chopped = [...(game.chopped ?? []), {
+    by: mine.userId, byName: mine.displayName,
+    from: theirs.userId, fromName: theirs.displayName,
+    cards: [...pile.cards], take,
+  }];
 }
 
 /// Gives up the round. Not allowed while leading: an empty table has to be answered by
@@ -820,6 +241,8 @@ export function advance(game, from) {
 export function newRound(game, winner) {
   game.pile = null;
   game.passed = new Set();
+  // Nothing carries over to a fresh table. The pot is a thing about one pile.
+  game.pot = 0;
 
   const leader = game.hands[winner].length ? winner : nextActive(game.hands, winner);
   if (leader === null || stillIn(game.hands) <= 1) { finish(game); return; }
@@ -845,6 +268,224 @@ export function finish(game) {
   game.turn = null;
   game.pile = null;
   game.passed = new Set();
+  game.ready = new Set();
+  game.touched = Date.now();
+
+  // Who leads the next one, if there is a next one.
+  //
+  // Read here, while `finished` still says — `startGame` clears it, and by the time a rematch
+  // is asked for there is nothing left to ask. Kept as the whole order rather than just the
+  // winner, because the winner is exactly the person most likely to take their money and go:
+  // the next hand then starts from whoever came second and is still sitting there.
+  game.wonLast = game.finished
+    .filter((seat) => game.seats[seat] && !game.seats[seat].bot)
+    .map((seat) => game.seats[seat].userId);
+
+  if (game.kind !== 'baucua' && !game.blanche) reckon(game);
+}
+
+/**
+ * What the end of the hand costs, beyond where everybody came.
+ *
+ * Two things, and neither can be known a card earlier: what is still in the losing hands, and
+ * whether anybody has to answer for the whole table.
+ *
+ * All of it is between people only. At a table with one person in it the machines are
+ * furniture — they do not pay for coming last and they do not pay for anything else either.
+ */
+export function reckon(game) {
+  const people = game.seats.filter((one) => !one.bot);
+  if (people.length < 2) return;
+
+  const human = (seat) => game.seats[seat] && !game.seats[seat].bot;
+
+  // Thối: what never got played, counted against whoever went out first.
+  game.rot = new Map();
+  game.hands.forEach((hand, seat) => {
+    if (!hand.length || !human(seat)) return;
+    const worth = rotting(hand);
+    if (worth) game.rot.set(game.seats[seat].userId, worth);
+  });
+
+  // Cóng: a whole hand and not one card played. They pay the table's placing money for
+  // everybody, which is the whole of the penalty and the reason nobody sits one out.
+  //
+  // Two people cóng and nobody đền. Both of them lost by not playing; making one of them pay
+  // for the other as well is an arithmetic that only ever reads as a fault.
+  const cold = game.seats
+    .map((one, seat) => seat)
+    .filter((seat) => human(seat) && !game.play.has(seat) && !game.left.has(seat));
+  if (cold.length === 1) { game.owes = game.seats[cold[0]].userId; game.owesWhy = 'cóng'; return; }
+  if (cold.length > 1) return;
+
+  // Ôm hàng không chặt: the hand was won on a 2 that somebody sitting there could have cut and
+  // did not. Having the bomb and keeping it is a choice, and this is what the choice costs.
+  //
+  // Only when exactly one person could have. With two of them there is no one to point at, and
+  // a penalty that lands on whoever happens to sit lower is worse than no penalty.
+  const won = game.wonWith && shapeOf(game.wonWith);
+  if (!won || rankOf(won.top) !== TWO) return;
+
+  const holding = game.hands
+    .map((hand, seat) => ({ hand, seat }))
+    .filter(({ hand, seat }) => hand.length && human(seat) && !game.left.has(seat))
+    .filter(({ hand }) => movesFrom(hand).some((move) => isChop(move.shape, won)
+      && beats(move.shape, won)));
+
+  if (holding.length === 1) {
+    game.owes = game.seats[holding[0].seat].userId;
+    game.owesWhy = 'ôm hàng';
+  }
+}
+
+// ---- phỏm, as functions with no opinions about chat -------------------------------------------
+//
+// Same shape as the tiến lên machine above and for the same reason: every one of these takes a
+// table from one legal position to the next, and none of it can be checked by looking at a
+// screen. A turn here is two halves — take a card, then throw one — and the half a table is in
+// is the thing most easily got wrong.
+
+/// Deals a phỏm hand. The one on the cái's seat holds ten and starts by throwing one away.
+export function dealPhom(game) {
+  const { hands, stock } = phomDeal(game.seats.length);
+  game.hands = hands;
+  game.stock = stock;
+  game.table = null;
+  game.tableFrom = null;
+  game.pile = null;
+  game.discards = [];
+  game.took = game.seats.map(() => 0);
+  game.eaten = game.seats.map(() => []);
+  game.fed = game.seats.map(() => game.seats.map(() => 0));
+  game.laid = [];
+  game.u = null;
+  game.uWith = null;
+  game.owes = null;
+  game.owesWhy = null;
+  game.scores = null;
+  game.turn = 0;
+  // The cái already has their card for this turn — it was dealt to them.
+  game.step = 'throw';
+  game.state = 'playing';
+  game.touched = Date.now();
+}
+
+/// Takes the card the player before threw, if it makes a phỏm on the spot.
+export function phomEat(game, seat) {
+  if (game.step !== 'take' || game.turn !== seat) return false;
+  if (game.table === null || !canEat(game.hands[seat], game.table)) return false;
+
+  const card = game.table;
+  const from = game.tableFrom;
+  game.hands[seat] = [...game.hands[seat], card].sort((a, b) => a - b);
+  game.eaten[seat].push(card);
+  // Who has been feeding whom. Three times to the same person and the hand is on them.
+  if (from !== null && from !== seat) game.fed[from][seat]++;
+  game.table = null;
+  game.tableFrom = null;
+  game.step = 'throw';
+  game.touched = Date.now();
+
+  phomCheckU(game, seat, from);
+  return true;
+}
+
+/// Takes the top of the nọc. The nọc running dry ends the hand where it stands.
+export function phomDraw(game, seat) {
+  if (game.step !== 'take' || game.turn !== seat) return false;
+  if (!game.stock.length) { phomEnd(game); return true; }
+
+  const card = game.stock.shift();
+  game.hands[seat] = [...game.hands[seat], card].sort((a, b) => a - b);
+  // The card nobody was offered is nobody's fault, so a ù off the nọc owes nothing to anybody.
+  game.table = null;
+  game.tableFrom = null;
+  game.step = 'throw';
+  game.touched = Date.now();
+
+  phomCheckU(game, seat, null);
+  return true;
+}
+
+/// Ù, which stops the hand where it is. `from` is whoever's card it was, if it was anybody's.
+function phomCheckU(game, seat, from) {
+  if (!isU(game.hands[seat])) return;
+  game.u = game.seats[seat].userId;
+  game.uWith = [...game.hands[seat]];
+  game.laid = [seat];
+  // Đền: the card that made it was thrown by somebody, and throwing the card somebody ù's on is
+  // the one mistake in phỏm that costs the whole hand rather than a few points.
+  if (from !== null && from !== undefined && from !== seat
+    && !game.seats[from].bot && !game.seats[seat].bot) {
+    game.owes = game.seats[from].userId;
+    game.owesWhy = 'nhả bài ù';
+  }
+  phomEnd(game);
+}
+
+/// Throws a card away, which is the other half of a turn and the end of it.
+export function phomThrow(game, seat, card) {
+  if (game.step !== 'throw' || game.turn !== seat) return false;
+  if (!game.hands[seat].includes(card)) return false;
+
+  game.hands[seat] = game.hands[seat].filter((one) => one !== card);
+  game.table = card;
+  game.tableFrom = seat;
+  game.discards.push({ seat, card });
+  game.took[seat]++;
+  game.touched = Date.now();
+
+  // Everybody has had their four. The last card thrown is the chốt and nobody answers it.
+  if (game.took.every((many) => many >= PHOM_TURNS)) { phomEnd(game); return true; }
+
+  game.turn = (seat + 1) % game.seats.length;
+  game.step = 'take';
+  return true;
+}
+
+/**
+ * The end of the hand: lay down, send what fits, and count what is left.
+ *
+ * Sending is worked out here rather than asked for. A player who has laid a phỏm may push their
+ * leftovers onto anybody's — it is never a choice worth making badly, and a screen that asked
+ * would be asking somebody to click four times to agree with the only sensible answer.
+ */
+export function phomEnd(game) {
+  if (game.state === 'over') return;
+
+  // Who laid first. Only matters for a tie, and a tie is decided by it.
+  for (let seat = 0; seat < game.seats.length; seat++) {
+    if (!game.laid.includes(seat) && bestSplit(game.hands[seat]).melds.length) game.laid.push(seat);
+  }
+
+  game.scores = phomScores(game.hands, { laid: game.laid });
+
+  // Đền: three of somebody's cards eaten by the same person. Their hand, their bill.
+  if (!game.owes) {
+    for (let from = 0; from < game.seats.length; from++) {
+      if (game.seats[from].bot) continue;
+      for (let to = 0; to < game.seats.length; to++) {
+        if (from === to || game.seats[to].bot) continue;
+        if (game.fed[from][to] >= 3) {
+          game.owes = game.seats[from].userId;
+          game.owesWhy = 'cho ăn ba lần';
+        }
+      }
+    }
+  }
+
+  // The order the table came in, for the screen that reads it out.
+  game.finished = [...game.scores]
+    .sort((a, b) => a.points - b.points || a.laidAt - b.laidAt)
+    .map((one) => one.seat);
+  if (game.u !== null) {
+    const won = game.seats.findIndex((one) => one.userId === game.u);
+    if (won >= 0) game.finished = [won, ...game.finished.filter((seat) => seat !== won)];
+  }
+
+  game.state = 'over';
+  game.turn = null;
+  game.step = null;
   game.ready = new Set();
   game.touched = Date.now();
 }
@@ -883,7 +524,7 @@ export async function run(token, { signal, api = API } = {}) {
   console.log(`@${me.username} is dealing`);
 
   await call('setCommands', {
-    commands: [{ command: 'tienlen', description: 'Mở một bàn tiến lên miền nam' }],
+    commands: [{ command: 'tienlen', description: 'Mở bàn: tiến lên, phỏm, hay bầu cua' }],
   });
 
   // Reaching for this bot should not leave a line in the room. Asked for once, here, rather
@@ -1072,28 +713,95 @@ export async function run(token, { signal, api = API } = {}) {
    * part that touches the ledger: never below nothing, and once per table however many times
    * this is reached.
    */
-  function settle(game) {
-    const owed = settlement(game.seats, game.finished, game.stake);
+  /**
+   * Pays a phỏm hand.
+   *
+   * Its own function rather than a branch inside `settle`, because the two games arrive at a
+   * number completely differently — one by where people came, one by what is left in their
+   * hands — and the only thing they share is the ledger they write into. That part is here.
+   */
+  function settlePhom(game) {
+    if (!game.scores) return;
+
+    const owed = phomSettle(game.seats, game.scores, game.solo ? BOT_STAKE : game.stake, {
+      u: game.u,
+      owes: game.owes,
+    });
 
     for (const one of owed) {
-      if (game.paidTo.has(one.userId)) {
-        // Already paid. What actually moved can be less than the arithmetic says, because
-        // nobody goes into debt — so what is shown from here on is what happened rather than
-        // what was owed.
-        one.change = game.paidTo.get(one.userId);
-        continue;
+      const already = game.paidTo.get(one.userId) ?? 0;
+      let moving = one.change - already;
+      if (moving) {
+        const row = rowFor(one.userId, one.displayName);
+        if (moving < 0) moving = -Math.min(-moving, row.gold);
+        row.gold += moving;
+        game.paidTo.set(one.userId, already + moving);
+        one.change = already + moving;
+        saveScores();
+      } else {
+        one.change = already;
       }
+      // The place a phỏm hand came in, in the words the rest of the bot uses.
+      one.place = placeName(one.place, one.of);
+    }
+
+    if (!game.counted) {
+      game.counted = true;
+      for (const one of owed) {
+        const row = rowFor(one.userId, one.displayName);
+        row.games++;
+        if (one.place === PLACES[0]) row.first++;
+        if (one.place === 'Bét') row.last++;
+      }
+      saveScores();
+    }
+
+    game.paid = owed;
+  }
+
+  function settle(game) {
+    if (game.kind === 'phom') return settlePhom(game);
+
+    const owed = settlement(game.seats, game.finished, game.stake, {
+      chops: game.chops,
+      rot: game.rot,
+      blanche: game.blanche,
+      owes: game.owes,
+    });
+
+    for (const one of owed) {
+      // What has already moved, and what still has to.
+      //
+      // Paid by difference rather than once, because a hand pays in instalments now: going out
+      // first is paid the moment it happens, a chặt the moment it lands, and thối and đền only
+      // once the last hand is down. Paying once meant the first instalment was the only one —
+      // and it meant a row that started at nothing stayed at nothing for the rest of the hand.
+      const already = game.paidTo.get(one.userId) ?? 0;
+      let moving = one.change - already;
+      if (!moving) { one.change = already; continue; }
 
       const row = rowFor(one.userId, one.displayName);
       // The backstop for the seam between taking the stake at the door and paying at the end:
       // somebody who sat down with enough and then lost it at another table.
-      if (one.change < 0) one.change = -Math.min(-one.change, row.gold);
-      row.gold += one.change;
-      row.games++;
-      if (one.place === PLACES[0]) row.first++;
-      if (one.place === 'Bét') row.last++;
+      if (moving < 0) moving = -Math.min(-moving, row.gold);
+      row.gold += moving;
 
-      game.paidTo.set(one.userId, one.change);
+      // Counted once a table, however many instalments it takes to pay it.
+      game.paidTo.set(one.userId, already + moving);
+      one.change = already + moving;
+      saveScores();
+    }
+
+    // The record of who has played and won: written when the table is done, not on the way.
+    if (game.state === 'over' && !game.counted) {
+      game.counted = true;
+      for (const one of owed) {
+        if (!one.place) continue;
+        const row = rowFor(one.userId, one.displayName);
+        row.games++;
+        if (one.place === PLACES[0]) row.first++;
+        if (one.place === 'Bét') row.last++;
+      }
       saveScores();
     }
 
@@ -1583,16 +1291,21 @@ export async function run(token, { signal, api = API } = {}) {
         return;
       }
 
-      // The only things left are to open a tiến lên table or to sit down at a machine.
-      if (action.open === undefined && action.solo === undefined) return;
+      // A table for either card game. Which one it is rides on the action, and everything after
+      // that — the seats, the stake, the room's one line, the world list — is the same for both.
+      const cards = action.phom !== undefined || action.phomSolo !== undefined ? 'phom' : 'tienlen';
+      const opened = cards === 'phom' ? action.phom : action.open;
+      const alone = cards === 'phom' ? action.phomSolo : action.solo;
 
-      const asked = Number(action.open ?? action.solo);
+      if (opened === undefined && alone === undefined) return;
+
+      const asked = Number(opened ?? alone);
       if (![2, 3, 4].includes(asked)) return;
 
-      if (action.solo !== undefined) {
+      if (alone !== undefined) {
         if (goldOf(who.userId) < BOT_STAKE) return pushTo(screen, { says: SAY.tooPoor(BOT_STAKE) });
 
-        const table = newGame(screen, asked, BOT_STAKE);
+        const table = newGame(screen, asked, BOT_STAKE, cards);
         table.solo = true;
         screen.gameId = table.id;
         fillMachines(table);
@@ -1604,7 +1317,7 @@ export async function run(token, { signal, api = API } = {}) {
       const stake = asStake(action.stake);
       if (goldOf(who.userId) < stake) return pushTo(screen, { says: SAY.tooPoor(stake) });
 
-      const table = newGame(screen, asked, stake);
+      const table = newGame(screen, asked, stake, cards);
       table.state = 'lobby';
       screen.gameId = table.id;
 
@@ -1613,7 +1326,7 @@ export async function run(token, { signal, api = API } = {}) {
       // are already holding is a button that cannot do anything. Everybody else finds it in the
       // world list, whichever group they are in.
       const invitation = await send(
-        table.conversationId, SAY.opened(who.displayName, asked, stake), JOIN(table.id),
+        table.conversationId, SAY.opened(who.displayName, asked, stake, cards), JOIN(table.id),
         null, [who.userId]);
       table.invitationId = invitation?.id ?? null;
 
@@ -1725,6 +1438,21 @@ export async function run(token, { signal, api = API } = {}) {
     // Everything left is a move, and a move needs a seat and a turn.
     if (seat === null) return;
     if (game.state !== 'playing' || game.turn !== seat) return;
+
+    if (game.kind === 'phom') {
+      if (game.state !== 'playing' || seat === null || game.turn !== seat) return;
+
+      let moved = false;
+      if (action.eat) moved = phomEat(game, seat);
+      else if (action.draw) moved = phomDraw(game, seat);
+      else if (Number.isInteger(action.throw)) moved = phomThrow(game, seat, action.throw);
+      if (!moved) return;
+
+      if (game.state === 'over') settle(game);
+      await pushGame(game);
+      await maybeBotTurn(game);
+      return;
+    }
 
     if (action.pass) {
       if (!move(game, seat, null)) return;
@@ -1889,12 +1617,26 @@ export async function run(token, { signal, api = API } = {}) {
     game.size = game.seats.length;
     // Everybody at the table is at it again. `away` is about the last hand.
     for (const one of game.seats) one.away = false;
+
+    if (game.kind === 'phom') {
+      game.paidTo = new Map();
+      game.paid = [];
+      game.counted = false;
+      game.finished = [];
+      game.left = new Set();
+      game.ready = new Set();
+      dealPhom(game);
+      if (game.invitationId) {
+        await edit(game.invitationId,
+          SAY.started(game.seats.map((one) => one.displayName), game.kind), WATCH(game.id), []);
+      }
+      await pushGame(game);
+      await maybeBotTurn(game);
+      return;
+    }
+
     game.hands = deal(game.seats.length);
 
-    const opening = opensGame(game.hands);
-    game.turn = opening.seat;
-    game.opensWith = opening.card;
-    game.first = true;
     game.pile = null;
     game.passed = new Set();
     game.finished = [];
@@ -1902,14 +1644,70 @@ export async function run(token, { signal, api = API } = {}) {
     game.ready = new Set();
     game.paidTo = new Map();
     game.paid = [];
+    game.counted = false;
+    game.play = new Set();
+    game.seen = [];
+    game.chops = new Map();
+    game.chopped = [];
+    game.pot = 0;
+    game.rot = null;
+    game.owes = null;
+    game.owesWhy = null;
+    game.blanche = null;
+    game.blancheWith = null;
+    game.wonWith = null;
     game.state = 'playing';
     game.touched = Date.now();
+
+    // Tới trắng: a hand that has won before anybody has played a card.
+    //
+    // Only at a table with two people in it. At a table of one the machines are furniture and
+    // pay for nothing — and a hand that hands out three stakes a machine never had would be a
+    // way of making gold by dealing again until the deal is good.
+    const people = game.seats.filter((one) => !one.bot);
+    if (people.length >= 2) {
+      const white = game.hands
+        .map((hand, seat) => ({ seat, what: instantWin(hand) }))
+        .find(({ seat, what }) => what && !game.seats[seat].bot);
+      if (white) {
+        game.blanche = game.seats[white.seat].userId;
+        game.blancheWith = white.what;
+        game.finished = [white.seat];
+        game.turn = null;
+        game.first = false;
+        game.opensWith = null;
+        finish(game);
+        settle(game);
+        await pushGame(game);
+        return;
+      }
+    }
+
+    // Who leads.
+    //
+    // The three of spades opens the *first* hand of a table and nothing after it: from then on
+    // it is whoever won the last one, which is the rule everybody plays and the one this bot
+    // was quietly not playing. Kept as a user id rather than a seat, because a rematch drops
+    // whoever went home and every seat below them shifts up by one.
+    const won = (game.wonLast ?? [])
+      .map((userId) => game.seats.findIndex((one) => one.userId === userId))
+      .find((seat) => seat >= 0);
+    if (won !== undefined) {
+      game.turn = won;
+      game.first = false;
+      game.opensWith = null;
+    } else {
+      const opening = opensGame(game.hands);
+      game.turn = opening.seat;
+      game.opensWith = opening.card;
+      game.first = true;
+    }
 
     if (game.invitationId) {
       // Shown to everybody again, the host included. It was hidden from them while it was an
       // offer they could not take; now it is the room's note of a game they are playing in.
       await edit(game.invitationId,
-        SAY.started(game.seats.map((one) => one.displayName)), WATCH(game.id), []);
+        SAY.started(game.seats.map((one) => one.displayName), game.kind), WATCH(game.id), []);
     }
 
     await pushGame(game);
@@ -1960,7 +1758,11 @@ export async function run(token, { signal, api = API } = {}) {
       dice: null,
       // Picked up where the last run of the bot left it, so a deploy costs the board nothing.
       history: scores.cau ?? [],
-      bettingEndsAt: null,
+      // A clock from the moment it exists, not from the moment the throwing loop gets round to
+      // starting one. The first push otherwise carries a bowl with no clock on it, and whoever
+      // walked in reads that as a table waiting for somebody — which is the one thing the world
+      // sòng never is.
+      bettingEndsAt: Date.now() + BETTING_MS,
       invitationId: null,
       touched: Date.now(),
     };
@@ -2217,6 +2019,29 @@ export async function run(token, { signal, api = API } = {}) {
         const seat = game.turn;
         if (seat === null || !game.seats[seat]?.bot) return;
 
+        if (game.kind === 'phom') {
+          await wait(PHOM_THINK_MS);
+          if (game.state !== 'playing' || game.turn !== seat) return;
+
+          if (game.step === 'take') {
+            const late = game.took.every((many) => many >= PHOM_TURNS - 1);
+            const taking = phomChoose(game.hands[seat], game.table, { late });
+            if (taking) phomEat(game, seat); else phomDraw(game, seat);
+          }
+          // Eating can end the hand — ù stops it where it stands — so the throw is asked for
+          // again rather than assumed.
+          if (game.state === 'playing' && game.step === 'throw' && game.turn === seat) {
+            const after = (seat + 1) % game.seats.length;
+            phomThrow(game, seat, phomDiscard(game.hands[seat], {
+              theirEaten: game.eaten[after] ?? [],
+              theirDiscarded: game.discards.filter((one) => one.seat === after).map((one) => one.card),
+            }));
+          }
+          if (game.state === 'over') settle(game);
+          await pushGame(game);
+          continue;
+        }
+
         await wait(THINK_MS);
         // Something may have moved while it thought — a person left, the table ended, the sweep
         // took the turn. Whatever it worked out is about a table that is no longer this one.
@@ -2225,6 +2050,7 @@ export async function run(token, { signal, api = API } = {}) {
         const cards = chooseMove(game.hands[seat], game.pile?.shape ?? null, {
           lowest: lowestElsewhere(game.hands, seat),
           mustInclude: game.first ? game.opensWith : null,
+          seen: game.seen,
         });
 
         if (cards) {
@@ -2319,9 +2145,97 @@ export async function run(token, { signal, api = API } = {}) {
     };
   }
 
+  /**
+   * A phỏm table as everybody at it sees it.
+   *
+   * Card counts, never cards — the same line the tiến lên table holds. What is different is
+   * that phỏm has a card face up in the middle that everybody is allowed to want: the one just
+   * thrown. That one is in here by name, because whether you can take it is the whole of the
+   * decision in front of the person whose turn it is.
+   */
+  function phomState(game) {
+    const paid = game.paid ?? [];
+    const owed = new Map(paid.map((one) => [one.userId, one.change]));
+    const scores = game.scores ?? [];
+    // Everybody at it, machines included. This names the places on the *table*, which is a list
+    // of every chair; what each person is paid for their place is named separately, out of the
+    // number of people actually being paid. Counting humans here gave a table of one person and
+    // three machines two seats called Bét.
+    const people = game.seats.length;
+
+    return {
+      phase: game.state,
+      kind: 'phom',
+      gameId: game.id,
+      size: game.size,
+      stake: game.stake,
+      solo: !!game.solo,
+      host: game.host.userId,
+      hostName: game.host.displayName,
+
+      seats: game.seats.map((one, seat) => {
+        const score = scores.find((row) => row.seat === seat);
+        return {
+          seat,
+          id: one.userId,
+          name: one.displayName,
+          bot: !!one.bot,
+          cards: game.hands ? game.hands[seat].length : null,
+          // What they have taken off the table. Public, and half of reading the table: somebody
+          // who ate a 7♥ is collecting round there.
+          eaten: game.eaten ? [...game.eaten[seat]] : [],
+          gone: game.left.has(seat),
+          place: game.finished.indexOf(seat) === -1
+            ? null
+            : placeName(game.finished.indexOf(seat), people),
+          won: owed.has(one.userId) ? owed.get(one.userId) : null,
+          // Only once it is over. Before that these are somebody's cards.
+          melds: score ? score.melds : null,
+          junk: score ? score.junk : null,
+          sent: score ? score.sent : null,
+          points: score ? score.points : null,
+          mom: score ? score.mom : false,
+        };
+      }),
+
+      turn: game.turn,
+      turnName: game.turn === null ? '' : game.seats[game.turn].displayName,
+      // Which half of the turn it is. A screen that does not say cannot draw the right button.
+      step: game.step ?? null,
+      turnEndsAt: game.state === 'playing' ? game.touched + TURN_MS : null,
+      turnMs: TURN_MS,
+
+      // The card in the middle, and whose it was.
+      table: game.table ?? null,
+      tableFrom: game.tableFrom ?? null,
+      tableName: game.tableFrom === null || game.tableFrom === undefined
+        ? '' : game.seats[game.tableFrom].displayName,
+      stock: game.stock ? game.stock.length : 0,
+      discards: game.discards ?? [],
+
+      round: game.took ? Math.min(...game.took) + 1 : 1,
+      turns: PHOM_TURNS,
+      took: game.took ?? [],
+
+      u: game.u ?? null,
+      owes: game.owes ?? null,
+      owesWhy: game.owesWhy ?? null,
+
+      ranking: game.finished.map((seat, place) => ({
+        id: game.seats[seat].userId,
+        name: game.seats[seat].displayName,
+        place: placeName(place, people),
+        points: (scores.find((row) => row.seat === seat) ?? {}).points ?? null,
+      })),
+      paid,
+      rematchAsked: [...game.ready],
+    };
+  }
+
   /// What somebody at a table is looking at. Their own hand is added by `pushTo`.
   function tableState(game) {
     if (game.kind === 'baucua') return baucuaState(game);
+    if (game.kind === 'phom') return phomState(game);
     const people = game.seats.length;
 
     // What the table has been worth to each person so far. Kept up to date by `settle` after
@@ -2374,6 +2288,16 @@ export async function run(token, { signal, api = API } = {}) {
       // because a rule that refuses a play without saying why reads as a bug.
       opensWith: game.first ? game.opensWith : null,
 
+      // Every chặt there was, and what it moved. Shown because money that arrives without a
+      // reason is money people assume was taken from them.
+      chopped: game.chopped ?? [],
+      // A hand that won on the deal, and what it was.
+      blanche: game.blanche ?? null,
+      blancheWith: game.blancheWith ?? null,
+      // Who is paying for the table, and which of the two reasons it is.
+      owes: game.owes ?? null,
+      owesWhy: game.owesWhy ?? null,
+
       ranking: game.finished.map((seat, place) => ({
         id: game.seats[seat].userId,
         name: game.seats[seat].displayName,
@@ -2421,6 +2345,28 @@ export async function run(token, { signal, api = API } = {}) {
     // What this one person has on the board. Not a secret the way a hand is — everybody's
     // stakes are in the shared state — but the widget needs to know which of them are theirs to
     // light up and to take back.
+    // Phỏm: their hand, how it splits, and whether the card in the middle is theirs to take.
+    // The split is worked out here rather than on the page for the same reason the deck is:
+    // a widget that decided what counted as a phỏm could decide generously.
+    const phom = game && game.kind === 'phom' && seat !== null && game.hands
+      ? (() => {
+        const hand = game.hands[seat];
+        const split = bestSplit(hand);
+        return {
+          seat,
+          hand,
+          melds: split.melds,
+          junk: split.junk,
+          points: split.points,
+          // Whether this card makes a phỏm on the spot, and out of what.
+          canEat: game.step === 'take' && game.turn === seat && game.table !== null
+            && canEat(hand, game.table),
+          options: game.step === 'take' && game.turn === seat && game.table !== null
+            ? eatOptions(hand, game.table) : [],
+        };
+      })()
+      : null;
+
     const mine = game && game.kind === 'baucua' && seat !== null
       ? {
         seat,
@@ -2437,7 +2383,7 @@ export async function run(token, { signal, api = API } = {}) {
       to: screen.userId,
       state: {
         ...shared,
-        me: mine ?? (seat === null ? null : {
+        me: phom ?? mine ?? (seat === null ? null : {
           seat,
           hand: game.hands ? game.hands[seat] : [],
           // Whether anything in this hand answers what is on the table. Worked out here rather
@@ -2526,6 +2472,21 @@ export async function run(token, { signal, api = API } = {}) {
 
         if (idle <= TURN_MS) continue;
 
+        // Phỏm has no passing. A turn that runs out draws from the nọc and throws the card that
+        // costs least, which is the smallest decision that keeps the table moving — nobody's
+        // hand is played for them beyond the one move the rules insist on.
+        if (game.kind === 'phom') {
+          game.touched = Date.now();
+          if (game.step === 'take') phomDraw(game, seat);
+          if (game.state === 'playing' && game.step === 'throw' && game.turn === seat) {
+            phomThrow(game, seat, phomDiscard(game.hands[seat]));
+          }
+          if (game.state === 'over') settle(game);
+          await pushGame(game);
+          await maybeBotTurn(game);
+          continue;
+        }
+
         // Passed rather than played well. Playing their hand for them would be deciding a game
         // they are not in — but somebody who is leading has to put something down, so the
         // cheapest thing goes.
@@ -2535,6 +2496,7 @@ export async function run(token, { signal, api = API } = {}) {
         } else {
           const cards = chooseMove(game.hands[seat], null, {
             mustInclude: game.first ? game.opensWith : null,
+            seen: game.seen,
           }) ?? [game.hands[seat][0]];
           move(game, seat, cards);
         }

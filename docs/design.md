@@ -129,7 +129,133 @@ trong đó là do quyết định chứ không phải xếp bừa rồi mong nó
   được **báo** chứ không được đưa một cái nút xám. Nút xám ghi "đang đợi" là thứ người ta bấm cho
   tới lúc bỏ cuộc.
 
-## 6. Bầu cua tôm cá
+## 6. Tiền của một ván tiến lên
+
+Trước đây tiền chỉ đến từ thứ hạng. Chặt heo không được gì, ôm heo tới cuối không mất gì — tức
+là phần "sát phạt", đúng cái làm nên trò này, không có trong game.
+
+Một bảng giá dùng chung cho hai câu hỏi, vì ở bàn thật nó cũng là một bảng: **chặt được thì thu
+bấy nhiêu, ôm tới cuối thì trả bấy nhiêu.**
+
+| Bộ | Giá (× cược) |
+| --- | --- |
+| Heo đen (2♠, 2♣) | 1 |
+| Heo đỏ (2♦, 2♥) | 2 |
+| 3 đôi thông | 2 |
+| Tứ quý | 3 |
+| 4 đôi thông | 4 |
+| 5 đôi thông | 5 |
+| 6 đôi thông | 6 |
+
+- **Heo đen và heo đỏ không phải một con.** Nên heo được đếm **từng lá**, chứ không đếm theo bộ
+  đã đánh ra: hai con heo nằm trong tay tới cuối ván là hai con heo, dù chủ nó có định đánh
+  thành đôi hay không.
+- **Chặt chồng có một cái nồi.** Nồi là số tiền người đang cầm đống bài sẽ mất nếu bị đè tiếp:
+  tiền họ vừa ăn được, cộng giá quả bom của chính họ. Ba lượt chặt thì người đầu tiên chỉ mất
+  đúng con heo của mình — hai người ở giữa mới là người chảy máu. Đúng cái luật "ai bị chặt cuối
+  cùng đền hết" ngoài đời.
+- **Chỉ giữa người với người.** Máy không thu và không trả, y như nó không trả tiền về nhất. Bàn
+  một người với ba máy thì không có chặt, không có thối, không có đền — nếu không thì có một
+  đường in vàng: mở bàn với máy rồi chặt heo của chúng.
+- **Tới trắng** — tứ quý heo, năm đôi thông, sáu đôi bất kỳ, sảnh rồng — ăn **ba lần cược của
+  từng người** và ván không có tiền thứ hạng, vì không ai đánh gì cả. Chỉ tính ở bàn từ hai
+  người thật trở lên, cùng lý do trên: một tay bài đẹp không được là một cái máy in.
+- **Đền** là một người trả thay cả làng, và có hai đường tới: **cóng** (hết ván chưa đánh nổi
+  một lá) và **ôm hàng không chặt** (để người ta về nhất bằng con heo trong khi mình cầm bom
+  chặt được). Cả hai chỉ tính khi chỉ ra được **đúng một** người — hai người cùng cóng thì không
+  ai đền ai, và hai người cùng ôm hàng thì không chỉ mặt được ai.
+
+**Chỗ suýt sai, và nó sai ở cả hai trò cùng lúc.** Đền viết lần đầu là "người đền gánh nợ của
+những người thua". Nghe đúng, và đúng *chừng nào người đền cũng đang thua*. Người đền mà lại
+đang thắng thì công thức đó làm bàn in ra một nghìn vàng từ hư không. Cách viết đúng là **"người
+đền trả cho những người thắng"** — hai câu ấy chỉ trùng nhau ở một nửa số trường hợp. Bắt được
+nhờ cái test tổng-bằng-không bên phỏm, nơi cùng một hình dạng sai nằm trong cùng một hình dạng
+code; sửa xong mới đi ngược lại tìm thấy nó bên tiến lên.
+
+---
+
+## 7. Cái máy: nó nghĩ bằng gì
+
+Máy cũ chấm điểm **từng nước một**: lá cao trừ đi số lá, cộng 60 nếu là heo, cộng 120 nếu là
+bom, cộng 100 nếu xé tứ quý. Nó biết giữ heo và đừng xé tứ quý. Nó **không** biết tay bài của
+nó đi hết trong mấy nước, không biết lá nào đã ra rồi, không phạt xé sảnh, và vì cộng thẳng 120
+cho mọi quả bom nên nó **né chặt heo** — kể cả lúc chặt là nước đúng.
+
+Cái thiếu là một con số: **tay này đi hết trong mấy nước.** Một tay đi hết trong năm nước thắng
+một tay đi hết trong tám nước có hai con heo, gần như luôn luôn. Bài báo về AI Big Two gọi nó là
+*Minimum Combination Search*; ở đây nó rẻ đến mức không cần xấp xỉ gì:
+
+> Một tay nhiều nhất mười ba lá → nhiều nhất **2¹³ = 8.192** cách còn lại một phần. Mỗi trạng
+> thái chỉ cần xét những nước dùng **lá thấp nhất của chính nó** — lá thấp nhất kiểu gì cũng
+> phải đi trong một nước nào đó. Vài nghìn bước, mỗi lượt một lần.
+
+Trên nền đó:
+
+- **`costOf` đổi câu hỏi.** Không còn là "nước này đắt bao nhiêu" mà là *"đánh xong thì tay còn
+  lại đi hết trong mấy nước"*. Một mình chuyện đó sửa luôn lỗi xé sảnh: rút con 7 khỏi
+  5-6-7-8-9 làm số nước còn lại nhảy vọt, và giờ nó thấy.
+- **Phân rã phải bóc được dây song song**, mà `movesFrom` thì không — nó chỉ sinh sảnh làm bằng
+  lá thấp nhất mỗi hạng, vì để *đánh* thì không có lý do sinh cái thứ hai. Để *chia* thì có mọi
+  lý do: 3♠4♠ 5♠5♣ 6♠6♣ 7♠7♣ là sảnh 3-4-5-6-7 rồi sảnh 5♣6♣7♣ — hai nước, không phải ba.
+- **Đếm bài.** `seen` là những lá **đã đánh ra trước mặt mọi người** — không bao giờ là bài trên
+  tay ai. Có test đọc thẳng thân hàm `chooseMove` và bắt đỏ nếu trong đó xuất hiện `hands`,
+  `game.` hay `seats`. Một cái máy nhìn được bài người khác là cái máy không ai thắng nổi, và là
+  gian lận.
+- **Ưu tiên chặt.** Chặt không còn là "tốn một quả bom" mà là lấy con heo ra khỏi tay người đang
+  trông vào nó. Nó chặt khi bài mình đã ngắn, hoặc khi có người sắp về — chứ vẫn không chặt bằng
+  quả bom duy nhất ở nước thứ hai của ván.
+
+**Đo được, không nói suông.** Máy mới đấu máy cũ 2.000 ván ở cả bàn hai người lẫn bàn bốn người:
+thắng **62%** và **64%**. Ngưỡng trong test đặt ở 57%, thấp hơn số đo chừng bốn lần sai số — một
+cái test chập chờn còn tệ hơn không có test, vì lần đỏ nào cũng bị đọc thành "chạy lại xem". Kèm
+một ngưỡng thời gian: một nước phải xong dưới 50ms, vì bàn bốn máy là bốn lần nghĩ nối nhau.
+
+Thử mà **không** giữ lại, ghi ở đây để khỏi ai thử lại:
+
+| Ý | Kết quả |
+| --- | --- |
+| Bỏ lượt thay vì xé một bộ | 62% → **53%**. Giữ được dây nhưng mất quyền dẫn, mà quyền dẫn đắt hơn |
+| Phạt nặng hơn nước ngoài kế hoạch (40 → 90 → 160) | không đổi gì — số nước còn lại đã át hết |
+| Sắp về đích thì dẫn lá khó đè trước | trong khoảng nhiễu, không đáng thêm một nhánh |
+
+---
+
+## 8. Đánh phỏm
+
+Cùng bộ khung: cùng ví, cùng mô hình phiên, cùng bàn thế giới, cùng cách máy là đồ đạc. Khác ở
+ba chỗ, và cả ba đều là chỗ dễ sai.
+
+**Một lá bài đọc khác nhau ở hai trò.** Cùng con số 0–51, cùng `hạng * 4 + chất`. Nhưng tiến lên
+xếp 3 thấp nhất và 2 cao nhất; phỏm xếp A thấp nhất, K cao nhất, và A đáng đúng **một điểm**.
+Hai cách đọc trên cùng một con số là chỗ dễ lẫn nhất trong cả dự án, nên hai trò có hai bộ hàm
+đọc riêng và không bao giờ dùng chung `rankOf`. Cả bên widget cũng vậy: `rankName` hỏi xem đang
+là trò nào rồi mới tra bảng.
+
+**Chia tay bài cho ít điểm rác nhất** lại là quy hoạch động trên bitmask, và lại vì đúng lý do
+cũ: mười lá là 1.024 trạng thái, nên trả lời *chính xác* rẻ hơn đoán. Cái bẫy ở đây không phải
+thuật toán mà là câu hỏi: cách chia đúng là cách để lại **ít điểm** nhất, không phải ít **lá**
+nhất. 5♥6♥7♥ 7♠7♣ K♦ giữ sảnh thì thừa 27 điểm, giữ bộ ba thì thừa 24 — hai câu nghe giống nhau
+và không phải một.
+
+**Ăn thì phải nhả.** Cái bẫy của trò này: ăn xong vẫn phải đánh đi một lá. Ăn một lá ba điểm rồi
+buộc phải nhả một lá mười ba điểm là ăn để lỗ mười. Nên máy so **điểm rác sau khi đã ăn và đã
+đánh đi lá tốt nhất**, chứ không so điểm rác lúc vừa ăn xong.
+
+Ngoài ra: máy nhớ người ngồi sau đã ăn những lá nào và tránh nhả lá quanh đó — đây là thứ phân
+biệt người biết chơi với người mới, và nó rẻ.
+
+**Tiền** giữ đúng khung tiến lên để một cái ví ba trò không có ba cách hiểu về "thắng bao nhiêu":
+xếp hạng theo điểm rác rồi trả theo `payouts`. Trên đó là ba thứ riêng của phỏm — **móm** thua
+gấp đôi, **ù** ăn gấp đôi từ mỗi người, **đền** trả thay cả làng. Bằng điểm thì ai hạ sau thua.
+
+**Một chỗ đổi so với kế hoạch, nói thẳng ra:** kế hoạch ghi đền là "ăn chốt rồi người sau ù".
+Với cấu trúc lượt ở đây thì ván dừng ngay lúc có người ù, nên tình huống ấy không bao giờ tới
+được. Thay bằng **"nhả lá cho người ta ù thì người nhả đền"** — cùng một họ luật, và là cái thật
+sự xảy ra ở bàn.
+
+---
+
+## 9. Bầu cua tôm cá
 
 **Sòng thế giới không phải một cái bàn ai đó mở.** Nó có sẵn, nó xóc liên tục, và vào là vào
 giữa một ván đang chạy — đó mới là cái sòng. Một cái bàn phải có người mở trước là cái bàn đóng
@@ -235,6 +361,13 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | `seat.conversationId` | Ghi ở ba chỗ, đọc ở không chỗ nào. Đúng loại field sẽ mốc rồi có ngày bị tin |
 | Đọc xuyên `next.me` không kiểm tra | Người **xem** sòng có `me: null`, còn push chung thì không có `me`. `next.me.theirs` ném `TypeError`, mà một cú ném trong `onState` là dừng luôn cả `render` — nên bàn **đứng nguyên ván trước**, tiền cược ván cũ còn nằm đó. Nó không trông giống lỗi, nó trông giống bàn bị kẹt, nên được báo về đúng như thế |
 | Đĩa nặn bay mất sau 34px | Cắt cụt đúng cái động tác mà cả tính năng sinh ra để có. Ngưỡng đoán mò thay cho phép đo: cái phải hỏi là "đã hở hết ba con chưa", không phải "đã kéo đủ xa chưa" |
+| Ván đấu lại vẫn bắt 3 bích | `startGame` ván nào cũng đi tìm 3 bích, không có nhánh nào cho ván sau. Đúng luật thì ván đầu mới bắt 3 bích, từ đó là người về nhất ván trước dẫn — ai chơi tiến lên cũng biết, mà bot thì không |
+| Màn "Bạn về nhất" vẽ lại mỗi lần đẩy state | Về nhất xong, ba người kia còn đánh cả phút, và **mỗi nước của họ là một push**: cái màn ấy bị dựng lại **mười hai lần**, chữ nhảy và số tiền chạy lại từ đầu. Bàn hai người thì về nhất là hết ván nên không bao giờ lộ — đó là lý do nó chỉ xuất hiện khi hơn hai người |
+| Lần vẽ đầu ra chữ "Bạn về " trống hạng | Cái push làm sạch tay bài tới trước cái push nói mình về thứ mấy |
+| Năm và sáu đôi thông không chặt được gì | `beats` liệt kê từng trường hợp và danh sách có lỗ: dây năm đôi thông rơi thẳng xuống `return false`, không đè nổi bốn đôi thông và cũng không đè nổi thứ gì khác |
+| Widget giữ bản sao `beats` và không được sửa theo | Thang chặt của bot lên bảy bậc, thang của widget vẫn bốn — người chơi ngồi nhìn dây năm đôi thông không chịu sáng lên |
+| Đền viết thành "gánh nợ người thua" | Chỉ đúng chừng nào người đền cũng đang thua. Người đền mà đang thắng thì bàn in ra một nghìn vàng từ hư không. **Cùng một lỗi nằm ở cả hai trò**, bắt được ở phỏm rồi mới tìm ngược ra ở tiến lên |
+| `placeName(place, số hàng được trả)` | Bàn một người ba máy: người ta về nhất, được cộng tiền, và màn hình báo **"Bạn về bét"** — vì chỉ có một hàng được trả nên hạng 0 vừa là nhất vừa là bét |
 
 Và một luật rút ra từ carobot, có test canh:
 

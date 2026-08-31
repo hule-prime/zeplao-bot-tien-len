@@ -12,6 +12,8 @@ import {
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, MIN_STAKE, MAX_STAKE, STAKES, BROKE, ADS_GOLD, asStake,
   FACES, FACE_NAMES, DICE, ROLL_MS, SHOW_MS, CHIPS, roll, faceWorth, boardWorth, staked, tally,
   chance, HISTORY,
+  bombRank, isChop, worthOf, rotting, instantWin, INSTANT, PAIRS_WORTH, twoWorth,
+  reckon, BLANCHE, decompose, playsAfter, unbeatable,
 } from './tienlenbot.mjs';
 
 /// A card by name, which is how anybody talks about one.
@@ -255,9 +257,21 @@ test('it keeps a two for somebody who is nearly out', () => {
 });
 
 test('and cuts with a bomb only when the round is worth it', () => {
-  const mine = hand('5♠', '5♣', '5♦', '5♥', '3♦');
-  assert.equal(chooseMove(mine, kindOf('2♥'), { lowest: 13 }), null);
-  assert.deepEqual(chooseMove(mine, kindOf('2♥'), { lowest: 2 }),
+  // Đầu ván, bài còn dài: quả bom còn cả ván để chờ một con heo đáng hơn, và bốn lá đổi lấy
+  // một vòng lúc này là bốn lá cho không.
+  const early = hand('5♠', '5♣', '5♦', '5♥',
+    '3♦', '4♦', '6♦', '7♦', '9♦', '10♦', 'J♦', 'Q♦', 'K♦');
+  assert.equal(chooseMove(early, kindOf('2♥'), { lowest: 13 }), null);
+
+  // Bài đã ngắn thì chặt, và không cần ai sắp về mới chặt: con heo ấy là con họ đang trông vào,
+  // còn quả bom thì không còn ván nào để chờ nữa. Đây là chỗ máy cũ chơi dở — nó cộng thẳng
+  // 120 điểm cho mọi quả bom nên nó *né* chặt, kể cả khi chặt là nước đúng.
+  const late = hand('5♠', '5♣', '5♦', '5♥', '3♦');
+  assert.deepEqual(chooseMove(late, kindOf('2♥'), { lowest: 13 }),
+    hand('5♠', '5♣', '5♦', '5♥'), 'năm lá trên tay mà không chặt heo là giữ bom cho ván sau');
+
+  // Và luôn chặt khi có người sắp về, dù bài còn dài.
+  assert.deepEqual(chooseMove(early, kindOf('2♥'), { lowest: 2 }),
     hand('5♠', '5♣', '5♦', '5♥'));
 });
 
@@ -947,5 +961,621 @@ test('a watcher has no `me`, and the page never reads through it on a bầu cua 
     const before = block.slice(Math.max(0, match.index - 12), match.index);
     assert.ok(/mine &&\s*$/.test(before),
       `read through mine with nothing checking it: ...${before}mine.`);
+  }
+});
+
+// ---- thang chặt, đủ bảy bậc ------------------------------------------------------------------
+
+test('the ladder of chặt has seven rungs and no gap in it', () => {
+  const rung = (...names) => bombRank(kindOf(...names));
+
+  assert.equal(rung('2♠'), 0, 'heo lẻ');
+  assert.equal(rung('2♠', '2♥'), 1, 'đôi heo');
+  assert.equal(rung('3♠', '3♣', '4♠', '4♣', '5♠', '5♣'), 2, 'ba đôi thông');
+  assert.equal(rung('7♠', '7♣', '7♦', '7♥'), 3, 'tứ quý');
+  assert.equal(rung('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣'), 4, 'bốn đôi thông');
+  assert.equal(rung('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '7♠', '7♣'), 5, 'năm đôi');
+  assert.equal(
+    rung('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '7♠', '7♣', '8♠', '8♣'), 6, 'sáu đôi');
+
+  // Không nằm trên thang thì không phải đích của chặt.
+  assert.equal(rung('A♥'), null);
+  assert.equal(rung('K♠', 'K♥'), null);
+  assert.equal(rung('9♠', '9♣', '9♦'), null, 'bộ ba không phải bom');
+});
+
+test('a longer run of pairs cuts a shorter one, which it could not before', () => {
+  const four = kindOf('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣');
+  const five = kindOf('7♠', '7♣', '8♠', '8♣', '9♠', '9♣', '10♠', '10♣', 'J♠', 'J♣');
+  const six = kindOf('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '7♠', '7♣', '8♠', '8♣');
+  const quad = kindOf('4♠', '4♣', '4♦', '4♥');
+
+  // Đây là lỗi cũ: năm đôi thông rơi thẳng xuống `return false`, không đè nổi cái gì.
+  assert.ok(beats(five, four), 'năm đôi thông phải chặt được bốn đôi thông');
+  assert.ok(beats(five, quad), 'và chặt được tứ quý');
+  assert.ok(beats(six, five), 'sáu đôi thông chặt năm');
+  assert.ok(!beats(four, five), 'ngược lại thì không');
+
+  // Cùng bậc thì so lá cao nhất, không phải chặt.
+  const lowFive = kindOf('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '7♠', '7♥');
+  assert.ok(beats(five, lowFive));
+  assert.ok(!beats(lowFive, five));
+});
+
+test('three consecutive pairs takes a lone 2 and nothing else', () => {
+  const three = kindOf('3♠', '3♣', '4♠', '4♣', '5♠', '5♣');
+  assert.ok(beats(three, kindOf('2♠')), 'chặt được heo lẻ');
+  assert.ok(!beats(three, kindOf('2♠', '2♥')), 'nhưng không chặt được đôi heo');
+  assert.ok(!beats(three, kindOf('9♠', '9♣', '9♦', '9♥')), 'và không chặt được tứ quý');
+});
+
+test('a bomb landing on a 2 or on a bomb is a chặt; a higher pair is not', () => {
+  const quad = kindOf('4♠', '4♣', '4♦', '4♥');
+  assert.ok(isChop(quad, kindOf('2♠')));
+  assert.ok(isChop(quad, kindOf('3♠', '3♣', '4♠', '4♣', '5♠', '5♣')));
+  assert.ok(isChop(quad, kindOf('9♠', '9♣', '9♦', '9♥')), 'tứ quý đè tứ quý là chặt chồng');
+
+  assert.ok(!isChop(kindOf('K♠', 'K♥'), kindOf('Q♠', 'Q♥')), 'đôi lớn hơn không phải chặt');
+  assert.ok(!isChop(kindOf('2♥'), kindOf('A♠')), 'heo đè át cũng không phải chặt');
+  assert.ok(!isChop(quad, null), 'dẫn bằng tứ quý thì không chặt ai cả');
+});
+
+// ---- tiền: chặt bao nhiêu, thối bao nhiêu -----------------------------------------------------
+
+test('a black 2 and a red 2 are not the same money', () => {
+  assert.equal(twoWorth(c('2', '♠')), 1);
+  assert.equal(twoWorth(c('2', '♣')), 1);
+  assert.equal(twoWorth(c('2', '♦')), 2);
+  assert.equal(twoWorth(c('2', '♥')), 2);
+
+  assert.equal(worthOf(hand('2♠')), 1);
+  assert.equal(worthOf(hand('2♥')), 2);
+  assert.equal(worthOf(hand('2♠', '2♥')), 3, 'đôi heo đen đỏ');
+  assert.equal(worthOf(hand('2♦', '2♥')), 4, 'đôi heo đỏ cả hai');
+});
+
+test('what a bomb is worth is what the table pays for it', () => {
+  assert.equal(worthOf(hand('7♠', '7♣', '7♦', '7♥')), 3, 'tứ quý');
+  assert.equal(worthOf(hand('3♠', '3♣', '4♠', '4♣', '5♠', '5♣')), PAIRS_WORTH[3]);
+  assert.equal(PAIRS_WORTH[3], 2);
+  assert.equal(PAIRS_WORTH[4], 4);
+  assert.equal(PAIRS_WORTH[5], 5);
+  assert.equal(PAIRS_WORTH[6], 6);
+
+  // Không phải bom, không phải heo thì không đáng gì.
+  assert.equal(worthOf(hand('K♠', 'K♥')), 0);
+  assert.equal(worthOf(hand('5♠', '6♠', '7♠')), 0);
+});
+
+test('what is still in a hand at the end is counted card by card', () => {
+  assert.equal(rotting(hand('5♠', '9♦')), 0, 'bài thường không thối');
+  assert.equal(rotting(hand('2♠')), 1);
+  assert.equal(rotting(hand('2♠', '2♦')), 3, 'một đen một đỏ, tính riêng từng con');
+  assert.equal(rotting(hand('7♠', '7♣', '7♦', '7♥')), 3, 'ôm tứ quý');
+  assert.equal(rotting(hand('2♥', '7♠', '7♣', '7♦', '7♥')), 5, 'ôm cả heo đỏ lẫn tứ quý');
+
+  // Năm đôi liên tiếp là một dây năm, không phải một dây ba với hai đôi thừa.
+  const five = hand('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '7♠', '7♣');
+  assert.equal(rotting(five), PAIRS_WORTH[5]);
+
+  // Hai dây rời nhau thì tính hai lần.
+  const two = hand('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '9♠', '9♣', '10♠', '10♣', 'J♠', 'J♣');
+  assert.equal(rotting(two), PAIRS_WORTH[3] * 2);
+
+  // Đôi heo không nằm trong đôi thông, nhưng vẫn thối theo con.
+  assert.equal(rotting(hand('A♠', 'A♣', '2♠', '2♣')), 2);
+});
+
+// ---- tới trắng --------------------------------------------------------------------------------
+
+test('the five hands that are over before they start', () => {
+  const quadTwos = hand('2♠', '2♣', '2♦', '2♥', '3♠', '4♠', '5♠', '6♠', '8♠', '9♠', 'J♠', 'Q♠', 'K♦');
+  assert.equal(instantWin(quadTwos), INSTANT.quadTwos);
+
+  const dragon = hand('3♠', '4♠', '5♠', '6♠', '7♠', '8♠', '9♠', '10♠', 'J♠', 'Q♠', 'K♠', 'A♠', '3♥');
+  assert.equal(instantWin(dragon), INSTANT.dragon);
+
+  const fivePairs = hand('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '7♠', '7♣', '9♠', 'J♦', 'K♥');
+  assert.equal(instantWin(fivePairs), INSTANT.fivePairs);
+
+  const sixPairs = hand('3♠', '3♣', '5♠', '5♣', '7♠', '7♣', '9♠', '9♣', 'J♠', 'J♣', 'K♠', 'K♣', '4♦');
+  assert.equal(instantWin(sixPairs), INSTANT.sixPairs);
+
+  // Sáu đôi được phép tính cả đôi heo — nó không phải đôi thông, nó chỉ là một đôi.
+  const sixWithTwos = hand('3♠', '3♣', '5♠', '5♣', '7♠', '7♣', '9♠', '9♣', 'J♠', 'J♣', '2♠', '2♣', '4♦');
+  assert.equal(instantWin(sixWithTwos), INSTANT.sixPairs);
+});
+
+test('and the hands that only look like them', () => {
+  // Bốn đôi thông thôi thì chưa tới trắng.
+  assert.equal(
+    instantWin(hand('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '9♠', 'J♦', 'K♥', 'A♠', '7♦')),
+    null);
+
+  // Năm đôi nhưng không thông.
+  assert.equal(
+    instantWin(hand('3♠', '3♣', '5♠', '5♣', '7♠', '7♣', '9♠', '9♣', 'J♠', 'J♣', 'K♥', 'A♠', '4♦')),
+    null);
+
+  // Sảnh mười một lá, thiếu đúng một hạng.
+  assert.equal(
+    instantWin(hand('3♠', '4♠', '5♠', '6♠', '7♠', '8♠', '9♠', '10♠', 'J♠', 'Q♠', 'K♠', '3♥', '4♥')),
+    null);
+
+  // Ba con heo chưa phải tứ quý heo.
+  assert.equal(
+    instantWin(hand('2♠', '2♣', '2♦', '3♠', '4♠', '6♠', '8♠', '9♠', 'J♠', 'Q♠', 'K♦', '7♥', '10♣')),
+    null);
+
+  assert.equal(instantWin(hand('3♠', '4♥', '9♦')), null, 'bài thường');
+});
+
+test('a dealt table throws up a tới trắng about as often as the arithmetic says', () => {
+  // Không ghim một con số chính xác — ghim rằng nó hiếm mà không phải không bao giờ, vì cả hai
+  // đầu đều là lỗi: không bao giờ nghĩa là hàm sai, mà thường xuyên nghĩa là luật sai.
+  let seen = 0;
+  for (let i = 0; i < 4000; i++) {
+    for (const one of deal(4)) if (instantWin(one)) seen++;
+  }
+  assert.ok(seen > 0, 'bốn nghìn ván mà không ván nào tới trắng thì hàm hỏng');
+  assert.ok(seen < 16000 * 0.05, `tới trắng ${seen}/16000 tay là quá nhiều`);
+});
+
+// ---- tiền trên một cái bàn thật ---------------------------------------------------------------
+
+/// Một cái bàn dựng tay, để hỏi luật tiền mà không phải chơi hết một ván.
+function table(hands, { bots = [], stake = 1000 } = {}) {
+  const seats = hands.map((_, seat) => ({
+    userId: bots.includes(seat) ? `machine:${seat}` : `u${seat}`,
+    displayName: bots.includes(seat) ? `Máy ${seat}` : `Người ${seat}`,
+    bot: bots.includes(seat),
+  }));
+  return {
+    kind: 'tienlen', state: 'playing', seats, hands: hands.map((one) => [...one]),
+    stake, turn: 0, pile: null, passed: new Set(), finished: [], left: new Set(),
+    play: new Set(), chops: new Map(), chopped: [], pot: 0,
+    rot: null, owes: null, owesWhy: null, blanche: null, wonWith: null,
+    first: false, opensWith: null, ready: new Set(), paidTo: new Map(), paid: [],
+    touched: Date.now(),
+  };
+}
+
+const paidBy = (game) => settlement(game.seats, game.finished, game.stake, {
+  chops: game.chops, rot: game.rot, blanche: game.blanche, owes: game.owes,
+});
+const sum = (paid) => paid.reduce((total, one) => total + one.change, 0);
+const forUser = (paid, id) => paid.find((one) => one.userId === id) ?? {};
+
+test('cutting a 2 is paid by whoever put the 2 down', () => {
+  const game = table([
+    hand('2♥', '5♠'),
+    hand('7♠', '7♣', '7♦', '7♥', '3♠'),
+    hand('4♠', '4♣'),
+    hand('6♠', '6♣'),
+  ]);
+
+  assert.ok(applyPlay(game, 0, hand('2♥')), 'heo đỏ xuống bàn');
+  assert.ok(applyPlay(game, 1, hand('7♠', '7♣', '7♦', '7♥')), 'tứ quý chặt');
+
+  // Heo đỏ đáng hai phần cược.
+  assert.equal(game.chops.get('u1'), 2);
+  assert.equal(game.chops.get('u0'), -2);
+  assert.equal(game.pot, 2, 'cái nồi giờ nằm trên đầu người vừa chặt');
+});
+
+test('chặt chồng: whoever is cut last carries the whole run of it', () => {
+  const game = table([
+    hand('2♠', '5♠'),
+    hand('7♠', '7♣', '7♦', '7♥', '3♠'),
+    hand('3♣', '3♦', '4♣', '4♦', '5♣', '5♦', '6♣', '6♦', '9♠'),
+    hand('8♠', '8♣'),
+  ]);
+
+  applyPlay(game, 0, hand('2♠'));                                    // heo đen, 1 phần
+  applyPlay(game, 1, hand('7♠', '7♣', '7♦', '7♥'));                  // tứ quý chặt, ăn 1
+  applyPlay(game, 2, hand('3♣', '3♦', '4♣', '4♦', '5♣', '5♦', '6♣', '6♦'));  // bốn đôi thông
+
+  // Người thứ ba ăn cả nồi (1) cộng giá tứ quý (3) = 4, lấy của người thứ hai.
+  assert.equal(game.chops.get('u0'), -1, 'chủ con heo mất đúng con heo của mình');
+  assert.equal(game.chops.get('u1'), 1 - 4, 'người chặt giữa vừa ăn vừa bị đè');
+  assert.equal(game.chops.get('u2'), 4);
+  assert.equal([...game.chops.values()].reduce((a, b) => a + b, 0), 0, 'tổng bằng không');
+});
+
+test('a machine neither collects a chặt nor pays for one', () => {
+  const game = table([
+    hand('2♥', '5♠'),
+    hand('7♠', '7♣', '7♦', '7♥', '3♠'),
+    hand('4♠', '4♣'),
+    hand('6♠', '6♣'),
+  ], { bots: [0] });
+
+  applyPlay(game, 0, hand('2♥'));
+  applyPlay(game, 1, hand('7♠', '7♣', '7♦', '7♥'));
+  assert.equal(game.chops.size, 0, 'chặt con heo của máy thì không ai được gì');
+});
+
+test('and none of it happens at a table with one person in it', () => {
+  const game = table([
+    hand('2♥', '5♠'),
+    hand('7♠', '7♣', '7♦', '7♥', '3♠'),
+  ], { bots: [1] });
+
+  applyPlay(game, 0, hand('2♥'));
+  applyPlay(game, 1, hand('7♠', '7♣', '7♦', '7♥'));
+  assert.equal(game.chops.size, 0);
+});
+
+test('what is left in a losing hand goes to whoever went out first', () => {
+  const game = table([hand('3♠'), hand('2♥', '2♦'), hand('4♠')]);
+  game.finished = [0, 1, 2];
+  game.hands = [[], hand('2♥', '2♦'), hand('4♠')];
+  game.play = new Set([0, 1, 2]);
+  game.state = 'over';
+  reckon(game);
+
+  assert.equal(game.rot.get('u1'), 4, 'hai con heo đỏ');
+  assert.ok(!game.rot.has('u2'), 'bài thường không thối');
+
+  const paid = paidBy(game);
+  assert.equal(forUser(paid, 'u1').rot, -4000);
+  assert.equal(forUser(paid, 'u0').rot, 4000, 'về nhất thu');
+  assert.equal(sum(paid), 0);
+});
+
+test('a hand played out without putting down one card pays for the table', () => {
+  const game = table([hand('3♠'), hand('4♠'), hand('5♠')]);
+  game.finished = [0, 1, 2];
+  game.hands = [[], [], hand('5♠')];
+  game.play = new Set([0, 1]);            // người thứ ba chưa đánh lá nào
+  game.state = 'over';
+  reckon(game);
+
+  assert.equal(game.owes, 'u2');
+  assert.equal(game.owesWhy, 'cóng');
+
+  const paid = paidBy(game);
+  // Ba người: nhất +1, nhì 0, bét −1. Người cóng gánh cả phần thua.
+  assert.equal(forUser(paid, 'u0').change, 1000);
+  assert.equal(forUser(paid, 'u2').change, -1000);
+  assert.equal(sum(paid), 0);
+});
+
+test('two people cóng and nobody pays for the table', () => {
+  const game = table([hand('3♠'), hand('4♠'), hand('5♠'), hand('6♠')]);
+  game.finished = [0, 1, 2, 3];
+  game.hands = [[], hand('4♠'), hand('5♠'), hand('6♠')];
+  game.play = new Set([0, 1]);
+  game.state = 'over';
+  reckon(game);
+  assert.equal(game.owes, null, 'hai người cùng cóng thì không ai đền cho ai');
+});
+
+test('going out on a 2 somebody could have cut costs them the table', () => {
+  const game = table([hand('2♥'), hand('3♠'), hand('4♠')]);
+  game.finished = [0, 1, 2];
+  game.hands = [[], hand('7♠', '7♣', '7♦', '7♥'), hand('4♠')];
+  game.wonWith = hand('2♥');
+  game.play = new Set([0, 1, 2]);
+  game.state = 'over';
+  reckon(game);
+
+  assert.equal(game.owes, 'u1', 'người ôm tứ quý mà không chặt');
+  assert.equal(game.owesWhy, 'ôm hàng');
+
+  const paid = paidBy(game);
+  assert.equal(sum(paid), 0);
+  assert.ok(forUser(paid, 'u1').owes < 0 || forUser(paid, 'u1').change < 0);
+});
+
+test('and not when two of them could have', () => {
+  const game = table([hand('2♥'), hand('3♠'), hand('4♠')]);
+  game.finished = [0, 1, 2];
+  game.hands = [[], hand('7♠', '7♣', '7♦', '7♥'), hand('9♠', '9♣', '9♦', '9♥')];
+  game.wonWith = hand('2♥');
+  game.play = new Set([0, 1, 2]);
+  game.state = 'over';
+  reckon(game);
+  assert.equal(game.owes, null, 'hai người cùng ôm hàng thì không chỉ mặt ai được');
+});
+
+test('nor when the hand was not won on a 2 at all', () => {
+  const game = table([hand('A♥'), hand('3♠'), hand('4♠')]);
+  game.finished = [0, 1, 2];
+  game.hands = [[], hand('7♠', '7♣', '7♦', '7♥'), hand('4♠')];
+  game.wonWith = hand('A♥');
+  game.play = new Set([0, 1, 2]);
+  game.state = 'over';
+  reckon(game);
+  assert.equal(game.owes, null);
+});
+
+test('tới trắng takes three stakes from everybody and no placing money at all', () => {
+  const game = table([hand('3♠'), hand('4♠'), hand('5♠')]);
+  game.finished = [0, 1, 2];
+  game.blanche = 'u0';
+  const paid = paidBy(game);
+
+  assert.equal(forUser(paid, 'u0').change, BLANCHE * 1000 * 2, 'ba lần cược từ mỗi người');
+  assert.equal(forUser(paid, 'u1').change, -BLANCHE * 1000);
+  assert.equal(forUser(paid, 'u2').change, -BLANCHE * 1000);
+  assert.equal(forUser(paid, 'u1').placing, 0, 'không có tiền thứ hạng, vì không ai đánh gì');
+  assert.equal(sum(paid), 0);
+});
+
+test('every way a hand can end still adds to nothing', () => {
+  // Cái test đáng giá nhất trong file này. Lỗi tiền là lỗi duy nhất người chơi nhớ mãi, và một
+  // cái bàn in ra vàng thì không ai báo — họ chỉ ở lại chơi.
+  const ways = [
+    { what: 'thường', build: (g) => { g.finished = [0, 1, 2, 3]; g.play = new Set([0, 1, 2, 3]); } },
+    { what: 'có thối', build: (g) => {
+      g.finished = [0, 1, 2, 3]; g.play = new Set([0, 1, 2, 3]);
+      g.hands = [[], hand('2♥'), hand('2♠', '2♣'), hand('7♠', '7♣', '7♦', '7♥')];
+    } },
+    { what: 'có chặt', build: (g) => {
+      g.finished = [0, 1, 2, 3]; g.play = new Set([0, 1, 2, 3]);
+      g.chops = new Map([['u0', 3], ['u1', -5], ['u2', 2], ['u3', 0]]);
+    } },
+    { what: 'có cóng', build: (g) => {
+      g.finished = [0, 1, 2, 3]; g.play = new Set([0, 1, 2]);
+      g.hands = [[], [], [], hand('9♠')];
+    } },
+    { what: 'cóng và thối cùng lúc', build: (g) => {
+      g.finished = [0, 1, 2, 3]; g.play = new Set([0, 1, 2]);
+      g.hands = [[], [], hand('2♥'), hand('2♠', '7♠', '7♣', '7♦', '7♥')];
+    } },
+    { what: 'tới trắng', build: (g) => { g.finished = [0, 1, 2, 3]; g.blanche = 'u1'; } },
+    { what: 'hai người và hai máy', build: (g) => {
+      g.seats[2].bot = true; g.seats[3].bot = true;
+      g.seats[2].userId = 'machine:2'; g.seats[3].userId = 'machine:3';
+      g.finished = [0, 2, 1, 3]; g.play = new Set([0, 1, 2, 3]);
+      g.hands = [[], [], [], hand('2♥')];
+    } },
+  ];
+
+  for (const { what, build } of ways) {
+    const game = table([hand('3♠'), hand('4♠'), hand('5♠'), hand('6♠')]);
+    game.hands = [[], [], [], []];
+    build(game);
+    game.state = 'over';
+    if (!game.blanche) reckon(game);
+    const paid = paidBy(game);
+    assert.equal(sum(paid), 0, `${what}: bàn làm ra ${sum(paid)} vàng từ hư không`);
+  }
+});
+
+// ---- máy mới đấu máy cũ -----------------------------------------------------------------------
+
+/**
+ * Cái máy trước khi sửa, chép nguyên vào đây.
+ *
+ * Không phải để giữ lại, mà để đo. "Thông minh hơn" nói suông thì không kiểm được; hai con bot
+ * ngồi đánh nhau hai nghìn ván thì kiểm được. Nó chấm điểm từng nước một và không bao giờ nhìn
+ * cả tay bài — đó chính là chỗ nó thua.
+ */
+function greedyCost(move, hand) {
+  let cost = move.shape.top - move.cards.length * 6;
+  if (rankOf(move.shape.top) === _TWO) cost += 60;
+  if (isBomb(move.shape)) cost += 120;
+
+  const groups = new Map();
+  for (const card of hand) {
+    const rank = rankOf(card);
+    if (!groups.has(rank)) groups.set(rank, []);
+    groups.get(rank).push(card);
+  }
+  for (const [rank, cards] of groups) {
+    const taken = move.cards.filter((card) => rankOf(card) === rank).length;
+    if (taken === 0 || taken === cards.length) continue;
+    if (cards.length === 4) cost += 100;
+    else if (cards.length === 3 && taken === 1) cost += 15;
+  }
+  return cost;
+}
+
+function greedyChoose(hand, pile, { lowest = 13, mustInclude = null } = {}) {
+  let moves = movesFrom(hand).filter((move) => beats(move.shape, pile));
+  if (mustInclude !== null) moves = moves.filter((move) => move.cards.includes(mustInclude));
+  if (!moves.length) return null;
+
+  const out = moves.find((move) => move.cards.length === hand.length);
+  if (out) return out.cards;
+
+  const scored = moves
+    .map((move) => ({ move, cost: greedyCost(move, hand) }))
+    .sort((a, b) => a.cost - b.cost);
+  const cheapest = scored[0];
+
+  if (!pile) {
+    const ordinary = scored.find(({ move }) => !isBomb(move.shape));
+    return (ordinary ?? cheapest).move.cards;
+  }
+  const expensive = isBomb(cheapest.move.shape) || rankOf(cheapest.move.shape.top) === _TWO;
+  if (expensive && lowest > 2) return null;
+  return cheapest.move.cards;
+}
+
+/// Một ván đủ, mỗi ghế một cái đầu. Trả về ghế về nhất.
+function duel(brains, hands) {
+  const game = tableOf(brains.length, hands);
+  const seen = [];
+  let turns = 0;
+
+  while (game.state === 'playing') {
+    if (++turns > 400) return null;
+    const seat = game.turn;
+    const cards = brains[seat](game.hands[seat], game.pile?.shape ?? null, {
+      lowest: lowestElsewhere(game.hands, seat),
+      mustInclude: game.first ? game.opensWith : null,
+      seen: [...seen],
+    });
+    if (cards) { seen.push(...cards); applyPlay(game, seat, cards); } else applyPass(game, seat);
+  }
+  return game.finished[0];
+}
+
+test('the machine that reads the whole hand beats the one that reads one play', () => {
+  // Ngưỡng 60%. Dưới đó thì công sức phân rã bài không đáng, và nói "thông minh hơn" là nói
+  // suông. Hai ghế, đổi chỗ mỗi ván để không ai được lợi vì đi trước.
+  //
+  // Đo được 62% ở bàn hai người và 63–65% ở bàn bốn. Ngưỡng đặt ở 57%, thấp hơn số đo khoảng
+  // bốn lần sai số — một cái test chập chờn còn tệ hơn không có test, vì lần đỏ nào cũng bị coi
+  // là "chạy lại phát nữa xem".
+  for (const players of [2, 4]) {
+    const N = 1200;
+    let won = 0;
+    let played = 0;
+
+    for (let i = 0; i < N; i++) {
+      const hands = deal(players);
+      // Đổi chỗ mỗi ván, để không ai được lợi vì cái ghế đi trước.
+      const brains = Array.from({ length: players },
+        (_, seat) => ((seat + i) % 2 === 0 ? chooseMove : greedyChoose));
+      const first = duel(brains, hands.map((one) => [...one]));
+      if (first === null) continue;
+      played++;
+      if (brains[first] === chooseMove) won++;
+    }
+
+    const rate = won / played;
+    console.log(`    bàn ${players} người · máy mới thắng ${(rate * 100).toFixed(1)}% `
+      + `(${won}/${played})`);
+    assert.ok(played > N * 0.98, `${N - played} ván không kết thúc`);
+    assert.ok(rate >= 0.57,
+      `bàn ${players}: máy mới chỉ thắng ${(rate * 100).toFixed(1)}% (${won}/${played})`);
+  }
+});
+
+test('and it does it inside a turn nobody waits for', () => {
+  // Bàn bốn máy nghĩ nối tiếp nhau. Một nước 50ms là bốn nước 200ms, đã thấy ì; chậm hơn nữa
+  // thì cái bàn đứng hình chứ không phải cái máy đang suy nghĩ.
+  let worst = 0;
+  for (let i = 0; i < 200; i++) {
+    const hand = deal(4)[0];
+    const began = performance.now();
+    chooseMove(hand, null, { lowest: 13, seen: [] });
+    worst = Math.max(worst, performance.now() - began);
+  }
+  assert.ok(worst < 50, `nước chậm nhất mất ${worst.toFixed(1)}ms`);
+});
+
+test('a hand cut into the fewest plays is cut correctly', () => {
+  // Sáu lá này không phải hai sảnh — nó là ba đôi thông, và ba đôi thông là *một* nước. Đúng
+  // cái bẫy: hai dây song song cùng khoảng bao giờ cũng đồng thời là một dây đôi thông, nên chỗ
+  // bóc dây có ích lại nằm ở hai dây **khác độ dài**.
+  assert.equal(decompose(hand('5♠', '5♣', '6♠', '6♣', '7♠', '7♣')).plays, 1, 'ba đôi thông');
+
+  // Đây mới là chỗ nó có ích. Sảnh 3-4-5-6-7 rồi còn 5♣6♣7♣ là hai nước; mà `movesFrom` không
+  // bao giờ sinh ra cái sảnh thứ hai, nên nếu chỉ dựa vào nó thì tay này bị đọc thành ba nước
+  // (ba đôi thông, rồi 3♠, rồi 4♠).
+  const stagger = hand('3♠', '4♠', '5♠', '5♣', '6♠', '6♣', '7♠', '7♣');
+  assert.equal(decompose(stagger).plays, 2, 'sảnh dài rồi sảnh ngắn');
+
+  assert.equal(decompose(hand('7♠', '7♣', '7♦', '7♥')).plays, 1, 'tứ quý là một nước');
+  assert.equal(decompose(hand('3♠', '5♣', '9♦')).plays, 3, 'ba lá rời là ba nước');
+  assert.equal(decompose(hand('3♠', '4♣', '5♦', '9♦')).plays, 2, 'một sảnh và một lá');
+  assert.equal(decompose([]).plays, 0);
+
+  // Và đọc lại được số nước còn lại sau một nước bất kỳ.
+  const plan = decompose(hand('3♠', '4♣', '5♦', '9♦'));
+  assert.equal(playsAfter(plan, hand('3♠', '4♣', '5♦')), 1);
+  assert.equal(playsAfter(plan, hand('9♦')), 1);
+  assert.equal(playsAfter(plan, hand('3♠')), 3, 'xé sảnh thì còn ba nước lẻ');
+});
+
+test('it does not break a run it did not have to break', () => {
+  // Chỗ máy cũ mù: `costOf` phạt xé tứ quý và bộ ba, không phạt xé sảnh. Rút con 7 ra khỏi
+  // 5-6-7-8-9 là mất cả dây, mà nó không thấy gì cả.
+  const mine = hand('5♠', '6♠', '7♠', '8♠', '9♠', '3♦');
+  assert.deepEqual(chooseMove(mine, null), hand('3♦'), 'dẫn bằng lá rời, không phải lá trong dây');
+  assert.deepEqual(chooseMove(mine, kindOf('4♦'), { lowest: 13 }), hand('5♠'),
+    'phải đè thì đè bằng lá đầu dây, chứ không rút ruột giữa dây');
+});
+
+test('the machine is told what was played and never what is held', () => {
+  // Cái máy nhìn được bài người khác là cái máy không ai thắng nổi, và là gian lận. `chooseMove`
+  // nhận đúng: tay của chính nó, cái đang nằm trên bàn, ai còn mấy lá, và những gì đã đánh ra.
+  const source = readFileSync(new URL('./rules/tienlen.mjs', import.meta.url), 'utf8');
+  const from = source.indexOf('export function chooseMove');
+  const body = source.slice(from, source.indexOf('\n}', from));
+  assert.ok(!/hands|game\.|seats/.test(body),
+    `máy đang nhìn thấy thứ nó không được nhìn:\n${body}`);
+
+  // Và `seen` là bài đã đánh, nên đưa vào cả bộ bài thì không còn gì ngoài kia để đè.
+  const everything = deck().filter((card) => card !== c('3', '♠') && card !== c('2', '♥'));
+  assert.ok(unbeatable(kindOf('2♥'), hand('2♥'), everything), 'heo đỏ là lá không ai đè được');
+  assert.ok(!unbeatable(kindOf('3♠'), hand('3♠'), []), 'chưa ai đánh gì thì 3 bích đè được hết');
+});
+
+test('the ladder the widget draws is the ladder the bot plays', () => {
+  // Widget giữ một bản sao của `beats` để biết lá nào sáng lên được — hỏi bot thì mỗi cú chạm
+  // phải đi một vòng mạng. Bản sao đó là bản sao duy nhất được phép, và cái giá của nó là đúng
+  // cái vừa xảy ra: thang chặt của bot lên bảy bậc, thang của widget vẫn bốn, và người chơi
+  // ngồi nhìn dây năm đôi thông không chịu sáng.
+  const widget = readFileSync(new URL('./widget/tienlen.js', import.meta.url), 'utf8');
+  // Cắt *sau* dòng mốc mở và *trước* dòng mốc đóng — hai dòng ấy là chú thích, và một chú thích
+  // lọt vào `new Function` là một lỗi cú pháp chứ không phải một luật sai.
+  const open = widget.indexOf('>>> luật chung với bot');
+  const shut = widget.indexOf('// >>> hết luật chung <<<');
+  assert.ok(open !== -1 && shut > open, 'mất dấu mốc quanh khối luật của widget');
+  const from = widget.indexOf('\n', open) + 1;
+  const to = shut;
+
+  const theirs = new Function('RANKS', 'SUITS', 'TWO', 'rankOf', 'suitOf',
+    `${widget.slice(from, to)}; return beats;`)(RANKS, SUITS, TWO, rankOf, suitOf);
+
+  // Mọi cặp bộ đáng quan tâm, hỏi cả hai bên và bắt trả lời giống nhau.
+  const shapes = [
+    ['2♠'], ['2♥'], ['A♥'], ['2♠', '2♥'], ['2♠', '2♣'], ['K♠', 'K♥'],
+    ['9♠', '9♣', '9♦'], ['4♠', '4♣', '4♦', '4♥'], ['9♠', '9♣', '9♦', '9♥'],
+    ['5♠', '6♠', '7♠'], ['5♠', '6♠', '7♠', '8♠'],
+    ['3♠', '3♣', '4♠', '4♣', '5♠', '5♣'],
+    ['7♠', '7♣', '8♠', '8♣', '9♠', '9♣'],
+    ['3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣'],
+    ['3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '7♠', '7♣'],
+    ['3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '7♠', '7♣', '8♠', '8♣'],
+  ].map((names) => kindOf(...names));
+
+  let asked = 0;
+  for (const mine of shapes) {
+    for (const under of [null, ...shapes]) {
+      assert.equal(beats(mine, under), theirs(mine, under),
+        `bot và widget không đồng ý về ${mine.kind}/${mine.size} đè ${under && under.kind}`);
+      asked++;
+    }
+  }
+  assert.ok(asked > 200, 'hỏi quá ít cặp để tin');
+});
+
+test('no animation is the only reason something is visible', () => {
+  // Đã cắn hai lần. Lần đầu là con xúc xắc: keyframe bắt đầu từ `opacity: 0` với `fill-mode:
+  // both`, nên animation không chạy là xúc xắc **tàng hình vĩnh viễn**. Lần thứ hai là bảng kết
+  // quả, y hệt — cả bảng biến mất, và biến mất thì không ai báo lỗi, người ta chỉ thấy game hỏng.
+  //
+  // Luật: `both` và `forwards` giữ khung đầu tiên suốt quãng chờ, nên khung đầu tiên không được
+  // là khung vô hình. Animation được quyền quyết định một thứ *đến* thế nào; không được là lý do
+  // duy nhất nhìn thấy nó.
+  const css = readFileSync(new URL('./widget/style.css', import.meta.url), 'utf8');
+
+  const frames = new Map();
+  for (const found of css.matchAll(/@keyframes\s+([\w-]+)\s*\{([\s\S]*?)\n\}/g)) {
+    frames.set(found[1], found[2]);
+  }
+  assert.ok(frames.size > 3, `chỉ đọc được ${frames.size} keyframes — regex hỏng rồi`);
+
+  const invisible = (body) => {
+    // Khung đầu tiên: `from`, hoặc `0%`.
+    const first = body.match(/(?:^|\n)\s*(?:from|0%)\s*\{([^}]*)\}/);
+    return !!first && /opacity:\s*0\s*[;}]/.test(first[1]);
+  };
+
+  for (const rule of css.matchAll(/animation:\s*([\w-]+)([^;]*);/g)) {
+    const [, name, rest] = rule;
+    if (!/\b(both|backwards)\b/.test(rest)) continue;
+    const body = frames.get(name);
+    if (!body) continue;
+    assert.ok(!invisible(body),
+      `@keyframes ${name} bắt đầu từ opacity 0 và được dùng với "${rest.trim()}" — `
+      + 'animation không chạy là thứ đó không bao giờ hiện ra');
   }
 });

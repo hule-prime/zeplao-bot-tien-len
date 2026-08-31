@@ -22,15 +22,22 @@ import { writeFileSync } from 'node:fs';
 
 const LEDGER = '/tmp/tienlen-flow-scores.json';
 process.env.TIENLEN_THINK_MS = '1';
+process.env.TIENLEN_PHOM_THINK_MS = '1';
 process.env.TIENLEN_ADS_MS = '150';
 process.env.TIENLEN_ROLL_MS = '60';
 process.env.TIENLEN_SHOW_MS = '120';
-process.env.TIENLEN_BETTING_MS = '700';
+// Cửa đặt của sòng thế giới, ngắn lại cho vừa một cái test.
+//
+// Bảy trăm mili giây thì vừa đủ cho tới khi bộ test có thêm mấy nghìn ván máy-đấu-máy chạy
+// trước nó: lúc máy bận, hai lệnh đặt cược mất hơn bảy trăm mili giây để tới nơi và cửa đã
+// đóng — test đỏ vì cái đồng hồ trong test, không phải vì cái sòng. Một cái test đỏ ngẫu nhiên
+// còn tệ hơn không có test, vì lần đỏ nào cũng bị đọc thành "chạy lại phát nữa xem".
+process.env.TIENLEN_BETTING_MS = '2500';
 process.env.TIENLEN_SCORES = LEDGER;
 
 const {
   run, chooseMove, shapeOf, nameOf, STARTING_GOLD, DAILY_GOLD, BOT_STAKE, ADS_GOLD, dayIn,
-  FACES, boardWorth, staked,
+  FACES, boardWorth, staked, phomChoose, phomDiscard,
 } = await import('./tienlenbot.mjs');
 
 const nap = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -174,8 +181,14 @@ function standIn(rooms = { c1: ['u1', 'u2'] }) {
   });
 
   /// Waits for the bot to have got somewhere rather than for a length of time.
+  /// Chờ tới khi điều kiện đúng, hoặc bỏ cuộc và nói rõ đang chờ cái gì.
+  ///
+  /// Hai lăm giây chứ không phải tám. Bộ test bây giờ có cả phép đo máy-đấu-máy nặng CPU chạy
+  /// trước nó, và một tiến trình đang bận thì cái đồng hồ trong test chạy chậm theo — mấy lần
+  /// đỏ ngẫu nhiên vừa rồi đều là *bàn vẫn chạy đúng, chỉ là chậm*. Test chậm thì chấp nhận
+  /// được; test đỏ ngẫu nhiên thì không, vì lần đỏ nào cũng bị đọc thành "chạy lại xem".
   app.until = async (what, why) => {
-    for (let waited = 0; waited < 8000; waited += 10) {
+    for (let waited = 0; waited < 25000; waited += 10) {
       if (what()) return;
       await nap(10);
     }
@@ -390,8 +403,12 @@ test('two people in different groups sit at the same table', async () => {
 
     const over = app.mine('u1');
     assert.equal(over.paid.length, 2);
-    assert.deepEqual(over.paid.map((one) => one.change).sort((a, b) => a - b), [-1000, 1000],
+    // A stake for coming first. `change` on top of that carries thối — whatever the loser was
+    // still holding — so the part that is about the placing is read on its own.
+    assert.deepEqual(over.paid.map((one) => one.placing).sort((a, b) => a - b), [-1000, 1000],
       'a stake, one way');
+    assert.equal(over.paid.reduce((sum, one) => sum + one.change, 0), 0,
+      'what one of them won is what the other lost, thối and all');
   }, { c1: ['u1'], c2: ['u2'] });
 });
 
@@ -645,7 +662,9 @@ test('coming first is paid at once, and leaving after it is not walking out', as
     const over = app.mine(rest[0]);
     assert.equal(over.phase, 'over');
     assert.equal(over.ranking[0].id, first, 'whoever went out first is still first');
-    assert.equal(over.paid.find((one) => one.userId === first).change, 1000);
+    // The placing money on its own: `change` also carries whatever thối the other two were
+    // still holding, which is theirs to lose and first place's to collect.
+    assert.equal(over.paid.find((one) => one.userId === first).placing, 1000);
     assert.equal(over.seats.find((one) => one.id === first).gone, false,
       'and is not drawn as somebody who walked out');
 
@@ -871,7 +890,10 @@ test('one sòng for the whole world, already throwing when anybody walks in', as
     app.does('u1', { baucua: 'world' });
     await app.until(() => (app.mine('u1') ?? {}).kind === 'baucua', 'the sòng');
     assert.equal(app.mine('u1').world, true, 'and it says which one it is');
-    assert.ok(app.mine('u1').bettingEndsAt, 'a clock, with nobody else there');
+    // Chờ chứ không đoán. Cái push đầu tiên ra khỏi bot trước khi vòng xóc kịp mở cửa đặt, nên
+    // đọc ngay lúc ấy thì thỉnh thoảng thấy một cái bàn chưa có đồng hồ — và một cái test đỏ
+    // ngẫu nhiên là một cái test không ai đọc nữa.
+    await app.until(() => (app.mine('u1') ?? {}).bettingEndsAt, 'a clock, with nobody else there');
 
     // Nobody opened anything, so there is nothing on anybody's list to join.
     assert.deepEqual(app.mine('u2').rooms ?? [], []);
@@ -1026,4 +1048,189 @@ test('a throw with nothing on the board does not happen', async () => {
     assert.equal(app.mine('u1').phase, 'betting', 'the bowl should not have moved');
     assert.equal(app.mine('u1').dice, null);
   });
+});
+
+test('the three of spades opens the first hand of a table and nothing after it', async () => {
+  // Cái lỗi luật: ván nào cũng đi tìm 3 bích, kể cả ván đấu lại. Đúng phải là người về nhất
+  // ván trước được dẫn — ai chơi tiến lên cũng biết, mà bot thì không.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen in c1');
+    await claim(app, 'u1');
+    app.asks('u2', 'c2');
+    await app.until(() => app.mine('u2'), 'a screen in c2');
+    await claim(app, 'u2');
+
+    app.does('u1', { open: 2, stake: 1000 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'lobby', 'a table for two');
+
+    await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the table on u2\'s list');
+    app.does('u2', { join: app.mine('u2').rooms[0].id });
+    await app.until(() => (app.mine('u2') ?? {}).phase === 'playing', 'the table to deal');
+
+    const first = app.mine('u1');
+    assert.notEqual(first.opensWith, null, 'ván đầu thì có lá bắt buộc');
+    const lowest = Math.min(...['u1', 'u2'].flatMap((id) => app.mine(id).me.hand));
+    assert.equal(first.opensWith, lowest, 'và nó là lá thấp nhất đang chia ra');
+
+    await playOut(app, ['u1', 'u2']);
+
+    const over = app.mine('u1');
+    const won = over.paid.find((one) => one.place === 'Nhất').userId;
+
+    app.does('u1', { rematch: true });
+    app.does('u2', { rematch: true });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'dealt again');
+
+    const again = app.mine('u1');
+    assert.equal(again.opensWith, null, 'ván sau không bắt lá nào cả');
+    assert.equal(again.seats[again.turn].id, won, 'người về nhất ván trước được dẫn');
+  }, { c1: ['u1'], c2: ['u2'] });
+});
+
+// ---- phỏm, cả đường dây --------------------------------------------------------------------
+
+/// Một lượt phỏm: lấy một lá rồi đánh một lá. Lấy gì và đánh gì thì hỏi đúng cái máy của bot.
+async function onePhomTurn(app, who) {
+  const turn = who.find((id) => {
+    const seen = app.mine(id);
+    return seen && seen.phase === 'playing' && seen.me && seen.turn === seen.me.seat;
+  });
+  if (!turn) { await nap(15); return false; }
+
+  const now = app.mine(turn);
+  const was = JSON.stringify([now.turn, now.step, now.me.hand.length, now.phase]);
+
+  if (now.step === 'take') {
+    app.does(turn, now.me.canEat && phomChoose(now.me.hand, now.table)
+      ? { eat: true } : { draw: true });
+  } else {
+    app.does(turn, { throw: phomDiscard(now.me.hand) });
+  }
+
+  await app.until(() => {
+    const after = app.mine(turn);
+    return JSON.stringify([after.turn, after.step, after.me.hand.length, after.phase]) !== was;
+  }, `the phỏm table to move from ${now.step}`);
+  return true;
+}
+
+async function playPhom(app, who) {
+  for (let move = 0; move < 400; move++) {
+    const stillAt = who.filter((id) => (app.mine(id) ?? {}).phase === 'playing');
+    if (!stillAt.length) return;
+    await onePhomTurn(app, who);
+  }
+  assert.fail('the phỏm table never finished');
+}
+
+test('a phỏm table is dealt, played, counted and paid', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+
+    app.does('u1', { phomSolo: 4 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a phỏm table');
+
+    const dealt = app.mine('u1');
+    assert.equal(dealt.kind, 'phom');
+    assert.equal(dealt.seats.length, 4);
+    assert.equal(dealt.me.hand.length, 10, 'người mở bàn cầm cái, mười lá');
+    assert.equal(dealt.step, 'throw', 'cầm cái thì đi bằng cách đánh ra một lá');
+    assert.equal(dealt.stock, 52 - 10 - 9 * 3);
+    assert.ok(dealt.seats.slice(1).every((one) => one.cards === 9));
+    assert.ok(dealt.seats.slice(1).every((one) => one.bot), 'ghế trống là máy');
+
+    // Số điểm rác được tính ở bot, không phải ở trang.
+    assert.equal(typeof dealt.me.points, 'number');
+    assert.ok(Array.isArray(dealt.me.melds));
+
+    await playPhom(app, ['u1']);
+
+    const over = app.mine('u1');
+    assert.equal(over.phase, 'over');
+    assert.equal(over.paid.length, 1, 'chỉ người mới được trả tiền, máy là đồ đạc');
+    assert.equal(over.ranking.length, 4, 'nhưng ai cũng có hạng');
+    assert.equal(new Set(over.ranking.map((one) => one.place)).size, 4,
+      'bốn ghế phải là bốn hạng khác nhau');
+    assert.ok(over.seats.every((one) => Array.isArray(one.melds) || one.melds === null));
+
+    // Vàng đổi đúng bằng cái nó nói là đã đổi.
+    const paid = over.paid[0];
+    assert.equal(over.gold, STARTING_GOLD + DAILY_GOLD + paid.change);
+  }, { c1: ['u1'] });
+});
+
+test('two people in different groups play phỏm at the same table', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen in c1');
+    await claim(app, 'u1');
+    app.asks('u2', 'c2');
+    await app.until(() => app.mine('u2'), 'a screen in c2');
+    await claim(app, 'u2');
+
+    app.does('u1', { phom: 2, stake: 1000 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'lobby', 'a phỏm table for two');
+
+    await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the table on u2\'s list');
+    const there = app.mine('u2').rooms[0];
+    assert.equal(there.kind, 'phom', 'danh sách phải nói rõ là bàn phỏm');
+
+    app.does('u2', { join: there.id });
+    await app.until(() => (app.mine('u2') ?? {}).phase === 'playing', 'the table to deal');
+
+    // Không ai nhận được bài của ai.
+    const hands = ['u1', 'u2'].map((id) => app.mine(id).me.hand);
+    assert.equal(hands[0].filter((card) => hands[1].includes(card)).length, 0,
+      'the same card was dealt to both of them');
+    assert.deepEqual(app.refused, [],
+      'nothing was ever shown to somebody outside its own conversation');
+
+    await playPhom(app, ['u1', 'u2']);
+
+    const over = app.mine('u1');
+    assert.equal(over.phase, 'over');
+    assert.equal(over.paid.length, 2);
+    assert.equal(over.paid.reduce((sum, one) => sum + one.change, 0), 0,
+      'bàn phỏm làm ra vàng từ hư không');
+  }, { c1: ['u1'], c2: ['u2'] });
+});
+
+test('nothing sent to a phỏm room ever carries a hand', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { phomSolo: 3 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a phỏm table');
+
+    // Bàn đang đợi *người* đánh lá đầu — cái cầm cái là mình. Đi vài lượt cho ba cái máy chạy
+    // theo, rồi mới có đủ push để soi.
+    for (let i = 0; i < 8; i++) await onePhomTurn(app, ['u1']);
+    await nap(200);
+
+    let looked = 0;
+    for (const push of app.pushes) {
+      if (push.to !== null) continue;
+      if (push.state.kind !== 'phom') continue;
+      looked++;
+      assert.equal(push.state.me, undefined, 'push chung mang theo bài riêng');
+      for (const seat of push.state.seats ?? []) {
+        assert.ok(typeof seat.cards === 'number' || seat.cards === null, 'ghế phải mang số lá');
+        assert.ok(!('hand' in seat), 'một tay bài lọt vào bàn ai cũng thấy');
+        // Lá đã ăn thì công khai — nó được đánh ra giữa bàn rồi.
+        assert.ok(Array.isArray(seat.eaten));
+      }
+      // Nọc là một con số, không phải một xấp bài.
+      assert.equal(typeof push.state.stock, 'number');
+      assert.ok(!Array.isArray(push.state.stock), 'cả cái nọc bị đẩy ra ngoài');
+    }
+    assert.ok(looked > 2, `chỉ soi được ${looked} push`);
+  }, { c1: ['u1'] });
 });

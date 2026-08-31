@@ -1,7 +1,7 @@
 # tienlenbot
 
-A bot for [Cúc Cu](https://kuku.vn) with two games in it: **tiến lên miền nam** and **bầu cua
-tôm cá**, played in a group chat for one purse of gold.
+A bot for [Cúc Cu](https://kuku.vn) with three games in it: **tiến lên miền nam**, **đánh
+phỏm** and **bầu cua tôm cá**, played in a group chat for one purse of gold.
 
 Live as **`@tienlenbot`** on `kuku.vn`, running as its own service beside `@carobot`. It is not
 published yet, so only its owner can add it to a conversation — see
@@ -15,6 +15,25 @@ published yet, so only its owner can add it to a conversation — see
 - **Tạo bàn** — open a table for two, three or four at a stake of your choosing. It goes on the
   world list, so somebody in a completely different group finds it and takes a seat; a full
   table deals itself.
+
+A hand pays four ways. Where you came is the first; on top of it are **chặt** — cutting
+somebody's 2 or somebody's bomb, paid by them, and paid again by whoever is cut after them —
+**thối**, what you were still holding when it ended, and **đền**, which is one person paying
+for the whole table. A hand that is already won on the deal is **tới trắng**: four 2s, five
+consecutive pairs, six pairs, or twelve running cards. The result screen names each of them
+under the row it belongs to, because one figure that is the sum of four unnamed things reads as
+money taken rather than money lost.
+
+**Đánh phỏm (tá lả)**
+
+- **Đấu với máy**, or **tạo bàn** for two, three or four, the same two ways in as tiến lên and
+  on the same world list.
+- Nine cards each, ten for whoever starts. Four turns each: take the card the player before
+  threw — only if it makes a phỏm on the spot — or draw from the nọc, then throw one away.
+- The hand you hold is drawn as it counts: phỏm lit, junk dimmed, and the points you are still
+  carrying written beside your name. **Ù** — nothing left over — stops the hand and takes
+  double from everybody. **Móm** — no phỏm at all — loses double. Throwing the card somebody
+  ù's on, or feeding the same player three times, is **đền**: you pay for the table.
 
 **Bầu cua tôm cá**
 
@@ -152,10 +171,22 @@ because a widget is a file anybody can edit.
 
 | | |
 | --- | --- |
-| `bots/tienlenbot/tienlenbot.mjs` | The whole bot. One file, no dependencies, three Node built-ins and `fetch` |
+| `bots/tienlenbot/tienlenbot.mjs` | The part that talks: the long poll, sessions, pushes, the ledger, and the turn machines |
+| `bots/tienlenbot/rules/cards.mjs` | The deck, and the only random in the process |
+| `bots/tienlenbot/rules/tienlen.mjs` | Tiến lên: shapes, the ladder of chặt, the money on a bomb, and the machine that plays it |
+| `bots/tienlenbot/rules/phom.mjs` | Phỏm: melds, the best way to cut a hand up, eating, sending, and its own machine |
+| `bots/tienlenbot/rules/baucua.mjs` | Six faces, three dice, and what a stake on one is worth |
+| `bots/tienlenbot/economy.mjs` | Gold: what a day is worth, what a table costs, and how a hand is paid |
 | `bots/tienlenbot/widget/` | The page in the frame — `index.html`, `style.css`, `tienlen.js`, `faces.js` |
-| `bots/tienlenbot/tienlenbot.test.mjs` | The rules, played out over a few hundred dealt hands |
+| `bots/tienlenbot/tienlenbot.test.mjs` | Tiến lên and the money, played out over a few thousand dealt hands |
+| `bots/tienlenbot/phom.test.mjs` | Phỏm, the same way |
 | `bots/tienlenbot/tienlenbot.flow.test.mjs` | The bot, end to end against a stand-in for the app |
+
+Every module under `rules/` is pure: cards and numbers in, cards and numbers out, and no idea
+that a network exists. That is what lets a rule be checked with a function call rather than with
+a running table — and `deploy/deploy-bot.sh` copies the whole directory rather than a list of
+files, because a deploy that copies the entry point without what it imports leaves a bot that
+runs on the machine it was written on and dies on the server at the *next* restart.
 | `tools/play.mjs` | The bot and its widget, playable in a browser with no token and no phone |
 | `tools/css-check.mjs` | Every id and class the page draws, checked against the stylesheet |
 | `deploy/` | The systemd unit and the script that puts it on a server |

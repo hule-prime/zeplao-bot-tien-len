@@ -51,10 +51,28 @@ step "upload"
 # data/ is the bot's own and survives every deploy. Made here rather than by the bot, because a
 # container cannot create its own bind mount.
 remote "mkdir -p /opt/zeplao/$BOT/data"
-scp -q -i "$SSH_KEY" -P "$SSH_PORT" \
-  "$ROOT/bots/$BOT/$BOT.mjs" \
-  "$ROOT/bots/$BOT/package.json" \
-  "$HOST:/opt/zeplao/$BOT/"
+# Everything the bot imports, not a list of files.
+#
+# It used to name two files. Then the rules moved into `rules/` and `economy.mjs`, and a deploy
+# that copies the entry point without what it imports leaves a bot that runs fine on the machine
+# it was written on and dies on the server with ERR_MODULE_NOT_FOUND — at the *next* restart,
+# which may be days later and will look like anything but a deploy. So: the whole directory,
+# minus the parts that are not the bot.
+#
+# `widget/` goes up through setWidget below rather than as files, and data/ is the bot's own.
+rsync -a --delete-after \
+  --exclude 'widget/' --exclude 'node_modules/' --exclude '*.test.mjs' --exclude 'data/' \
+  -e "ssh -i $SSH_KEY -p $SSH_PORT" \
+  "$ROOT/bots/$BOT/" "$HOST:/opt/zeplao/$BOT/"
+
+# Every module it imports, resolved on the server, before it is asked to serve anybody.
+#
+# A missing file is the one deploy fault that hides: the process starts, the loop runs, and the
+# import that is not there is only reached at the next restart. Importing the entry point here
+# walks the whole graph in one go, in the container the bot runs in, and fails the deploy rather
+# than the night.
+remote "docker run --rm -v /opt/zeplao/$BOT:/app -w /app node:22-alpine \
+  node -e 'import(\"/app/$BOT.mjs\").then(() => console.log(\"imports ok\"))'"
 
 step "unit"
 scp -q -i "$SSH_KEY" -P "$SSH_PORT" \
