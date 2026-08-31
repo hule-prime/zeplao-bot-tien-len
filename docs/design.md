@@ -162,8 +162,17 @@ lúc lên cùng ba con xúc xắc, nên bàn không có "đang chờ ai" và ng�
 - **Sáu linh vật vẽ bằng SVG**, không dùng emoji. Emoji do hãng làm điện thoại vẽ, nên cùng một
   bàn là sáu phong cách khác nhau trên sáu máy khác nhau và không cái nào là phong cách của bàn
   này. Với lại **không có emoji quả bầu**, mà bầu là chữ đầu tiên của tên trò.
-- **Nhà cái ăn gần 8%** — đúng con số cổ điển, và nó là thứ giữ cho vàng phát mỗi ngày không biến
-  thành một đống chỉ có tăng.
+- **Xúc xắc không nhìn thấy tiền.** `roll()` **không nhận tham số nào** — không có đường nào để
+  truyền vào cho nó biết ai đang ngồi, đặt cửa nào, đặt bao nhiêu — và nó được gọi *sau* khi cửa
+  đã khoá. Có test ghim cả hai: `roll.length === 0`, và thân hàm không được nhắc tới `bets`,
+  `staked`, `gold`, `seat` hay `game`. Cách dễ nhất để một cái sòng gian là thêm một tham số vào
+  đúng chỗ đó rồi không ai để ý.
+- **`randomInt(6)`, không phải `floor(random() * 6)`.** Sáu không chia hết cho luỹ thừa của hai,
+  nên nhân một số thực rồi làm tròn khiến hai mặt nhỉnh hơn bốn mặt kia — khoảng bảy phần triệu
+  tỉ, không ai đo được, và không có lý do gì phải mang theo.
+- **Nhà cái ăn 17/216 = 7,87%** — đúng con số cổ điển của mọi bàn bầu cua vỉa hè, tính chính xác
+  chứ không phải đo. Đây là thứ giữ cho vàng phát mỗi ngày không biến thành một đống chỉ có tăng.
+  **Không phải 50-50 và chưa bao giờ là:** đặt một cửa thì 57,87% số lần không ra con nào.
 
 ---
 

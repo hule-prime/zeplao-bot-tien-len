@@ -641,10 +641,20 @@ export const WORLD = 'world';
 /// everybody is betting on the same three dice at the same time.
 export const BAUCUA_SEATS = 8;
 
-/// Three dice, from `chance` and never from `Math.random`. See the note on it: these are
-/// decided after the money is down, in public, every twenty-five seconds.
-export function roll(random = chance) {
-  return Array.from({ length: DICE }, () => FACES[Math.floor(random() * FACES.length)]);
+/**
+ * Three dice.
+ *
+ * Takes nothing. It cannot see who is at the table, what is on the board, or how much of it —
+ * there is no argument through which it could, and it is called after the betting has closed.
+ * That is the whole of the guarantee and it is worth being able to read it in four lines.
+ *
+ * `randomInt(6)` rather than `floor(chance() * 6)`. Six does not divide a power of two, so
+ * scaling a float leaves two of the faces very slightly likelier than the other four — about
+ * seven parts in a thousand million million, which nobody could ever measure and which there is
+ * no reason to carry. `randomInt` rejects and re-draws instead, and is exactly uniform.
+ */
+export function roll() {
+  return Array.from({ length: DICE }, () => FACES[randomInt(FACES.length)]);
 }
 
 /**

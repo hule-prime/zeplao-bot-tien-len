@@ -844,3 +844,47 @@ test('chance is a number in [0, 1) and not the same one twice', () => {
   }
   assert.ok(seen.size > 1990, 'the same number keeps coming back');
 });
+
+test('the dice cannot see the money, because there is no way in', () => {
+  // The plainest guarantee available: a function that takes nothing cannot be told who is at
+  // the table, what is on the board, or how much of it. Pinned, because the easy way to make a
+  // house cheat is to add a parameter here and nobody notice.
+  assert.equal(roll.length, 0, 'roll() grew an argument');
+
+  // The function itself, not the prose after it — the next thing in the file is a comment about
+  // stakes, and a check that reads it is a check that fails for the wrong reason.
+  const source = readFileSync(new URL('./tienlenbot.mjs', import.meta.url), 'utf8');
+  const from = source.indexOf('export function roll()');
+  const body = source.slice(from, source.indexOf('\n}', from) + 2);
+  assert.ok(!/bets|placed|staked|game|seat|gold/.test(body),
+    `the throw mentions something it has no business knowing:\n${body}`);
+});
+
+test('every face comes up as often as every other', () => {
+  const N = 60_000;
+  const seen = Object.fromEntries(FACES.map((face) => [face, 0]));
+  for (let i = 0; i < N; i++) for (const face of roll()) seen[face]++;
+
+  // Three standard errors on 180.000 throws of a fair six is about 0.26 percentage points.
+  for (const face of FACES) {
+    const pct = (seen[face] / (N * DICE)) * 100;
+    assert.ok(Math.abs(pct - 100 / 6) < 0.4, `${face} came up ${pct.toFixed(3)}% of the time`);
+  }
+});
+
+test('the house edge is the one every pavement table plays, and no more', () => {
+  // 17/216. Not fifty-fifty and never was: a stake comes back doubled on one die of three, and
+  // three times out of five it does not come back at all. Worked out exactly rather than
+  // sampled, so this is the number itself and not a measurement of it.
+  let total = 0;
+  for (let a = 0; a < 6; a++) {
+    for (let b = 0; b < 6; b++) {
+      for (let c = 0; c < 6; c++) {
+        total += faceWorth(216, 'cua', [FACES[a], FACES[b], FACES[c]]);
+      }
+    }
+  }
+  // A 216 stake over all 216 throws loses exactly 17 × 216 / 216 = 17 per 216 staked.
+  assert.equal(total, -17 * 216);
+  assert.equal(-total / (216 * 216), 17 / 216);
+});
