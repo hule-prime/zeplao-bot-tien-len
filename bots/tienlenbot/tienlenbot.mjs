@@ -583,6 +583,87 @@ export function settlement(seats, finished, stake) {
   return paid;
 }
 
+// ---- bầu cua tôm cá ---------------------------------------------------------------------------
+
+/**
+ * The six faces, in the order they sit on a board.
+ *
+ * Kept as names rather than numbers because the widget draws each of them and the state has to
+ * say which is which. Three dice, six faces, and everything below is counting.
+ */
+export const FACES = ['bau', 'cua', 'tom', 'ca', 'ga', 'nai'];
+
+export const FACE_NAMES = {
+  bau: 'Bầu', cua: 'Cua', tom: 'Tôm', ca: 'Cá', ga: 'Gà', nai: 'Nai',
+};
+
+/// How many dice are thrown. Three, and the whole shape of the game is that number.
+export const DICE = 3;
+
+/// How long the bowl is shaking for.
+///
+/// Long enough to be a throw rather than a number appearing, short enough that nobody watching
+/// four rounds in a row starts wishing it were shorter. The dice are decided at the end of it
+/// and not the start: what the bot has not worked out yet is not in any push anybody could read.
+export const ROLL_MS = Number(process.env.TIENLEN_ROLL_MS ?? 1_600);
+
+/// How long a finished throw stays up before the next round opens.
+export const SHOW_MS = Number(process.env.TIENLEN_SHOW_MS ?? 3_500);
+
+/// How long a table with more than one person at it takes bets for.
+export const BETTING_MS = 25_000;
+
+/// What may be put on a face in one tap.
+export const CHIPS = [1_000, 5_000, 20_000];
+
+/// How many people fit round one board. Wider than a card table because nobody takes turns —
+/// everybody is betting on the same three dice at the same time.
+export const BAUCUA_SEATS = 8;
+
+/// Three dice.
+export function roll(random = Math.random) {
+  return Array.from({ length: DICE }, () => FACES[Math.floor(random() * FACES.length)]);
+}
+
+/**
+ * What one stake on one face is worth once the dice have landed.
+ *
+ * The rule everybody at a pavement table knows: the stake comes back with as much again for
+ * every die showing that face, and goes if none of them do. So a thousand on cua is worth a
+ * thousand, two, or three — or nothing at all, three times out of four.
+ *
+ * Returned as the *change* to somebody's gold, which is what the ledger moves by: `+n × stake`
+ * on a hit and `−stake` on a miss. Not "stake back plus winnings", because there is no moment
+ * here where the stake has left and might come back — nothing is taken until this says so.
+ */
+export function faceWorth(stake, face, dice) {
+  if (!stake) return 0;
+  const hits = dice.filter((one) => one === face).length;
+  return hits ? stake * hits : -stake;
+}
+
+/**
+ * What a whole board of stakes is worth to one person.
+ *
+ * `bets` is a face-to-stake object, and faces nobody put anything on are simply not in it.
+ */
+export function boardWorth(bets, dice) {
+  let change = 0;
+  for (const face of FACES) change += faceWorth(bets?.[face] ?? 0, face, dice);
+  return change;
+}
+
+/// Everything staked on this board, which is the most it can lose.
+export const staked = (bets) =>
+  FACES.reduce((sum, face) => sum + (bets?.[face] ?? 0), 0);
+
+/// Which faces came up, and how many times each. What the widget lights up.
+export function tally(dice) {
+  const counted = {};
+  for (const face of dice) counted[face] = (counted[face] ?? 0) + 1;
+  return counted;
+}
+
 // ---- what the room is told ----------------------------------------------------------------
 
 export const SAY = {
@@ -595,6 +676,10 @@ export const SAY = {
   startedAlready: 'Bàn này đã vào ván rồi — bạn vào xem nhé.',
   busy: 'Bạn đang ngồi ở một bàn. Rời bàn đó rồi mới vào bàn khác được nhé.',
   watching: 'Bạn đang xem bàn này.',
+  openedBaucua: (who) => `${who} mở sòng bầu cua tôm cá — vào đặt đi.`,
+  overBet: (left) => left > 0
+    ? `Chỉ còn ${gold(left)} vàng để đặt.`
+    : 'Hết vàng để đặt rồi.',
   tooMany: 'Nhóm đang mở quá nhiều widget. Đợi một ván xong rồi thử lại nhé.',
   // Said with the number, because "not enough gold" leaves somebody to work out how much a
   // table they cannot see costs.
@@ -980,9 +1065,14 @@ export async function run(token, { signal, api = API } = {}) {
 
   /// Tables still short of people, anywhere. The list somebody looking for a game is shown.
   const openTables = () => [...games.values()]
-    .filter((game) => game.state === 'lobby' && !game.solo)
+    .filter((game) => (game.state === 'lobby'
+      // A bầu cua table is open for as long as it is running: there is no hand in progress to
+      // wait out, only the next throw.
+      || (game.kind === 'baucua' && game.state !== 'over'))
+      && !game.solo && game.seats.length < game.size)
     .map((game) => ({
       id: game.id,
+      kind: game.kind,
       size: game.size,
       stake: game.stake,
       names: game.seats.map((who) => who.displayName),
@@ -991,9 +1081,11 @@ export async function run(token, { signal, api = API } = {}) {
   /// And the ones under way, so somebody with nowhere to sit has something to watch. Not tables
   /// with a machine at them: watching one person play three programs is watching one person.
   const running = () => [...games.values()]
-    .filter((game) => game.state === 'playing' && !game.solo
+    .filter((game) => game.kind === 'tienlen' && game.state === 'playing' && !game.solo
       && game.seats.filter((one) => !one.bot).length > 1)
-    .map((game) => ({ id: game.id, names: game.seats.map((who) => who.displayName) }));
+    .map((game) => ({
+      id: game.id, kind: game.kind, names: game.seats.map((who) => who.displayName),
+    }));
 
   /// The table this person is sitting at, if any. One at a time: somebody holding two hands is
   /// somebody six other people are waiting on.
@@ -1273,7 +1365,11 @@ export async function run(token, { signal, api = API } = {}) {
       return null;
     }
 
-    if (game.state !== 'lobby') {
+    // A bầu cua table takes anybody at any moment: there is no hand in progress to wait out,
+    // only the next throw, and somebody who sits down mid-throw simply bets on the one after.
+    const midRound = game.kind === 'baucua' && game.state !== 'over';
+
+    if (game.state !== 'lobby' && !midRound) {
       // Not a refusal so much as a redirection: a table that has started is a table to watch.
       screen.gameId = game.id;
       await pushTo(screen);
@@ -1305,8 +1401,21 @@ export async function run(token, { signal, api = API } = {}) {
 
     // A full table deals itself. Waiting for the host to press a button once the last seat is
     // taken is four people looking at each other — and the host may be the one who wandered off.
-    if (game.seats.length >= game.size) await startGame(game);
-    else await pushGame(game);
+    if (game.kind === 'baucua') {
+      if (game.state === 'lobby') {
+        startBaucua(game);
+      } else if (game.state === 'betting' && !game.bettingEndsAt && game.seats.length > 1) {
+        // A second person is somebody to wait for, so the clock starts. Only the clock: this
+        // used to re-open the board, which swept every chip anybody had already put down —
+        // arriving at a table and clearing it is not arriving at a table.
+        game.bettingEndsAt = Date.now() + BETTING_MS;
+      }
+      await pushGame(game);
+    } else if (game.seats.length >= game.size) {
+      await startGame(game);
+    } else {
+      await pushGame(game);
+    }
 
     await pushLobbies();
     return null;
@@ -1396,8 +1505,34 @@ export async function run(token, { signal, api = API } = {}) {
     }
 
     if (!game) {
-      // On the lobby. The only things to do from here are to open a table or to sit down at a
-      // machine, and both are the same two lines.
+      // On the lobby.
+      //
+      // Bầu cua first, because it needs neither a seat count nor a stake: everybody bets what
+      // they like on the same three dice, so opening one is a single answer rather than three.
+      if (action.baucua) {
+        if (goldOf(who.userId) < CHIPS[0]) {
+          return pushTo(screen, { says: SAY.tooPoor(CHIPS[0]) });
+        }
+
+        const alone = action.baucua === 'solo';
+        const table = newGame(screen, alone ? 1 : BAUCUA_SEATS, CHIPS[0], 'baucua');
+        table.solo = alone;
+        screen.gameId = table.id;
+        startBaucua(table);
+
+        if (!alone) {
+          const invitation = await send(
+            table.conversationId, SAY.openedBaucua(who.displayName), JOIN(table.id),
+            null, [who.userId]);
+          table.invitationId = invitation?.id ?? null;
+        }
+
+        await pushTo(screen);
+        await pushLobbies();
+        return;
+      }
+
+      // The only things left are to open a tiến lên table or to sit down at a machine.
       if (action.open === undefined && action.solo === undefined) return;
 
       const asked = Number(action.open ?? action.solo);
@@ -1437,6 +1572,34 @@ export async function run(token, { signal, api = API } = {}) {
     }
 
     const host = game.host.userId === who.userId;
+
+    if (game.kind === 'baucua') {
+      const seat = seatOf(game, who.userId);
+      if (seat === null) {
+        // Watching somebody else's table. Nothing here is theirs to press.
+        if (action.leave) { screen.gameId = null; await pushTo(screen); }
+        return;
+      }
+
+      if (action.leave) {
+        game.seats.splice(seat, 1);
+        delete game.placed[who.userId];
+        screen.gameId = null;
+        // Whoever opened it taking their coat is the table closing. Anybody else leaving is a
+        // chair going back.
+        if (host) await endGame(game, 'the table was closed by whoever opened it');
+        else { await pushGame(game); await pushTo(screen); await pushLobbies(); }
+        return;
+      }
+
+      if (action.bet) return placeBet(game, screen, action.bet);
+      if (action.undo) return takeBack(game, screen);
+
+      // Thrown when somebody says so rather than only when the clock runs out — sitting through
+      // twenty-five seconds of nothing because nobody else is betting is not a game.
+      if (action.roll && host) return spin(game);
+      return;
+    }
 
     // Filling the empty seats, and starting short. Both belong to whoever opened the table.
     if (action.fill) {
@@ -1514,9 +1677,13 @@ export async function run(token, { signal, api = API } = {}) {
   }
 
   /// A table, before anybody is dealt anything.
-  function newGame(screen, size, stake) {
+  function newGame(screen, size, stake, kind = 'tienlen') {
     const game = {
       id: `g${++named}`,
+      // Which game is being played at it. Everything about a table that is not the rules — who
+      // is at it, what it costs, how somebody joins and leaves — is the same for both, so this
+      // is the only thing most of the code has to know.
+      kind,
       // Where it was opened, which is where its one line in a room lives. The people at it can
       // be anywhere.
       conversationId: screen.conversationId,
@@ -1537,6 +1704,10 @@ export async function run(token, { signal, api = API } = {}) {
       ready: new Set(),
       paidTo: new Map(),
       paid: [],
+      // Bầu cua: what everybody has put down this round, and what came up.
+      placed: {},
+      dice: null,
+      bettingEndsAt: null,
       invitationId: null,
       touched: Date.now(),
     };
@@ -1679,6 +1850,135 @@ export async function run(token, { signal, api = API } = {}) {
     await maybeBotTurn(game);
   }
 
+  // ---- bầu cua tôm cá ---------------------------------------------------------------------
+
+  /// Everything one person has put down this round, from the order they put it down in.
+  ///
+  /// Derived rather than stored, so taking a chip back is popping one thing off a list instead
+  /// of unpicking a total — and the two can never disagree about what is on the board.
+  function betsOf(game, userId) {
+    const bets = {};
+    for (const one of game.placed[userId] ?? []) {
+      bets[one.face] = (bets[one.face] ?? 0) + one.amount;
+    }
+    return bets;
+  }
+
+  /// Opens the board. A table with more than one person at it takes bets on a clock, because
+  /// somebody has to be waited for; alone, the throw happens when the one person says so.
+  function openBets(game) {
+    game.state = 'betting';
+    game.dice = null;
+    game.paid = [];
+    game.placed = {};
+    game.touched = Date.now();
+    game.bettingEndsAt = game.seats.length > 1 ? Date.now() + BETTING_MS : null;
+  }
+
+  function startBaucua(game) {
+    openBets(game);
+  }
+
+  async function placeBet(game, screen, asked) {
+    if (game.state !== 'betting') return;
+
+    const face = String(asked.face ?? '');
+    const amount = Math.round(Number(asked.amount));
+    // Everything here came from a page anybody can edit.
+    if (!FACES.includes(face)) return;
+    if (!CHIPS.includes(amount)) return;
+
+    // Never more on the board than there is in the purse. The stake is not taken until the dice
+    // land, so this is the only thing standing between a board and a debt.
+    const row = rowFor(screen.userId, screen.displayName);
+    const already = staked(betsOf(game, screen.userId));
+    if (already + amount > row.gold) {
+      await pushTo(screen, { says: SAY.overBet(row.gold - already) });
+      return;
+    }
+
+    game.placed[screen.userId] = (game.placed[screen.userId] ?? []).concat({ face, amount });
+    game.touched = Date.now();
+    await pushGame(game);
+  }
+
+  async function takeBack(game, screen) {
+    if (game.state !== 'betting') return;
+    const mine = game.placed[screen.userId];
+    if (!mine || !mine.length) return;
+
+    mine.pop();
+    game.touched = Date.now();
+    await pushGame(game);
+  }
+
+  /**
+   * The throw.
+   *
+   * The dice are worked out at the *end* of the shaking and not the start. Nothing the bot has
+   * not decided yet can be in a push somebody reads early — which matters here in a way it does
+   * not in caro, because the whole game is one number nobody is supposed to know yet.
+   *
+   * Guarded, because this awaits twice and the update loop does not stop while it does.
+   */
+  async function spin(game) {
+    if (game.spinning || game.state !== 'betting') return;
+
+    // A throw with nothing on the board is a throw nobody asked for.
+    const anything = game.seats.some((one) => staked(betsOf(game, one.userId)) > 0);
+    if (!anything) return;
+
+    game.spinning = true;
+    try {
+      game.state = 'rolling';
+      game.bettingEndsAt = null;
+      game.touched = Date.now();
+      await pushGame(game);
+
+      await wait(ROLL_MS);
+      if (game.state !== 'rolling') return;
+
+      game.dice = roll();
+      payBaucua(game);
+      game.state = 'paid';
+      game.touched = Date.now();
+      await pushGame(game);
+
+      await wait(SHOW_MS);
+      if (game.state !== 'paid') return;
+
+      openBets(game);
+      await pushGame(game);
+    } finally {
+      game.spinning = false;
+    }
+  }
+
+  /// Pays the board out, one person at a time.
+  function payBaucua(game) {
+    game.paid = [];
+
+    for (const who of game.seats) {
+      const bets = betsOf(game, who.userId);
+      const on = staked(bets);
+      if (!on) continue;
+
+      const row = rowFor(who.userId, who.displayName);
+      const worth = boardWorth(bets, game.dice);
+      // A loss can only be as large as what is on the board, and the board was checked against
+      // the purse when each chip went down. This is the backstop for the seam between the two.
+      const moved = worth < 0 ? -Math.min(-worth, row.gold) : worth;
+
+      row.gold += moved;
+      row.games++;
+      game.paid.push({
+        userId: who.userId, displayName: who.displayName, staked: on, change: moved, bets,
+      });
+    }
+
+    saveScores();
+  }
+
   /**
    * A move, and everything a move sets off.
    *
@@ -1772,8 +2072,46 @@ export async function run(token, { signal, api = API } = {}) {
     };
   }
 
+  /// What somebody at a bầu cua table is looking at. Their own board is added by `pushTo`.
+  ///
+  /// Everybody's stakes are in it, and that is on purpose: at a pavement table the board is the
+  /// board and half the game is watching where everybody else put their money.
+  function baucuaState(game) {
+    return {
+      phase: game.state,
+      kind: 'baucua',
+      gameId: game.id,
+      size: game.size,
+      solo: !!game.solo,
+      host: game.host.userId,
+      hostName: game.host.displayName,
+
+      faces: FACES,
+      chips: CHIPS,
+      dice: game.dice,
+      // What is on each face from everybody at the table, so the board reads like a board.
+      board: game.seats.reduce((total, one) => {
+        const bets = betsOf(game, one.userId);
+        for (const face of FACES) total[face] = (total[face] ?? 0) + (bets[face] ?? 0);
+        return total;
+      }, {}),
+
+      seats: game.seats.map((one) => ({
+        id: one.userId,
+        name: one.displayName,
+        staked: staked(betsOf(game, one.userId)),
+        change: (game.paid.find((p) => p.userId === one.userId) ?? {}).change ?? null,
+      })),
+
+      bettingEndsAt: game.state === 'betting' ? game.bettingEndsAt : null,
+      rollMs: ROLL_MS,
+      paid: game.paid,
+    };
+  }
+
   /// What somebody at a table is looking at. Their own hand is added by `pushTo`.
   function tableState(game) {
+    if (game.kind === 'baucua') return baucuaState(game);
     const people = game.seats.length;
 
     // What the table has been worth to each person so far. Kept up to date by `settle` after
@@ -1869,12 +2207,25 @@ export async function run(token, { signal, api = API } = {}) {
     if (!landed) { dropScreen(screen); return false; }
 
     const seat = game ? seatOf(game, screen.userId) : null;
+
+    // What this one person has on the board. Not a secret the way a hand is — everybody's
+    // stakes are in the shared state — but the widget needs to know which of them are theirs to
+    // light up and to take back.
+    const mine = game && game.kind === 'baucua' && seat !== null
+      ? {
+        seat,
+        bets: betsOf(game, screen.userId),
+        staked: staked(betsOf(game, screen.userId)),
+        canUndo: (game.placed[screen.userId] ?? []).length > 0,
+      }
+      : null;
+
     await call('pushState', {
       sessionId: screen.sessionId,
       to: screen.userId,
       state: {
         ...shared,
-        me: seat === null ? null : {
+        me: mine ?? (seat === null ? null : {
           seat,
           hand: game.hands ? game.hands[seat] : [],
           // Whether anything in this hand answers what is on the table. Worked out here rather
@@ -1882,7 +2233,7 @@ export async function run(token, { signal, api = API } = {}) {
           // find it" are the same screen otherwise, and only one of them is true.
           stuck: game.state === 'playing' && game.turn === seat && !!game.pile
             && !canAnswer(game.hands[seat], game.pile.shape),
-        },
+        }),
       },
     }).catch(() => {});
 
@@ -1928,6 +2279,19 @@ export async function run(token, { signal, api = API } = {}) {
   async function sweep() {
     for (const game of [...games.values()]) {
       const idle = Date.now() - (game.touched ?? 0);
+
+      if (game.kind === 'baucua') {
+        // The clock running out is the throw. Only ever set when more than one person is at the
+        // table, because alone there is nobody to be waited for.
+        if (game.state === 'betting' && game.bettingEndsAt && Date.now() >= game.bettingEndsAt) {
+          await spin(game);
+          continue;
+        }
+        // A board nobody has touched. Longer than a card table's wait, because sitting and
+        // watching other people throw is a thing somebody might be doing.
+        if (idle > LOBBY_MS) await endGame(game, 'a sòng nobody was betting at');
+        continue;
+      }
 
       if (game.state === 'playing') {
         const seat = game.turn;

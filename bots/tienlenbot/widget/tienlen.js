@@ -550,6 +550,24 @@ function drawButtons() {
 
   if (state.phase === 'choosing') return;
 
+  if (state.kind === 'baucua') {
+    button('Rời sòng', 'quiet', (el) => { el.disabled = true; z.send({ leave: true }); });
+    if (!state.me) return;
+
+    const undo = button('Hoàn tác', '', () => z.send({ undo: true }));
+    undo.disabled = state.phase !== 'betting' || !state.me.canUndo;
+
+    // Only whoever opened it throws. On a table with other people the clock throws anyway, so
+    // this is the way to say "everybody is done" rather than the only way it ever happens.
+    const throwIt = button(
+      state.phase === 'rolling' ? 'Đang xóc…' : state.phase === 'paid' ? 'Ván sau…' : 'Xóc',
+      'primary', (el) => { el.disabled = true; z.send({ roll: true }); });
+    throwIt.disabled = state.phase !== 'betting'
+      || state.host !== z.viewer.id
+      || !state.me.staked;
+    return;
+  }
+
   if (state.phase === 'lobby') {
     const host = state.host === z.viewer.id;
     const seated = state.seats.length;
@@ -964,25 +982,44 @@ function drawMenu() {
     // Nothing here about running out. The `+` beside the purse is where more gold comes from,
     // and it is on every screen — putting a card about it on this one as well is how the first
     // thing anybody sees grows a fourth thing to read.
-    body.append(bigCard('♠', 'Đấu với máy',
-      purse < state.botStake
-        ? `Cần ${gold(state.botStake)} vàng`
-        : 'Vào bàn ngay, ghế trống là máy ngồi',
-      waiting ? '' : 'gold', purse >= state.botStake,
-      () => { step = 'solo'; render(); }));
+    body.append(bigCard('♠', 'Tiến lên miền nam',
+      purse < cheapest ? `Cần ${gold(cheapest)} vàng` : 'Đánh bài, 2 đến 4 người',
+      waiting ? '' : 'gold', purse >= cheapest,
+      () => { step = 'tienlen'; render(); }));
 
-    body.append(bigCard('⌸', 'Tạo bàn',
-      purse < cheapest
-        ? `Cần ${gold(cheapest)} vàng`
-        : 'Mở cho cả thế giới — nhóm nào cũng vào được',
+    body.append(bigCard('⚄', 'Bầu cua tôm cá',
+      purse < cheapest ? `Cần ${gold(cheapest)} vàng` : 'Đặt cửa, ba con xúc xắc',
       '', purse >= cheapest,
-      () => { step = 'open'; render(); }));
+      () => { step = 'baucua'; render(); }));
 
     return;
   }
 
+  if (step === 'tienlen') {
+    body.append(stepHead('Tiến lên miền nam', 'Chơi kiểu nào?', null));
+    body.append(pick('Đấu với máy', `cược ${gold(state.botStake)}`,
+      purse >= state.botStake, () => { step = 'solo'; render(); }));
+    body.append(pick('Tạo bàn', 'mời cả thế giới',
+      purse >= cheapest, () => { step = 'open'; render(); }));
+    body.append(stepNote(purse < state.botStake
+      ? `Đấu với máy cần ${gold(state.botStake)} vàng.`
+      : 'Bàn tự mở ra cho mọi nhóm — ai cũng tìm thấy và vào được.'));
+    return;
+  }
+
+  if (step === 'baucua') {
+    body.append(stepHead('Bầu cua tôm cá', 'Chơi kiểu nào?', null));
+    body.append(pick('Chơi một mình', 'xóc lúc nào tuỳ bạn',
+      purse >= cheapest, () => z.send({ baucua: 'solo' })));
+    body.append(pick('Mở sòng', 'cả thế giới cùng đặt một ván',
+      purse >= cheapest, () => z.send({ baucua: 'open' })));
+    body.append(stepNote('Đặt vào cửa nào, cửa đó ra mấy con thì ăn bấy nhiêu lần. '
+      + 'Không ra thì mất phần đặt.'));
+    return;
+  }
+
   if (step === 'solo') {
-    body.append(stepHead('Đấu với máy', 'Ghế trống là máy ngồi', null));
+    body.append(stepHead('Đấu với máy', 'Ghế trống là máy ngồi', 'tienlen'));
     for (const many of [2, 3, 4]) {
       body.append(pick(`${many} người`, many === 4 ? 'đủ bàn' : many === 2 ? 'nhanh nhất' : '',
         true, () => z.send({ solo: many })));
@@ -994,7 +1031,7 @@ function drawMenu() {
   }
 
   if (step === 'open') {
-    body.append(stepHead('Tạo bàn', 'Bàn mấy người?', null));
+    body.append(stepHead('Tạo bàn', 'Bàn mấy người?', 'tienlen'));
     for (const many of [2, 3, 4]) {
       body.append(pick(`${many} người`, many === 4 ? 'đủ bàn' : many === 2 ? 'nhanh nhất' : '',
         true, () => { seatsWanted = many; step = 'stake'; render(); }));
@@ -1176,12 +1213,14 @@ function drawBrowse() {
 
     const names = document.createElement('span');
     names.className = 'row-names';
-    names.textContent = room.names.join(', ');
+    // Which game, before the names. Two kinds of table on one list and no way to tell them
+    // apart is somebody sitting down to the wrong one.
+    names.textContent = (room.kind === 'baucua' ? '⚄ ' : '♠ ') + room.names.join(', ');
     // The stake before the seats. It is the first thing worth knowing about a table and the
     // only one that can refuse you.
     const bet = document.createElement('span');
     bet.className = 'row-seats';
-    bet.textContent = gold(room.stake);
+    bet.textContent = room.kind === 'baucua' ? 'bầu cua' : gold(room.stake);
     const many = document.createElement('span');
     many.className = 'score';
     many.textContent = `${room.names.length}/${room.size}`;
@@ -1374,6 +1413,209 @@ function drawTabs() {
   }
 }
 
+// ---- bầu cua tôm cá -----------------------------------------------------------------------
+
+/// Which chip is being put down. Theirs and local — the table has no opinion about it.
+let chip = null;
+
+/// The dice, while they are still in the air.
+///
+/// Cycled here rather than pushed: the bot has not decided what they are yet, and cannot, or
+/// somebody reading the socket would know before the bowl stopped.
+let tumbling = null;
+
+function stopTumbling() {
+  clearInterval(tumbling);
+  tumbling = null;
+}
+
+function drawBaucua() {
+  const bowl = $('bowl');
+  const dice = $('dice');
+  const note = $('bowl-note');
+
+  bowl.classList.toggle('shaking', state.phase === 'rolling');
+  dice.replaceChildren();
+  note.replaceChildren();
+  for (const gone of bowl.querySelectorAll('.punters')) gone.remove();
+
+  // Three dice, always — an empty bowl before the first throw reads as something not loaded.
+  const shown = state.dice || [state.faces[0], state.faces[1], state.faces[2]];
+  const landed = !!state.dice;
+  const hits = landed ? shown.reduce((n, f) => ((n[f] = (n[f] ?? 0) + 1), n), {}) : {};
+
+  shown.forEach((face, i) => {
+    // Ringed when it is a face this person had money on. Ringing every die that matches its
+    // own face rings all three, every time, which says nothing at all.
+    const mine = (state.me && state.me.bets) || {};
+
+    const die = document.createElement('div');
+    die.className = 'die'
+      + (state.phase === 'rolling' ? ' tumbling' : '')
+      + (landed && mine[face] ? ' hit' : '');
+    die.dataset.face = face;
+    die.append(faceArt(face));
+    dice.append(die);
+
+    // One after another — three dice landing together is one event, landing in order is three.
+    // Timed here rather than with `animation-delay`, because a delayed animation holds its
+    // first frame and a die whose first frame is small is a die nobody can read until its turn.
+    if (landed) setTimeout(() => die.classList.add('landing'), i * 120);
+  });
+
+  if (state.phase === 'rolling') {
+    // Faces flicking past while the bowl shakes. Whatever is showing has nothing to do with
+    // what comes up — the bot works that out when the shaking stops.
+    stopTumbling();
+    tumbling = setInterval(() => {
+      for (const die of dice.children) {
+        const face = state.faces[Math.floor(Math.random() * state.faces.length)];
+        die.dataset.face = face;
+        die.replaceChildren(faceArt(face));
+      }
+    }, 90);
+  } else {
+    stopTumbling();
+  }
+
+  if (state.phase === 'paid') {
+    const mine = (state.paid || []).find((one) => one.userId === z.viewer.id);
+    if (mine && mine.change) {
+      const said = document.createElement('b');
+      said.textContent = `${change(mine.change)} vàng`;
+      note.append(said);
+    } else {
+      note.textContent = mine ? 'Hoà' : 'Ván này bạn không đặt';
+    }
+  } else if (state.phase === 'rolling') {
+    note.textContent = 'Đang xóc…';
+  } else if (state.bettingEndsAt) {
+    const clock = document.createElement('span');
+    clock.className = 'clock';
+    note.append(document.createTextNode('Đặt cửa · '), clock);
+  } else {
+    note.textContent = state.me && state.me.staked
+      ? 'Xong thì bấm Xóc'
+      : 'Chọn phần cược rồi chạm vào cửa';
+  }
+
+  // Who else is at it, and what they have on. At a pavement table half the game is watching
+  // where everybody put their money — and on a phone this is also what fills the space under
+  // the bowl that a solo table has no use for.
+  const others = (state.seats || []).filter((one) => one.id !== z.viewer.id);
+  if (others.length) {
+    const row = document.createElement('div');
+    row.className = 'punters';
+    for (const one of (state.seats || [])) {
+      const chip = document.createElement('span');
+      chip.className = 'punter'
+        + (one.id === z.viewer.id ? ' me' : '')
+        + (state.phase === 'paid' && one.change > 0 ? ' up' : '')
+        + (state.phase === 'paid' && one.change < 0 ? ' down' : '');
+      chip.textContent = state.phase === 'paid' && one.change !== null
+        ? `${one.name} ${change(one.change)}`
+        : `${one.name} ${one.staked ? gold(one.staked) : '·'}`;
+      row.append(chip);
+    }
+    $('bowl').append(row);
+  }
+
+  drawBoard();
+  drawChips();
+}
+
+function drawBoard() {
+  const board = $('board');
+  board.replaceChildren();
+
+  const mine = (state.me && state.me.bets) || {};
+  const hits = state.dice
+    ? state.dice.reduce((n, f) => ((n[f] = (n[f] ?? 0) + 1), n), {})
+    : {};
+
+  for (const face of state.faces) {
+    const tile = document.createElement('button');
+    tile.className = 'tile'
+      + (mine[face] ? ' has' : '')
+      + (hits[face] ? ' won' : '');
+    tile.dataset.face = face;
+
+    tile.append(faceArt(face));
+
+    const name = document.createElement('div');
+    name.className = 'tile-name';
+    name.textContent = FACE_LABEL[face] || face;
+
+    // What is on this face. Everybody's total, and yours picked out of it — half the game is
+    // watching where the rest of the table put their money.
+    const on = document.createElement('div');
+    on.className = 'tile-on';
+    const all = (state.board || {})[face] || 0;
+    if (mine[face]) {
+      const ours = document.createElement('span');
+      ours.className = 'tile-mine';
+      ours.textContent = gold(mine[face]);
+      on.append(ours);
+      if (all > mine[face]) on.append(document.createTextNode(` / ${gold(all)}`));
+    } else if (all) {
+      on.textContent = gold(all);
+    }
+
+    tile.append(name, on);
+
+    if (hits[face]) {
+      const many = document.createElement('span');
+      many.className = 'tile-hits';
+      many.textContent = `×${hits[face]}`;
+      tile.append(many);
+    }
+
+    const canBet = state.phase === 'betting' && !!state.me;
+    tile.disabled = !canBet;
+    if (canBet) tile.onclick = () => z.send({ bet: { face, amount: chip } });
+
+    board.append(tile);
+  }
+}
+
+function drawChips() {
+  const row = $('chips');
+  row.replaceChildren();
+
+  const chips = state.chips || [1000];
+  const left = state.gold - ((state.me && state.me.staked) || 0);
+  if (!chips.includes(chip)) chip = chips[0];
+
+  // The largest one they can still afford, chosen for them when the one they had picked has
+  // gone out of reach — a selected chip that cannot be put down is a board that ignores taps.
+  if (chip > left) chip = [...chips].reverse().find((one) => one <= left) ?? chips[0];
+
+  for (const one of chips) {
+    const el = document.createElement('button');
+    el.className = 'chip-pick' + (chip === one ? ' on' : '');
+    el.textContent = gold(one);
+    el.disabled = state.phase !== 'betting' || one > left;
+    el.onclick = () => { chip = one; render(); };
+    row.append(el);
+  }
+}
+
+/// The clock on the bowl, and the one on the felt. Both are drawn from a moment rather than
+/// counted down, so a phone that was asleep comes back to the right number.
+function betTick() {
+  if (!state || !state.bettingEndsAt) return;
+  const clock = document.querySelector('#bowl-note .clock');
+  if (!clock) return;
+
+  const left = Math.max(0, Math.round((state.bettingEndsAt - Date.now()) / 1000));
+  clock.textContent = `${left}s`;
+  clock.classList.toggle('low', left <= 5);
+}
+
+const FACE_LABEL = {
+  bau: 'Bầu', cua: 'Cua', tom: 'Tôm', ca: 'Cá', ga: 'Gà', nai: 'Nai',
+};
+
 /// Draws everything from whatever `state` currently holds.
 ///
 /// A function of its own rather than the body of the state callback, because pressing a tab
@@ -1390,10 +1632,16 @@ function render() {
   const watching = !!(state && state.adsEndsAt);
   const deciding = !!(state && state.phase === 'choosing');
 
+  // Two games, two boards. A card table seen from your chair and a mat seen from above have
+  // nothing in common but the frame round them, so they are two sections rather than one in two
+  // moods.
+  const dice = !!(state && state.kind === 'baucua');
+
   $('ads').hidden = !watching;
   $('menu').hidden = watching || !deciding || screen !== 'play';
   $('browse').hidden = watching || !deciding || screen === 'play';
-  $('table').hidden = watching || deciding;
+  $('baucua').hidden = watching || deciding || !dice;
+  $('table').hidden = watching || deciding || dice;
   $('buttons').hidden = watching;
 
   if (watching) {
@@ -1408,8 +1656,16 @@ function render() {
   drawTabs();
 
   if (deciding) {
+    stopTumbling();
     if (screen === 'play') drawMenu(); else drawBrowse();
     drawButtons();
+    return;
+  }
+
+  if (dice) {
+    drawBaucua();
+    drawButtons();
+    if (state.bettingEndsAt) { betTick(); ticking = setInterval(betTick, 250); }
     return;
   }
 

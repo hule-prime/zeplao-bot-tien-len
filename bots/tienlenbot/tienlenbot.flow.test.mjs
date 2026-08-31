@@ -23,10 +23,13 @@ import { writeFileSync } from 'node:fs';
 const LEDGER = '/tmp/tienlen-flow-scores.json';
 process.env.TIENLEN_THINK_MS = '1';
 process.env.TIENLEN_ADS_MS = '150';
+process.env.TIENLEN_ROLL_MS = '60';
+process.env.TIENLEN_SHOW_MS = '120';
 process.env.TIENLEN_SCORES = LEDGER;
 
 const {
   run, chooseMove, shapeOf, nameOf, STARTING_GOLD, DAILY_GOLD, BOT_STAKE, ADS_GOLD, dayIn,
+  FACES, boardWorth, staked,
 } = await import('./tienlenbot.mjs');
 
 const nap = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -840,5 +843,152 @@ test('and a row that already had one is left alone', async () => {
     app.asks('u1');
     await app.until(() => app.mine('u1'), 'a screen');
     assert.equal(app.mine('u1').gold, 500);
+  });
+});
+
+// ---- bầu cua tôm cá ------------------------------------------------------------------------
+
+/// Waits for the throw to come round to a board anybody can bet on again.
+const betting = (app, id) => app.until(
+  () => (app.mine(id) ?? {}).phase === 'betting', `${id} a board to bet on`);
+
+test('a sòng deals nothing, takes bets, throws once and pays everybody', async () => {
+  // Two people in two groups betting on the same three dice, which is the whole point of the
+  // game being at a table rather than on a phone.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen for u1');
+    await claim(app, 'u1');
+    app.asks('u2', 'c2');
+    await app.until(() => app.mine('u2'), 'a screen for u2');
+    await claim(app, 'u2');
+
+    app.does('u1', { baucua: 'open' });
+    await betting(app, 'u1');
+    assert.equal(app.mine('u1').kind, 'baucua');
+    assert.deepEqual(app.mine('u1').faces, FACES);
+
+    // Found from another group, and joined mid-round rather than made to wait for a hand out.
+    await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the sòng on the list');
+    const there = app.mine('u2').rooms[0];
+    assert.equal(there.kind, 'baucua');
+    // Somebody already betting when the second person arrives. Their chips stay where they are.
+    app.does('u1', { bet: { face: 'tom', amount: 1000 } });
+    await app.until(() => app.mine('u1').me.staked === 1000, 'a chip on the board');
+
+    app.does('u2', { join: there.id });
+    await betting(app, 'u2');
+    assert.equal(app.mine('u1').me.staked, 1000,
+      'somebody arriving at a table swept it clear');
+    assert.ok(app.mine('u1').bettingEndsAt, 'and a second person starts the clock');
+
+    app.does('u1', { undo: true });
+    await app.until(() => app.mine('u1').me.staked === 0, 'the board back to empty');
+
+    const purse = { u1: app.mine('u1').gold, u2: app.mine('u2').gold };
+
+    app.does('u1', { bet: { face: 'cua', amount: 1000 } });
+    app.does('u1', { bet: { face: 'ga', amount: 5000 } });
+    app.does('u2', { bet: { face: 'cua', amount: 20000 } });
+    await app.until(() => app.mine('u1').me.staked === 6000 && app.mine('u2').me.staked === 20000,
+      'the board to fill up');
+
+    // Nothing has been taken. The stake goes when the dice land and not before.
+    assert.equal(app.mine('u1').gold, purse.u1, 'a stake is not taken when it is put down');
+    // And the board is everybody's, which is half the game.
+    assert.equal(app.mine('u1').board.cua, 21000);
+    assert.equal(app.mine('u1').board.ga, 5000);
+
+    const bets = { u1: { ...app.mine('u1').me.bets }, u2: { ...app.mine('u2').me.bets } };
+
+    app.does('u1', { roll: true });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'paid', 'the throw');
+
+    const over = app.mine('u1');
+    assert.equal(over.dice.length, 3);
+    assert.ok(over.dice.every((one) => FACES.includes(one)));
+
+    for (const id of ['u1', 'u2']) {
+      const owed = boardWorth(bets[id], over.dice);
+      const paid = over.paid.find((one) => one.userId === id);
+      assert.ok(paid, `${id} was not paid`);
+      assert.equal(paid.change, owed, `${id} was paid ${paid.change} for ${owed}`);
+      assert.equal(app.mine(id).gold, purse[id] + owed, `${id}'s purse`);
+      assert.ok(owed >= -staked(bets[id]), 'nobody loses more than was on the board');
+    }
+
+    // And the board opens again on its own.
+    await betting(app, 'u1');
+    assert.equal(app.mine('u1').me.staked, 0, 'swept for the next throw');
+    assert.equal(app.mine('u1').dice, null);
+  }, { c1: ['u1'], c2: ['u2'] });
+});
+
+test('a stake bigger than the purse is refused, and the last chip can be taken back', async () => {
+  ledger({ u1: { name: 'Thọ', gold: 6000, games: 1, first: 0, last: 1, claimed: dayIn(), adsDay: dayIn(), ads: 0 } });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    app.does('u1', { baucua: 'solo' });
+    await betting(app, 'u1');
+
+    app.does('u1', { bet: { face: 'ca', amount: 5000 } });
+    await app.until(() => app.mine('u1').me.staked === 5000, 'the first chip');
+
+    // Six thousand in the purse and five already on the board.
+    app.does('u1', { bet: { face: 'nai', amount: 5000 } });
+    await app.until(() => !!app.mine('u1').says, 'a refusal');
+    assert.match(app.mine('u1').says, /1\.000/);
+    assert.equal(app.mine('u1').me.staked, 5000, 'and nothing went on the board');
+
+    app.does('u1', { bet: { face: 'nai', amount: 1000 } });
+    await app.until(() => app.mine('u1').me.staked === 6000, 'the rest of it');
+
+    app.does('u1', { undo: true });
+    await app.until(() => app.mine('u1').me.staked === 5000, 'the last chip back');
+    assert.equal(app.mine('u1').me.bets.nai, undefined, 'and off the face it was on');
+  });
+});
+
+test('nothing a widget can send bets on a face that is not there', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { baucua: 'solo' });
+    await betting(app, 'u1');
+
+    const nonsense = [
+      { face: 'rong', amount: 1000 },        // a face nobody drew
+      { face: 'cua', amount: 3 },            // not a chip
+      { face: 'cua', amount: -5000 },        // a stake that pays you to place it
+      { face: 'cua', amount: 1e12 },
+      { amount: 1000 },
+      {},
+    ];
+    for (const bad of nonsense) app.does('u1', { bet: bad });
+
+    await nap(300);
+    assert.equal(app.mine('u1').me.staked, 0,
+      `one of ${JSON.stringify(nonsense)} got onto the board`);
+    assert.equal(app.mine('u1').gold, STARTING_GOLD + DAILY_GOLD, 'and nothing moved');
+  });
+});
+
+test('a throw with nothing on the board does not happen', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { baucua: 'solo' });
+    await betting(app, 'u1');
+
+    app.does('u1', { roll: true });
+    await nap(300);
+    assert.equal(app.mine('u1').phase, 'betting', 'the bowl should not have moved');
+    assert.equal(app.mine('u1').dice, null);
   });
 });

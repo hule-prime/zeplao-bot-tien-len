@@ -10,6 +10,7 @@ import {
   nextInRound, nextActive, opensGame, stillIn, lowestElsewhere, placeName,
   payouts, settlement, dayIn, gold,
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, MIN_STAKE, MAX_STAKE, STAKES, BROKE, ADS_GOLD, asStake,
+  FACES, FACE_NAMES, DICE, ROLL_MS, SHOW_MS, CHIPS, roll, faceWorth, boardWorth, staked, tally,
 } from './tienlenbot.mjs';
 
 /// A card by name, which is how anybody talks about one.
@@ -716,4 +717,89 @@ test('walking out puts you under everybody who played it through', () => {
 
   assert.deepEqual(game.finished, [0, 2, 3, 1],
     'the one who left is under the one who was still holding cards');
+});
+
+// ---- bầu cua tôm cá -----------------------------------------------------------------------
+
+test('three dice, six faces, and nothing else on them', () => {
+  assert.equal(DICE, 3);
+  assert.deepEqual(FACES, ['bau', 'cua', 'tom', 'ca', 'ga', 'nai']);
+  assert.equal(new Set(FACES).size, 6);
+  assert.ok(FACES.every((face) => FACE_NAMES[face]));
+
+  for (let i = 0; i < 500; i++) {
+    const dice = roll();
+    assert.equal(dice.length, DICE);
+    assert.ok(dice.every((one) => FACES.includes(one)));
+  }
+});
+
+test('a stake comes back with as much again for every die showing it', () => {
+  // The rule everybody at a pavement table knows. A thousand on cua is worth a thousand, two or
+  // three — or nothing at all, which is most of the time.
+  assert.equal(faceWorth(1000, 'cua', ['cua', 'ga', 'nai']), 1000);
+  assert.equal(faceWorth(1000, 'cua', ['cua', 'cua', 'nai']), 2000);
+  assert.equal(faceWorth(1000, 'cua', ['cua', 'cua', 'cua']), 3000);
+  assert.equal(faceWorth(1000, 'cua', ['bau', 'ga', 'nai']), -1000);
+  assert.equal(faceWorth(0, 'cua', ['cua', 'cua', 'cua']), 0, 'nothing staked wins nothing');
+});
+
+test('a board is every stake on it, counted one face at a time', () => {
+  const dice = ['cua', 'cua', 'ga'];
+  assert.equal(boardWorth({ cua: 1000 }, dice), 2000);
+  assert.equal(boardWorth({ cua: 1000, ga: 1000 }, dice), 3000);
+  assert.equal(boardWorth({ cua: 1000, nai: 1000 }, dice), 1000);
+  assert.equal(boardWorth({ nai: 1000, bau: 500 }, dice), -1500);
+  assert.equal(boardWorth({}, dice), 0);
+  assert.equal(boardWorth(null, dice), 0);
+});
+
+test('what is staked is the most a board can lose', () => {
+  const bets = { cua: 1000, ga: 2000, nai: 500 };
+  assert.equal(staked(bets), 3500);
+  assert.equal(staked({}), 0);
+
+  // Every throw there is, checked against the one thing that must always hold.
+  for (let a = 0; a < 6; a++) {
+    for (let b = 0; b < 6; b++) {
+      for (let c = 0; c < 6; c++) {
+        const dice = [FACES[a], FACES[b], FACES[c]];
+        const worth = boardWorth(bets, dice);
+        assert.ok(worth >= -staked(bets), `${dice} lost more than was on the board`);
+        assert.ok(worth <= staked(bets) * DICE, `${dice} paid more than three times`);
+      }
+    }
+  }
+});
+
+test('the house edge is the drain, and it is the one everybody plays', () => {
+  // A stake on one face, over every throw there is. The classic number: the house keeps a
+  // little under eight percent, which is what stops the daily gold turning into a pile that
+  // only ever grows.
+  let total = 0;
+  let throws = 0;
+  for (let a = 0; a < 6; a++) {
+    for (let b = 0; b < 6; b++) {
+      for (let c = 0; c < 6; c++) {
+        total += faceWorth(1000, 'cua', [FACES[a], FACES[b], FACES[c]]);
+        throws++;
+      }
+    }
+  }
+  assert.equal(throws, 216);
+  const edge = -total / throws / 1000;
+  assert.ok(edge > 0.07 && edge < 0.09, `house edge is ${(edge * 100).toFixed(2)}%`);
+});
+
+test('the tally says what to light up', () => {
+  assert.deepEqual(tally(['cua', 'cua', 'ga']), { cua: 2, ga: 1 });
+  assert.deepEqual(tally(['bau', 'tom', 'nai']), { bau: 1, tom: 1, nai: 1 });
+  assert.deepEqual(tally(['ca', 'ca', 'ca']), { ca: 3 });
+});
+
+test('the chips are stakes anybody can reach', () => {
+  assert.deepEqual(CHIPS, [1000, 5000, 20000]);
+  assert.ok(CHIPS.every((one) => one >= MIN_STAKE));
+  assert.ok(ROLL_MS >= 1000, 'a throw should be a throw, not a number appearing');
+  assert.ok(SHOW_MS > ROLL_MS, 'and it should stay up long enough to be read');
 });

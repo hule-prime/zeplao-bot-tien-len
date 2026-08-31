@@ -129,6 +129,25 @@ trong đó là do quyết định chứ không phải xếp bừa rồi mong nó
   được **báo** chứ không được đưa một cái nút xám. Nút xám ghi "đang đợi" là thứ người ta bấm cho
   tới lúc bỏ cuộc.
 
+## 6. Bầu cua tôm cá
+
+Cùng con bot, cùng cái ví, cùng mô hình phiên. Khác ở chỗ nó **không có lượt**: ai cũng đặt cùng
+lúc lên cùng ba con xúc xắc, nên bàn không có "đang chờ ai" và người tới sau ngồi xuống giữa ván
+được — họ đơn giản là đặt cho lần xóc sau.
+
+- **Xúc xắc được quyết ở cuối tiếng lắc, không phải đầu.** Cái bot chưa nghĩ ra thì không nằm
+  trong bất kỳ push nào ai đó đọc sớm được. Ở caro chuyện này không quan trọng; ở đây cả trò chơi
+  là một con số chưa ai được biết.
+- **Không trừ tiền lúc đặt.** Cược chỉ đi khi xúc xắc rơi, nên không có khoảnh khắc nào tiền
+  "đang ở đâu đó". Thứ chặn nợ là kiểm tra lúc đặt: trên bàn không bao giờ nhiều hơn trong ví.
+- **Bàn là của mọi người.** Ai đặt gì vào cửa nào đều hiện — nửa cái thú của trò này là nhìn
+  người khác bỏ tiền vào đâu.
+- **Sáu linh vật vẽ bằng SVG**, không dùng emoji. Emoji do hãng làm điện thoại vẽ, nên cùng một
+  bàn là sáu phong cách khác nhau trên sáu máy khác nhau và không cái nào là phong cách của bàn
+  này. Với lại **không có emoji quả bầu**, mà bầu là chữ đầu tiên của tên trò.
+- **Nhà cái ăn gần 8%** — đúng con số cổ điển, và nó là thứ giữ cho vàng phát mỗi ngày không biến
+  thành một đống chỉ có tăng.
+
 ---
 
 ## Những chỗ từng sai
@@ -143,6 +162,8 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | `countUp` chỉ dựa `requestAnimationFrame` | rAF không chạy khi tab bị ẩn → số tiền kẹt ở `0` vĩnh viễn, đúng vào lúc người ta ngoảnh đi |
 | `countUp` chạy lại mỗi lần vẽ | Bàn mình đã xong vẫn đẩy mỗi giây → số **reset về 0 mỗi giây và không bao giờ tới nơi**. Ảnh chụp một khoảnh khắc không thấy được |
 | Chip tiền bay nằm trong ghế | `drawSeats` dựng lại DOM mỗi push → chip bị xoá sau một phần năm quãng đường |
+| Xúc xắc rơi từ `opacity: 0` với `fill-mode: both` | Animation không chạy thì **xúc xắc tàng hình vĩnh viễn**. Animation được quyền quyết định một thứ *đến* thế nào; không được là lý do duy nhất nhìn thấy nó |
+| Người vào sòng giữa ván gọi `openBets()` | **Xoá sạch cửa đã đặt của mọi người**. Tới bàn mà dọn sạch bàn thì không phải là tới bàn |
 | `justify-content: center` trên hộp cuộn | Phần tràn nằm **trên** gốc cuộn, không cuộn tới được. Dòng "+10.000 vàng" bị cắt mất đầu |
 | Một lệnh thay thế nuốt cả khối CSS quảng cáo | Màn ADS mất nền, mất căn giữa. Chỉ ảnh chụp mới thấy — nên giờ có `tools/css-check.mjs` |
 | Nút thoát duy nhất tính là **bỏ ván** | Về nhất xong bấm thoát thì ghế ghi "đã rời" thay vì "Nhất" |

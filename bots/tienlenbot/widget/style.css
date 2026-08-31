@@ -1045,3 +1045,238 @@ body {
 
 .placed .where-gold.up { color: #6fd39a; }
 .placed .where-gold.down { color: var(--danger); }
+
+/* ---- bầu cua tôm cá ---------------------------------------------------------------------- */
+
+#baucua {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The bowl. A dish seen from above, which is what the plate on a pavement table looks like from
+   where anybody is standing. */
+#bowl {
+  flex: 1;
+  min-height: 96px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 100% at 50% 30%, #1d7a54 0%, var(--felt-deep) 68%, #082a1d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* The shake. Small and fast: a bowl that swings across the screen reads as the screen moving,
+   not as somebody's hand. */
+@keyframes shaking {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  20%  { transform: translate(-3px, 2px) rotate(-1.4deg); }
+  40%  { transform: translate(3px, -2px) rotate(1.4deg); }
+  60%  { transform: translate(-2px, -2px) rotate(-1deg); }
+  80%  { transform: translate(2px, 2px) rotate(1deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+#bowl.shaking { animation: shaking 0.26s ease-in-out infinite; }
+
+#dice { display: flex; gap: 9px; }
+
+.die {
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, #fffdf7, #e8e0cf);
+  border: 1px solid #cfc6b2;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.42), inset 0 -2px 0 rgba(0, 0, 0, 0.08);
+  color: var(--rim);
+}
+
+.die .face-art { width: 34px; height: 34px; display: block; }
+
+/* The same colours as the mat. A die drawn in ink is a die somebody has to work out; a die in
+   the colour its square is painted is read from across the table. */
+.die[data-face="bau"] .face-art { color: #4f9a5f; }
+.die[data-face="cua"] .face-art { color: #c9463a; }
+.die[data-face="tom"] .face-art { color: #d16a3a; }
+.die[data-face="ca"]  .face-art { color: #3d84ad; }
+.die[data-face="ga"]  .face-art { color: #c08a2a; }
+.die[data-face="nai"] .face-art { color: #9c6c45; }
+
+/* Tumbling, then landing. The landing is what sells it: a die that simply stops was never
+   moving, and one that overshoots and settles was thrown. */
+@keyframes tumbling {
+  0%   { transform: rotate(0deg) scale(1); }
+  50%  { transform: rotate(180deg) scale(0.86); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* No opacity in here, and no fill mode.
+ *
+ * It started at `opacity: 0` with `both`, which meant a die was invisible until its turn came —
+ * and if the animation never ran at all it was invisible for ever. An animation is allowed to
+ * decide how a thing arrives; it is not allowed to be the only reason it can be seen. The
+ * stagger is a timeout in the page rather than an `animation-delay` for the same reason. */
+@keyframes landing {
+  0%   { transform: scale(0.55) rotate(-32deg); }
+  55%  { transform: scale(1.18) rotate(6deg); }
+  78%  { transform: scale(0.95) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.die.tumbling { animation: tumbling 0.42s linear infinite; }
+.die.landing { animation: landing 0.5s cubic-bezier(0.22, 1.2, 0.36, 1); }
+
+/* The face that came up, ringed on the die itself as well as on the board. */
+.die.hit { box-shadow: 0 0 0 2px var(--gold), 0 3px 9px rgba(0, 0, 0, 0.45); }
+
+#bowl-note {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--muted);
+  min-height: 15px;
+  text-align: center;
+  padding: 0 10px;
+}
+
+#bowl-note b { color: var(--gold); }
+
+/* Everybody at the table and what they have on, under the bowl. */
+.punters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: center;
+  padding: 0 8px;
+  max-height: 52px;
+  overflow: hidden;
+}
+
+.punter {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--muted);
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+
+.punter.me { color: var(--ink); border-color: rgba(233, 196, 106, 0.4); }
+.punter.up { color: #7fe0a8; }
+.punter.down { color: var(--danger); }
+#bowl-note .clock { font-variant-numeric: tabular-nums; }
+#bowl-note .clock.low { color: var(--danger); }
+
+/* ---- the mat ------------------------------------------------------------------------------- */
+
+#board {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 7px 4px 6px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025));
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.tile .face-art { width: 40px; height: 40px; display: block; }
+
+/* Each face its own colour, the way the squares on a real mat are painted. Muted enough that
+   six of them together are a board rather than a paint chart. */
+.tile[data-face="bau"] .face-art { color: #7fc08a; }
+.tile[data-face="cua"] .face-art { color: #e0705f; }
+.tile[data-face="tom"] .face-art { color: #e8926a; }
+.tile[data-face="ca"]  .face-art { color: #6fb3d8; }
+.tile[data-face="ga"]  .face-art { color: #e0b25f; }
+.tile[data-face="nai"] .face-art { color: #c79a72; }
+
+.tile-name { font-size: 10.5px; font-weight: 650; color: var(--muted); }
+
+/* What is on this face: everybody's, and yours inside it. */
+.tile-on {
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  min-height: 14px;
+  color: var(--muted);
+}
+
+.tile-mine { color: var(--gold); }
+
+.tile:disabled { cursor: default; }
+.tile:disabled .face-art { opacity: 0.55; }
+
+/* Yours. A ring rather than a fill, so the drawing underneath is still the thing being read. */
+.tile.has { border-color: rgba(233, 196, 106, 0.55); background: rgba(233, 196, 106, 0.1); }
+
+/* Came up. Pulsed once rather than left glowing: it is a thing that just happened. */
+@keyframes struckTile {
+  0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(233, 196, 106, 0.7); }
+  40%  { transform: scale(1.06); box-shadow: 0 0 0 8px rgba(233, 196, 106, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(233, 196, 106, 0); }
+}
+
+.tile.won {
+  border-color: var(--gold);
+  background: rgba(233, 196, 106, 0.18);
+  animation: struckTile 0.65s ease-out;
+}
+
+.tile-hits {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--gold);
+}
+
+/* ---- the chips ------------------------------------------------------------------------------ */
+
+#chips { flex: none; display: flex; gap: 6px; }
+
+.chip-pick {
+  flex: 1;
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 750;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.chip-pick.on {
+  border-color: transparent;
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  color: #2a1e05;
+}
+
+.chip-pick:disabled { opacity: 0.35; cursor: default; }

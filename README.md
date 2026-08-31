@@ -1,17 +1,29 @@
 # tienlenbot
 
-A bot for [Cúc Cu](https://kuku.vn) that deals **tiến lên miền nam** in a group chat.
+A bot for [Cúc Cu](https://kuku.vn) with two games in it: **tiến lên miền nam** and **bầu cua
+tôm cá**, played in a group chat for one purse of gold.
 
 Live as **`@tienlenbot`** on `kuku.vn`, running as its own service beside `@carobot`. It is not
 published yet, so only its owner can add it to a conversation — see
 [docs/operations.md](docs/operations.md#chưa-công-khai). Say
 `@tienlen` or `/tienlen` in a room and a table opens in a floating frame in the conversation.
 
+**Tiến lên**
+
 - **Đấu với máy** — sit down straight away at a table of two, three or four, the empty seats
   filled by machines.
 - **Tạo bàn** — open a table for two, three or four at a stake of your choosing. It goes on the
   world list, so somebody in a completely different group finds it and takes a seat; a full
   table deals itself.
+
+**Bầu cua tôm cá**
+
+- **Chơi một mình** — put chips on the six faces and throw when you like.
+- **Mở sòng** — up to eight people from any group betting on the same three dice, a
+  twenty-five second window a round.
+
+A stake on a face comes back with as much again for every die showing it, and goes if none of
+them do. Nothing is taken from anybody's purse until the dice land.
 
 Every hand is played for gold. Turning up is worth 10.000 a day, a table against the machines
 pays 2.000 for coming first and takes 2.000 off whoever comes last, and a table between people
@@ -137,7 +149,7 @@ because a widget is a file anybody can edit.
 | | |
 | --- | --- |
 | `bots/tienlenbot/tienlenbot.mjs` | The whole bot. One file, no dependencies, three Node built-ins and `fetch` |
-| `bots/tienlenbot/widget/` | The page in the frame — `index.html`, `style.css`, `tienlen.js` |
+| `bots/tienlenbot/widget/` | The page in the frame — `index.html`, `style.css`, `tienlen.js`, `faces.js` |
 | `bots/tienlenbot/tienlenbot.test.mjs` | The rules, played out over a few hundred dealt hands |
 | `bots/tienlenbot/tienlenbot.flow.test.mjs` | The bot, end to end against a stand-in for the app |
 | `tools/play.mjs` | The bot and its widget, playable in a browser with no token and no phone |
