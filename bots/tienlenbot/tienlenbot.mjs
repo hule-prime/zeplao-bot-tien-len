@@ -511,11 +511,12 @@ export function asStake(asked) {
 /// short of the cheapest thing on the screen has not done its one job. It used to pay two
 /// thousand against a two thousand table; when the table went to four, this had to follow.
 ///
-/// The count came down as the payment went up, so a day's worth of watching is worth the same
-/// forty thousand it was — twice the gold in half the advertisements.
+/// The count is deliberately huge. It is not there to ration anything — ten seconds a time is
+/// the rationing, and somebody willing to sit through a thousand of them has earned whatever
+/// that comes to. It is there so a bug in the counting cannot run away with the ledger.
 export const ADS_MS = Number(process.env.TIENLEN_ADS_MS ?? 10_000);
 export const ADS_GOLD = BOT_STAKE;
-export const ADS_PER_DAY = 10;
+export const ADS_PER_DAY = 1_000;
 
 /// Below this there is no table anybody can sit at. Not a gate on anything — the way to more
 /// gold is beside the purse at every balance — but the widget draws the two ways in dark and

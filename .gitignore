@@ -3,3 +3,6 @@ node_modules/
 .env
 .DS_Store
 data/
+
+# Where the server is. Not a secret worth much, and not worth publishing either.
+deploy/.env

@@ -474,7 +474,7 @@ test('and it stops when the day\'s are used up', async () => {
   ledger({
     u1: {
       name: 'Thọ', gold: 40_000, games: 3, first: 2, last: 0,
-      claimed: dayIn(), adsDay: dayIn(), ads: 10,
+      claimed: dayIn(), adsDay: dayIn(), ads: 1000,
     },
   });
   await withBot(async (app) => {
@@ -715,7 +715,7 @@ test('a row written before the reward was a button still works', async () => {
 
     assert.equal(app.mine('u1').gold, 5000, 'and nobody is paid twice by the migration');
     assert.equal(app.mine('u1').daily, 0, 'today\'s was already taken under the old name');
-    assert.equal(app.mine('u1').adsLeft, 6, 'and the four they had watched still count');
+    assert.equal(app.mine('u1').adsLeft, 996, 'and the four they had watched still count');
   });
 });
 

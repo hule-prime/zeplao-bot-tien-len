@@ -23,9 +23,23 @@ if [ ! -d "$ROOT/bots/$BOT" ]; then
   exit 2
 fi
 
-SSH_KEY=${ZEPLAO_SSH_KEY:-~/.ssh/<khoá>}
-SSH_PORT=${ZEPLAO_SSH_PORT}
-HOST=${ZEPLAO_HOST:-root@$ZEPLAO_HOST}
+# Where the server is, and how to reach it. No defaults, on purpose.
+#
+# They used to be written in here. This repository is public, and an address with a port beside
+# it is a door somebody else can knock on — the address is not a secret worth much, but it is
+# not worth publishing either, and nothing about a deploy script needs it in the open.
+#
+# Put them in deploy/.env, which git ignores:
+#
+#   ZEPLAO_HOST=root@<address>
+#   ZEPLAO_SSH_PORT=<port>
+#   ZEPLAO_SSH_KEY=~/.ssh/<key>
+[ -f "$ROOT/deploy/.env" ] && . "$ROOT/deploy/.env"
+
+SSH_KEY=${ZEPLAO_SSH_KEY:?set it in deploy/.env}
+SSH_PORT=${ZEPLAO_SSH_PORT:?set it in deploy/.env}
+HOST=${ZEPLAO_HOST:?set it in deploy/.env}
+SSH_KEY=${SSH_KEY/#\~/$HOME}
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 remote() { ssh -i "$SSH_KEY" -p "$SSH_PORT" "$HOST" "$@"; }

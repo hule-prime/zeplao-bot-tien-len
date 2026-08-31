@@ -54,7 +54,7 @@ sẽ cho người ta thấy một tay bài và không có cái bàn nào.
 | Quà mỗi ngày | **+10.000**, và phải **bấm nhận**. Ngày sang lúc nửa đêm giờ Việt Nam, không phải giờ UTC |
 | Bàn với máy | Cược cố định **4.000**, bất kể bàn mở ở mức nào. Nhất +4.000, nhì +2.000, ba −2.000, bét −4.000 |
 | Bàn giữa người | Cược của phòng — **tự đặt**, từ 1.000 tới 1.000.000 và không quá số tiền người mở đang có. Ba mức có sẵn chỉ là câu trả lời thường gặp |
-| Kiếm thêm | Quảng cáo 10 giây, **4.000** — đúng một ván với máy — tối đa 10 lần/ngày. Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** |
+| Kiếm thêm | Quảng cáo 10 giây, **4.000** — đúng một ván với máy — tối đa 1.000 lần/ngày (con số đó chặn lỗi đếm chứ không phải để hạn chế — mười giây một lần đã là hạn chế rồi). Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** |
 | Bảng xếp hạng | Vàng, của cả thế giới |
 
 **Quảng cáo trả đúng một ván với máy**, không phải trùng hợp: nó tồn tại để đưa người hết tiền

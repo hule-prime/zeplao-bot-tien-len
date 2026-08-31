@@ -8,7 +8,7 @@ Bot đang chạy thật. File này là chỗ tra khi có gì đó hỏng lúc ba
 | --- | --- |
 | Tài khoản | `@tienlenbot` — "Tiến Lên", id `3b82d8e9-2446-4de3-b701-be6a40331a45` |
 | Chủ | tài khoản dev — cùng chủ với `@carobot`. Số điện thoại của tài khoản đó nằm ở `deploy/check-accounts.mjs` bên project zeplao, không chép sang đây: đây là repo mã nguồn, không phải chỗ để số điện thoại của người thật |
-| Máy chủ | `<địa chỉ máy chủ>`, cổng ssh trong deploy/.env, khoá `~/.ssh/<khoá>` |
+| Máy chủ | Địa chỉ, cổng và khoá nằm ở `deploy/.env` — git bỏ qua file đó. Repo này công khai |
 | Service | `zeplao-tienlenbot.service` — container riêng, `node:22-alpine` |
 | Mã | `/opt/zeplao/tienlenbot/tienlenbot.mjs` (gắn read-only vào container) |
 | Sổ vàng | `/opt/zeplao/tienlenbot/data/scores.json` — **sống qua mọi lần deploy** |
@@ -42,17 +42,18 @@ nó tới khi bàn tan.
 ## Xem nó có sống không
 
 ```bash
-ssh -i ~/.ssh/<khoá> -p <cổng> root@$ZEPLAO_HOST \
-  'systemctl is-active zeplao-tienlenbot; journalctl -u zeplao-tienlenbot -n 20 --no-pager'
+. deploy/.env && SSH="-i ${ZEPLAO_SSH_KEY/#\~/$HOME} -p $ZEPLAO_SSH_PORT $ZEPLAO_HOST"
+ssh $SSH 'systemctl is-active zeplao-tienlenbot; journalctl -u zeplao-tienlenbot -n 20 --no-pager'
 ```
+
+Mọi lệnh ssh dưới đây dùng `$SSH` đã đặt như trên.
 
 Lúc lên đúng nó in `@tienlenbot is dealing`. Bất cứ gì khác là token sai.
 
 Hỏi thẳng API bằng chính token của nó:
 
 ```bash
-ssh -i ~/.ssh/<khoá> -p <cổng> root@$ZEPLAO_HOST \
-  'T=$(grep -o "ZEPLAO_BOT_TOKEN=.*" /opt/zeplao/tienlenbot/.env | cut -d= -f2-);
+ssh $SSH 'T=$(grep -o "ZEPLAO_BOT_TOKEN=.*" /opt/zeplao/tienlenbot/.env | cut -d= -f2-);
    curl -s -H "Authorization: Bearer $T" https://api-bot.kuku.vn/getMe'
 ```
 
@@ -94,7 +95,7 @@ Mã nguồn nằm ở `github.com/hule-prime/zeplao-bot-tien-len`, **công khai*
 commit: **không có token, không có khoá riêng, không có `.env`** ở bất kỳ commit nào. `.gitignore`
 chặn `.env` và `data/` từ commit đầu.
 
-Lộ ra, có chủ ý: IP máy chủ, cổng ssh, tên file khoá, id bot. Id bot **không phải bí mật** — nửa
+Lộ ra, có chủ ý: id bot. Id bot **không phải bí mật** — nửa
 đầu token chính là nó, và chỉ nửa sau mới được băm và lưu.
 
 Mã nguồn công khai **không mở thêm đường nào vào trò chơi**: mọi thao tác đều được kiểm lại ở
@@ -114,27 +115,27 @@ permitrootlogin yes
 passwordauthentication yes
 ```
 
-Không có tường lửa. IP và cổng giờ nằm trong một repo công khai, mà trước đó chưa từng công khai
-ở đâu (`zeplao` là private). Nghĩa là: **ai cũng dò được root bằng mật khẩu.**
+Không có tường lửa. Địa chỉ và cổng **đã từng nằm trong repo công khai này** — nay đã gỡ khỏi cả
+lịch sử, nhưng thứ đã bị crawl thì không lấy lại được. Nghĩa là phải coi như địa chỉ đã lộ:
+**ai cũng dò được root bằng mật khẩu.**
 
-Khoá `~/.ssh/<khoá>` đang dùng được, nên tắt mật khẩu là an toàn — nhưng phải tự kiểm là
+Khoá ssh đang dùng được, nên tắt mật khẩu là an toàn — nhưng phải tự kiểm là
 không còn ai khác đang vào bằng mật khẩu trước khi tắt:
 
 ```bash
-ssh -i ~/.ssh/<khoá> -p <cổng> root@$ZEPLAO_HOST '
+ssh $SSH '
   sed -i "s/^#*PasswordAuthentication.*/PasswordAuthentication no/" /etc/ssh/sshd_config
   sshd -t && systemctl reload sshd && sshd -T | grep passwordauthentication'
 ```
 
-Và cân nhắc `fail2ban`, hoặc chỉ mở cổng ssh cho vài IP.
+Và cân nhắc `fail2ban`, hoặc chỉ mở cổng ssh cho vài địa chỉ.
 
 ## Xoay token
 
 `kuku.vn/bot → @tienlenbot → xoay token`, rồi ghi lại vào `.env` và restart:
 
 ```bash
-ssh -i ~/.ssh/<khoá> -p <cổng> root@$ZEPLAO_HOST \
-  'printf "ZEPLAO_BOT_TOKEN=%s\n" "<token mới>" > /opt/zeplao/tienlenbot/.env
+ssh $SSH 'printf "ZEPLAO_BOT_TOKEN=%s\n" "<token mới>" > /opt/zeplao/tienlenbot/.env
    chmod 600 /opt/zeplao/tienlenbot/.env
    systemctl restart zeplao-tienlenbot'
 ```
