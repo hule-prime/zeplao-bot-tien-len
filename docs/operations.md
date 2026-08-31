@@ -88,6 +88,46 @@ kuku.vn/bot → @tienlenbot → bật "Chia sẻ cho mọi người"
 Đây là quyết định của chủ bot, không phải của người viết mã — mặc định đóng là điểm mấu chốt:
 một mặc định mở thì hỏng trong im lặng, và hỏng lên đầu người chưa được ai hỏi.
 
+## Repo công khai — cái gì lộ, cái gì không
+
+Mã nguồn nằm ở `github.com/hule-prime/zeplao-bot-tien-len`, **công khai**. Đã quét toàn bộ 9
+commit: **không có token, không có khoá riêng, không có `.env`** ở bất kỳ commit nào. `.gitignore`
+chặn `.env` và `data/` từ commit đầu.
+
+Lộ ra, có chủ ý: IP máy chủ, cổng ssh, tên file khoá, id bot. Id bot **không phải bí mật** — nửa
+đầu token chính là nó, và chỉ nửa sau mới được băm và lưu.
+
+Mã nguồn công khai **không mở thêm đường nào vào trò chơi**: mọi thao tác đều được kiểm lại ở
+phía bot, không phía nào tin cái trang gửi lên. Biết luật không giúp gì, đó là mục đích của việc
+kiểm ở server. Riêng widget thì vốn đã không bí mật — nó được tải về máy mọi người chơi.
+
+**Nhưng nó làm lộ một thứ:** trước đây xúc xắc và chia bài dùng `Math.random`, tức xorshift128+,
+mà trạng thái của nó khôi phục được từ chính đầu ra. Xúc xắc được gieo **sau khi tiền đã đặt**, ở
+sòng thế giới thì gieo công khai 25 giây một lần trước mặt mọi người — đúng nghĩa một cái máy
+tiên tri cho ai chịu khó. Đã đổi sang `crypto.randomInt`, và có test giữ: nếu `roll` hay `deal`
+quay lại dùng `Math.random` thì test đỏ.
+
+## Việc cần làm: ssh đang mở cửa
+
+```
+permitrootlogin yes
+passwordauthentication yes
+```
+
+Không có tường lửa. IP và cổng giờ nằm trong một repo công khai, mà trước đó chưa từng công khai
+ở đâu (`zeplao` là private). Nghĩa là: **ai cũng dò được root bằng mật khẩu.**
+
+Khoá `~/.ssh/<khoá>` đang dùng được, nên tắt mật khẩu là an toàn — nhưng phải tự kiểm là
+không còn ai khác đang vào bằng mật khẩu trước khi tắt:
+
+```bash
+ssh -i ~/.ssh/<khoá> -p <cổng> root@$ZEPLAO_HOST '
+  sed -i "s/^#*PasswordAuthentication.*/PasswordAuthentication no/" /etc/ssh/sshd_config
+  sshd -t && systemctl reload sshd && sshd -T | grep passwordauthentication'
+```
+
+Và cân nhắc `fail2ban`, hoặc chỉ mở cổng ssh cho vài IP.
+
 ## Xoay token
 
 `kuku.vn/bot → @tienlenbot → xoay token`, rồi ghi lại vào `.env` và restart:

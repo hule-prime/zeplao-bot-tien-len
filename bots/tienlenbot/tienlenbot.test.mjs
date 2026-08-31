@@ -11,6 +11,7 @@ import {
   payouts, settlement, dayIn, gold,
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, MIN_STAKE, MAX_STAKE, STAKES, BROKE, ADS_GOLD, asStake,
   FACES, FACE_NAMES, DICE, ROLL_MS, SHOW_MS, CHIPS, roll, faceWorth, boardWorth, staked, tally,
+  chance,
 } from './tienlenbot.mjs';
 
 /// A card by name, which is how anybody talks about one.
@@ -802,4 +803,44 @@ test('the chips are stakes anybody can reach', () => {
   assert.ok(CHIPS.every((one) => one >= MIN_STAKE));
   assert.ok(ROLL_MS >= 1000, 'a throw should be a throw, not a number appearing');
   assert.ok(SHOW_MS > ROLL_MS, 'and it should stay up long enough to be read');
+});
+
+test('the dice do not come out of Math.random', () => {
+  // They are thrown after the bets are down, in front of everybody, every twenty-five seconds —
+  // and this source is public. `Math.random` is xorshift128+ and recoverable from its own
+  // output, so anybody patient enough could work out what the next throw was going to be.
+  //
+  // Held down rather than argued about: if `roll` ever reaches for it again, this fails.
+  const real = Math.random;
+  Math.random = () => 0;
+  try {
+    const thrown = new Set();
+    for (let i = 0; i < 200; i++) thrown.add(roll().join(''));
+    assert.ok(thrown.size > 20,
+      `${thrown.size} different throws out of 200 — the dice are following Math.random`);
+  } finally {
+    Math.random = real;
+  }
+});
+
+test('and neither does the deal', () => {
+  const real = Math.random;
+  Math.random = () => 0;
+  try {
+    const dealt = new Set();
+    for (let i = 0; i < 50; i++) dealt.add(deal(4)[0].join(','));
+    assert.equal(dealt.size, 50, 'every deal should be its own');
+  } finally {
+    Math.random = real;
+  }
+});
+
+test('chance is a number in [0, 1) and not the same one twice', () => {
+  const seen = new Set();
+  for (let i = 0; i < 2000; i++) {
+    const one = chance();
+    assert.ok(one >= 0 && one < 1, `${one} is not in [0, 1)`);
+    seen.add(one);
+  }
+  assert.ok(seen.size > 1990, 'the same number keeps coming back');
 });
