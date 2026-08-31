@@ -148,6 +148,15 @@ lúc lên cùng ba con xúc xắc, nên bàn không có "đang chờ ai" và ng�
   là một con số chưa ai được biết.
 - **Không trừ tiền lúc đặt.** Cược chỉ đi khi xúc xắc rơi, nên không có khoảnh khắc nào tiền
   "đang ở đâu đó". Thứ chặn nợ là kiểm tra lúc đặt: trên bàn không bao giờ nhiều hơn trong ví.
+- **Chip hiện ngay khi chạm, gửi sau.** Round-trip nhanh nhất cũng một phần mười giây, mà bầu
+  cua là đặt bốn chip trong ba giây — bàn đợi phản hồi là bàn không nghe thấy mình.
+- **Bot được báo *cả bàn*, không phải "thêm một chip" hay "gỡ chip cuối".** Bốn cú chạm và một
+  lần hoàn tác là năm POST riêng biệt, mà năm POST riêng biệt tới theo thứ tự mạng thích: "gỡ
+  chip cuối" lúc đó là hai chuyện khác nhau ở hai đầu, và bàn lúc vẽ khớp nhau thì lúc xóc lại
+  lệch. Đã xảy ra thật ngay lần đầu trộn đặt với hoàn tác. Tổng thì không có thứ tự nào để sai;
+  kèm một số đếm tăng dần để cái gửi trước mà tới sau bị bỏ qua thay vì ghi đè cái mới.
+- **Gửi gộp sau 200ms** kể từ cú chạm cuối, nên sáu cú chạm là một request. Gửi ngay nếu đồng hồ
+  còn dưới 3 giây — bàn đặt xong mà chưa kịp gửi là bàn chưa từng đặt.
 - **Bàn là của mọi người.** Ai đặt gì vào cửa nào đều hiện — nửa cái thú của trò này là nhìn
   người khác bỏ tiền vào đâu.
 - **Sáu linh vật vẽ bằng SVG**, không dùng emoji. Emoji do hãng làm điện thoại vẽ, nên cùng một
@@ -174,6 +183,9 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | Người vào sòng giữa ván gọi `openBets()` | **Xoá sạch cửa đã đặt của mọi người**. Tới bàn mà dọn sạch bàn thì không phải là tới bàn |
 | `watchersOf` khai bằng `const` dưới vòng lặp | Vùng chết vĩnh viễn — sòng thế giới không chạy được một dòng nào. Test canh bắt trước khi nó kịp chạy lần đầu |
 | Vòng xóc dừng khi người cuối rời đi | Tiền còn trên bàn không bao giờ được thanh toán — tức là bị lấy mất |
+| Đặt/gỡ chip gửi từng cái một | Năm POST riêng biệt tới không đúng thứ tự → bàn lúc xóc khác bàn lúc nhìn. Sửa bằng cách gửi cả bàn kèm số đếm |
+| `betsOf` khai bằng `const` dưới vòng lặp | Lần thứ ba trong file này. Test canh là thứ duy nhất từng bắt được |
+| Lời giải thích "hết vàng" đặt ở màn sau | Mà thẻ vào màn đó đang bị tắt — người ta không đọc được bằng gì. Phải nói ngay trên màn đang bị từ chối |
 | `justify-content: center` trên hộp cuộn | Phần tràn nằm **trên** gốc cuộn, không cuộn tới được. Dòng "+10.000 vàng" bị cắt mất đầu |
 | Một lệnh thay thế nuốt cả khối CSS quảng cáo | Màn ADS mất nền, mất căn giữa. Chỉ ảnh chụp mới thấy — nên giờ có `tools/css-check.mjs` |
 | Nút thoát duy nhất tính là **bỏ ván** | Về nhất xong bấm thoát thì ghế ghi "đã rời" thay vì "Nhất" |

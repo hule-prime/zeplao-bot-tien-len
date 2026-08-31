@@ -187,6 +187,10 @@ function standIn(rooms = { c1: ['u1', 'u2'] }) {
 
 const NAMES = { u1: 'Thọ', u2: 'Lan Anh', u3: 'Minh', u9: 'Người lạ' };
 
+/// A board is sent whole and stamped, so a send overtaken by a later one is ignored. Each
+/// stand-in person keeps their own count.
+const clocks = { u1: 0, u2: 0, u3: 0, u9: 0 };
+
 /// The ledger this run starts from. Written before the bot is started, because it is read once
 /// on the way up.
 function ledger(people = {}) {
@@ -878,8 +882,8 @@ test('one sòng for the whole world, already throwing when anybody walks in', as
     await app.until(() => (app.mine('u1').seats ?? []).length === 2, 'both of them in the chairs');
 
     const purse = { u1: app.mine('u1').gold, u2: app.mine('u2').gold };
-    app.does('u1', { bet: { face: 'cua', amount: 1000 } });
-    app.does('u2', { bet: { face: 'ga', amount: 5000 } });
+    app.does('u1', { bets: { cua: 1000 }, at: ++clocks.u1 });
+    app.does('u2', { bets: { ga: 5000 }, at: ++clocks.u2 });
     await app.until(() => app.mine('u1').me.staked === 1000 && app.mine('u2').me.staked === 5000,
       'the board to fill up');
 
@@ -933,7 +937,7 @@ test('money left on the board is still money on the board', async () => {
 
     app.does('u1', { baucua: 'world' });
     await app.until(() => (app.mine('u1') ?? {}).kind === 'baucua', 'the sòng');
-    app.does('u1', { bet: { face: 'ca', amount: 1000 } });
+    app.does('u1', { bets: { ca: 1000 }, at: ++clocks.u1 });
     await app.until(() => app.mine('u1').me.staked === 1000, 'a chip down');
     const bets = { ...app.mine('u1').me.bets };
 
@@ -958,21 +962,28 @@ test('a stake bigger than the purse is refused, and the last chip can be taken b
     app.does('u1', { baucua: 'solo' });
     await betting(app, 'u1');
 
-    app.does('u1', { bet: { face: 'ca', amount: 5000 } });
+    app.does('u1', { bets: { ca: 5000 }, at: ++clocks.u1 });
     await app.until(() => app.mine('u1').me.staked === 5000, 'the first chip');
 
-    // Six thousand in the purse and five already on the board.
-    app.does('u1', { bet: { face: 'nai', amount: 5000 } });
+    // Six thousand in the purse and a board asking for ten.
+    app.does('u1', { bets: { ca: 5000, nai: 5000 }, at: ++clocks.u1 });
     await app.until(() => !!app.mine('u1').says, 'a refusal');
-    assert.match(app.mine('u1').says, /1\.000/);
-    assert.equal(app.mine('u1').me.staked, 5000, 'and nothing went on the board');
+    assert.match(app.mine('u1').says, /6\.000/);
+    assert.equal(app.mine('u1').me.staked, 5000, 'and the board it had is the board it keeps');
 
-    app.does('u1', { bet: { face: 'nai', amount: 1000 } });
+    app.does('u1', { bets: { ca: 5000, nai: 1000 }, at: ++clocks.u1 });
     await app.until(() => app.mine('u1').me.staked === 6000, 'the rest of it');
 
-    app.does('u1', { undo: true });
+    // Taking a chip back is a smaller board, and a board is all the bot is ever told.
+    app.does('u1', { bets: { ca: 5000 }, at: ++clocks.u1 });
     await app.until(() => app.mine('u1').me.staked === 5000, 'the last chip back');
     assert.equal(app.mine('u1').me.bets.nai, undefined, 'and off the face it was on');
+
+    // A board stamped older than one already taken is ignored rather than undoing it.
+    const stale = clocks.u1 - 2;
+    app.does('u1', { bets: { ca: 1000, ga: 20000 }, at: stale });
+    await nap(250);
+    assert.equal(app.mine('u1').me.staked, 5000, 'a send that arrived late undid a later one');
   });
 });
 
@@ -986,14 +997,13 @@ test('nothing a widget can send bets on a face that is not there', async () => {
     await betting(app, 'u1');
 
     const nonsense = [
-      { face: 'rong', amount: 1000 },        // a face nobody drew
-      { face: 'cua', amount: 3 },            // not a chip
-      { face: 'cua', amount: -5000 },        // a stake that pays you to place it
-      { face: 'cua', amount: 1e12 },
-      { amount: 1000 },
-      {},
+      { rong: 1000 },                        // a face nobody drew
+      { cua: -5000 },                        // a stake that pays you to place it
+      { cua: 1e12 },                         // more than anybody has
+      { cua: 'lots' },
+      { cua: 1000, rong: 1000 },             // one good face and one invented one
     ];
-    for (const bad of nonsense) app.does('u1', { bet: bad });
+    for (const bad of nonsense) app.does('u1', { bets: bad, at: ++clocks.u1 });
 
     await nap(300);
     assert.equal(app.mine('u1').me.staked, 0,

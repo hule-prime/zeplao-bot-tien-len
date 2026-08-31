@@ -555,8 +555,16 @@ function drawButtons() {
       (el) => { el.disabled = true; z.send({ leave: true }); });
     if (!state.me) return;
 
-    const undo = button('Hoàn tác', state.world ? 'primary' : '', () => z.send({ undo: true }));
-    undo.disabled = state.phase !== 'betting' || !state.me.canUndo;
+    const undo = button('Hoàn tác', state.world ? 'primary' : '', () => {
+      // Purely a thing about this page. The bot is told totals, so taking a chip back is one
+      // fewer chip in the next thing it is told.
+      stack.pop();
+      say('');
+      drawBaucua();
+      drawButtons();
+      sendBets();
+    });
+    undo.disabled = state.phase !== 'betting' || !stack.length;
 
     // No throw button at the world sòng. It runs on its own clock, and a button that hurried it
     // along would be one person at it deciding for everybody else.
@@ -565,7 +573,7 @@ function drawButtons() {
     const throwIt = button(
       state.phase === 'rolling' ? 'Đang xóc…' : state.phase === 'paid' ? 'Ván sau…' : 'Xóc',
       'primary', (el) => { el.disabled = true; z.send({ roll: true }); });
-    throwIt.disabled = state.phase !== 'betting' || !state.me.staked;
+    throwIt.disabled = state.phase !== 'betting' || !myStaked();
     return;
   }
 
@@ -993,30 +1001,55 @@ function drawMenu() {
       '', purse >= cheapest,
       () => { step = 'baucua'; render(); }));
 
+    // Said here, on the screen somebody is actually looking at.
+    //
+    // Both ways in are dark when there is nothing to play with, and a dark card with no line
+    // under it is a screen that has refused somebody without telling them what to do about it.
+    // The explanation used to live one screen further in — behind the cards they cannot press.
+    if (purse < cheapest) {
+      body.append(stepNote(state.daily > 0
+        ? `Bạn có ${gold(purse)} vàng, chưa đủ vào bàn nào — nhận quà mỗi ngày ở trên đã.`
+        : `Bạn có ${gold(purse)} vàng, chưa đủ vào bàn nào. Bấm dấu + cạnh số vàng ở trên `
+          + `để xem quảng cáo nhận ${gold(state.adsGold)} vàng.`));
+    }
+
     return;
   }
 
   if (step === 'tienlen') {
+    const noBot = purse < state.botStake;
+    const noTable = purse < cheapest;
+
     body.append(stepHead('Tiến lên miền nam', 'Chơi kiểu nào?', null));
-    body.append(pick('Đấu với máy', `cược ${gold(state.botStake)}`,
-      purse >= state.botStake, () => { step = 'solo'; render(); }));
-    body.append(pick('Tạo bàn', 'mời cả thế giới',
-      purse >= cheapest, () => { step = 'open'; render(); }));
-    body.append(stepNote(purse < state.botStake
-      ? `Đấu với máy cần ${gold(state.botStake)} vàng.`
+    body.append(pick('Đấu với máy',
+      noBot ? `cần ${gold(state.botStake)} vàng` : `cược ${gold(state.botStake)}`,
+      !noBot, () => { step = 'solo'; render(); }));
+    body.append(pick('Tạo bàn',
+      noTable ? `cần ${gold(cheapest)} vàng` : 'mời cả thế giới',
+      !noTable, () => { step = 'open'; render(); }));
+
+    body.append(stepNote(noBot
+      ? `Bạn có ${gold(purse)} vàng. Bấm dấu + cạnh số vàng ở trên để xem quảng cáo nhận `
+        + `${gold(state.adsGold)} vàng.`
       : 'Bàn tự mở ra cho mọi nhóm — ai cũng tìm thấy và vào được.'));
     return;
   }
 
   if (step === 'baucua') {
     body.append(stepHead('Bầu cua tôm cá', 'Chơi kiểu nào?', null));
-    body.append(pick('Sòng thế giới', 'lúc nào cũng đang xóc',
-      purse >= cheapest, () => z.send({ baucua: 'world' })));
-    body.append(pick('Chơi một mình', 'xóc lúc nào tuỳ bạn',
-      purse >= cheapest, () => z.send({ baucua: 'solo' })));
-    body.append(stepNote('Đặt vào cửa nào, cửa đó ra mấy con thì ăn bấy nhiêu lần. '
-      + 'Không ra thì mất phần đặt. Sòng thế giới là một sòng duy nhất, ai cũng vào được, '
-      + 'xóc liên tục theo đồng hồ.'));
+    const poor = purse < cheapest;
+    body.append(pick('Sòng thế giới', poor ? `cần ${gold(cheapest)} vàng` : 'lúc nào cũng đang xóc',
+      !poor, () => z.send({ baucua: 'world' })));
+    body.append(pick('Chơi một mình', poor ? `cần ${gold(cheapest)} vàng` : 'xóc lúc nào tuỳ bạn',
+      !poor, () => z.send({ baucua: 'solo' })));
+
+    // Said, not merely shown. A dark row and nothing else is a screen that has refused somebody
+    // without telling them what to do about it.
+    body.append(stepNote(poor
+      ? `Bạn có ${gold(purse)} vàng, chưa đủ đặt một cửa. Bấm dấu + cạnh số vàng ở trên để `
+        + `xem quảng cáo nhận ${gold(state.adsGold)} vàng.`
+      : 'Đặt vào cửa nào, cửa đó ra mấy con thì ăn bấy nhiêu lần. Không ra thì mất phần đặt. '
+        + 'Sòng thế giới là một sòng duy nhất, ai cũng vào được, xóc liên tục theo đồng hồ.'));
     return;
   }
 
@@ -1420,6 +1453,56 @@ function drawTabs() {
 /// Which chip is being put down. Theirs and local — the table has no opinion about it.
 let chip = null;
 
+/**
+ * My board, while a betting window is open.
+ *
+ * The page owns it and the bot is told the **totals** — not "add a chip", not "take one off".
+ * Four taps and an undo were five separate POSTs, and five separate POSTs arrive in whatever
+ * order the network feels like: "take the last chip off" then means different things at the two
+ * ends, and a board that agreed when it was drawn settles differently when it is thrown. It was
+ * not theoretical; it turned up the first time bets and undos were interleaved fast.
+ *
+ * A total has no order to get wrong. `clock` counts up so a send overtaken by a later one is
+ * ignored rather than undoing it.
+ *
+ * `stack` is the order the chips went down in, kept here because undo is a thing about this
+ * page and not about the table. And drawing before sending is what makes a tap feel like a tap:
+ * the round trip is a tenth of a second at best, and a board that waits for it is a board that
+ * did not hear you.
+ */
+let stack = [];
+let clock = 0;
+let sending = null;
+
+function forgetPending() {
+  clearTimeout(sending);
+  sending = null;
+  stack = [];
+}
+
+function myBets() {
+  const bets = {};
+  for (const one of stack) bets[one.face] = (bets[one.face] ?? 0) + one.amount;
+  return bets;
+}
+
+const myStaked = () => stack.reduce((sum, one) => sum + one.amount, 0);
+
+/**
+ * Tells the bot what is on the board, once, after the tapping stops.
+ *
+ * A fifth of a second: under what anybody notices, over what a burst of taps takes — so six
+ * taps are one request rather than six. Sent at once instead when the clock is nearly out,
+ * because a throw that lands while a send is still waiting is a board that was never placed.
+ */
+function sendBets() {
+  clearTimeout(sending);
+  const soon = state.bettingEndsAt && state.bettingEndsAt - Date.now() < 3000;
+  const post = () => { sending = null; z.send({ bets: myBets(), at: ++clock }); };
+  if (soon) post();
+  else sending = setTimeout(post, 200);
+}
+
 /// The dice, while they are still in the air.
 ///
 /// Cycled here rather than pushed: the bot has not decided what they are yet, and cannot, or
@@ -1499,7 +1582,7 @@ function drawBaucua() {
       document.createTextNode(state.world ? `Sòng thế giới · ${many} người · ` : 'Đặt cửa · '),
       clock);
   } else {
-    note.textContent = state.me && state.me.staked
+    note.textContent = state.me && myStaked()
       ? 'Xong thì bấm Xóc'
       : 'Chọn phần cược rồi chạm vào cửa';
   }
@@ -1533,7 +1616,7 @@ function drawBoard() {
   const board = $('board');
   board.replaceChildren();
 
-  const mine = (state.me && state.me.bets) || {};
+  const mine = state.me ? myBets() : {};
   const hits = state.dice
     ? state.dice.reduce((n, f) => ((n[f] = (n[f] ?? 0) + 1), n), {})
     : {};
@@ -1555,7 +1638,10 @@ function drawBoard() {
     // watching where the rest of the table put their money.
     const on = document.createElement('div');
     on.className = 'tile-on';
-    const all = (state.board || {})[face] || 0;
+    // Everybody's, adjusted by whatever this page has done since the bot last spoke.
+    const theirs = (state.me && state.me.theirs) || {};
+    const ahead = (mine[face] || 0) - (theirs[face] || 0);
+    const all = ((state.board || {})[face] || 0) + ahead;
     if (mine[face]) {
       const ours = document.createElement('span');
       ours.className = 'tile-mine';
@@ -1577,7 +1663,22 @@ function drawBoard() {
 
     const canBet = state.phase === 'betting' && !!state.me;
     tile.disabled = !canBet;
-    if (canBet) tile.onclick = () => z.send({ bet: { face, amount: chip } });
+    if (canBet) {
+      tile.onclick = () => {
+        const left = state.gold - myStaked();
+        if (chip > left) {
+          say(left > 0 ? `Chỉ còn ${gold(left)} vàng để đặt` : 'Hết vàng để đặt rồi');
+          return;
+        }
+        // Drawn before it is sent. The round trip is a tenth of a second at best and a tap that
+        // waits for it feels like a board that did not hear you.
+        stack.push({ face, amount: chip });
+        say('');
+        drawBaucua();
+        drawButtons();
+        sendBets();
+      };
+    }
 
     board.append(tile);
   }
@@ -1588,7 +1689,7 @@ function drawChips() {
   row.replaceChildren();
 
   const chips = state.chips || [1000];
-  const left = state.gold - ((state.me && state.me.staked) || 0);
+  const left = state.gold - myStaked();
   if (!chips.includes(chip)) chip = chips[0];
 
   // The largest one they can still afford, chosen for them when the one they had picked has
@@ -1600,7 +1701,7 @@ function drawChips() {
     el.className = 'chip-pick' + (chip === one ? ' on' : '');
     el.textContent = gold(one);
     el.disabled = state.phase !== 'betting' || one > left;
-    el.onclick = () => { chip = one; render(); };
+    el.onclick = () => { chip = one; say(''); drawChips(); };
     row.append(el);
   }
 }
@@ -1703,6 +1804,28 @@ z.onState((next) => {
   // Cards picked up out of a hand that has since been dealt again are not cards.
   const held = new Set((next.me && next.me.hand) || []);
   picked = new Set([...picked].filter((card) => held.has(card)));
+
+  // Whose board is whose.
+  //
+  // While a betting window is open this page owns its own chips — it drew them, and taking them
+  // back from the bot in the middle of somebody tapping would make chips flicker. It hands the
+  // board over when the round turns, and when the bot refuses one: at that point what is drawn
+  // is a lie, and the truth is whatever the bot says it is holding.
+  if (next.kind === 'baucua') {
+    const mine = next.me;
+    const turned = next.phase !== 'betting'
+      || !(state && state.kind === 'baucua' && state.gameId === next.gameId);
+    if (turned) {
+      forgetPending();
+    } else if (next.says) {
+      // Refused. What is drawn is now a lie, so the bot's board is taken as it stands — one
+      // entry a face, which makes undo coarse for a moment and truthful immediately.
+      forgetPending();
+      stack = Object.entries(mine.theirs || {}).map(([face, amount]) => ({ face, amount }));
+    }
+  } else if (stack.length || sending) {
+    forgetPending();
+  }
 
   // A different table, or the same one dealt again. Either way whatever was announced belonged
   // to the hand before it, and announcing it a second time is telling somebody they won twice.

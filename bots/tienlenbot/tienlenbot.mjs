@@ -681,8 +681,8 @@ export const SAY = {
   busy: 'Bạn đang ngồi ở một bàn. Rời bàn đó rồi mới vào bàn khác được nhé.',
   watching: 'Bạn đang xem bàn này.',
   openedBaucua: (who) => `${who} mở sòng bầu cua tôm cá — vào đặt đi.`,
-  overBet: (left) => left > 0
-    ? `Chỉ còn ${gold(left)} vàng để đặt.`
+  overBet: (purse) => purse > 0
+    ? `Chỉ đặt được tối đa ${gold(purse)} vàng.`
     : 'Hết vàng để đặt rồi.',
   tooMany: 'Nhóm đang mở quá nhiều widget. Đợi một ván xong rồi thử lại nhé.',
   // Said with the number, because "not enough gold" leaves somebody to work out how much a
@@ -1604,15 +1604,14 @@ export async function run(token, { signal, api = API } = {}) {
         }
 
         game.seats.splice(seat, 1);
-        delete game.placed[who.userId];
+        delete game.bets[who.userId];
         // Whoever opened a private table taking their coat is that table closing.
         if (host) await endGame(game, 'the table was closed by whoever opened it');
         else { await pushGame(game); await pushTo(screen); await pushLobbies(); }
         return;
       }
 
-      if (action.bet) return placeBet(game, screen, action.bet);
-      if (action.undo) return takeBack(game, screen);
+      if (action.bets) return setBets(game, screen, action.bets, action.at);
 
       // Thrown when somebody says so rather than only when the clock runs out — sitting through
       // twenty-five seconds of nothing because nobody else is betting is not a game.
@@ -1725,8 +1724,9 @@ export async function run(token, { signal, api = API } = {}) {
       ready: new Set(),
       paidTo: new Map(),
       paid: [],
-      // Bầu cua: what everybody has put down this round, and what came up.
-      placed: {},
+      // Bầu cua: what everybody has on the board this round, and what came up.
+      bets: {},
+      betAt: {},
       dice: null,
       bettingEndsAt: null,
       invitationId: null,
@@ -1910,7 +1910,8 @@ export async function run(token, { signal, api = API } = {}) {
       ready: new Set(),
       paidTo: new Map(),
       paid: [],
-      placed: {},
+      bets: {},
+      betAt: {},
       dice: null,
       bettingEndsAt: null,
       invitationId: null,
@@ -1952,7 +1953,7 @@ export async function run(token, { signal, api = API } = {}) {
         // Kept going by somebody looking at it, or by money still on it. The second is not
         // decoration: the last person can walk out with chips down, and a stake that is never
         // settled is a stake taken. The dice do not care who is watching.
-        const owed = Object.keys(game.placed).some((id) => staked(betsOf(game, id)) > 0);
+        const owed = Object.keys(game.bets).some((id) => staked(betsOf(game, id)) > 0);
         if (!watchersOf(game).length && !owed) {
           game.bettingEndsAt = null;
           return;
@@ -1974,16 +1975,13 @@ export async function run(token, { signal, api = API } = {}) {
     }
   }
 
-  /// Everything one person has put down this round, from the order they put it down in.
+  /// What one person has on the board.
   ///
-  /// Derived rather than stored, so taking a chip back is popping one thing off a list instead
-  /// of unpicking a total — and the two can never disagree about what is on the board.
+  /// A function declaration, like everything else down here. Third time in this file: a `const`
+  /// below the endless loop stays in the temporal dead zone for the life of the process, and
+  /// the test at the bottom of the suite is the only thing that has ever caught one.
   function betsOf(game, userId) {
-    const bets = {};
-    for (const one of game.placed[userId] ?? []) {
-      bets[one.face] = (bets[one.face] ?? 0) + one.amount;
-    }
-    return bets;
+    return game.bets[userId] ?? {};
   }
 
   /// Opens the board. A table with more than one person at it takes bets on a clock, because
@@ -1992,7 +1990,8 @@ export async function run(token, { signal, api = API } = {}) {
     game.state = 'betting';
     game.dice = null;
     game.paid = [];
-    game.placed = {};
+    game.bets = {};
+    game.betAt = {};
     game.touched = Date.now();
     // The world sòng always has a clock: it is a table that keeps throwing whether or not
     // anybody in particular is at it. A private one only needs a clock when there is somebody
@@ -2004,35 +2003,47 @@ export async function run(token, { signal, api = API } = {}) {
     openBets(game);
   }
 
-  async function placeBet(game, screen, asked) {
+  /**
+   * The whole board, from the page that drew it.
+   *
+   * A board and not a chip, and that is the fix for something that looked like polish and was
+   * not. The page puts a chip down the instant it is tapped and sends afterwards, so four taps
+   * and an undo are five requests — and requests are five separate POSTs that can arrive in any
+   * order. "Take the last chip off" then means different things to the page and to the bot, and
+   * two boards that agreed when they were drawn disagree by the time they are thrown.
+   *
+   * Sending the totals has no order to get wrong. `at` counts up on the page so a reply that
+   * overtakes a later one is ignored rather than undoing it.
+   */
+  async function setBets(game, screen, asked, at) {
     if (game.state !== 'betting') return;
 
-    const face = String(asked.face ?? '');
-    const amount = Math.round(Number(asked.amount));
+    const when = Number(at);
+    if (!Number.isFinite(when)) return;
+    if (when <= (game.betAt[screen.userId] ?? 0)) return;
+
     // Everything here came from a page anybody can edit.
-    if (!FACES.includes(face)) return;
-    if (!CHIPS.includes(amount)) return;
+    const bets = {};
+    let total = 0;
+    for (const [face, amount] of Object.entries(asked ?? {})) {
+      if (!FACES.includes(face)) return;
+      const on = Math.round(Number(amount));
+      if (!Number.isFinite(on) || on < 0) return;
+      if (on === 0) continue;
+      bets[face] = on;
+      total += on;
+    }
 
     // Never more on the board than there is in the purse. The stake is not taken until the dice
     // land, so this is the only thing standing between a board and a debt.
     const row = rowFor(screen.userId, screen.displayName);
-    const already = staked(betsOf(game, screen.userId));
-    if (already + amount > row.gold) {
-      await pushTo(screen, { says: SAY.overBet(row.gold - already) });
+    if (total > row.gold) {
+      await pushTo(screen, { says: SAY.overBet(row.gold) });
       return;
     }
 
-    game.placed[screen.userId] = (game.placed[screen.userId] ?? []).concat({ face, amount });
-    game.touched = Date.now();
-    await pushGame(game);
-  }
-
-  async function takeBack(game, screen) {
-    if (game.state !== 'betting') return;
-    const mine = game.placed[screen.userId];
-    if (!mine || !mine.length) return;
-
-    mine.pop();
+    game.bets[screen.userId] = bets;
+    game.betAt[screen.userId] = when;
     game.touched = Date.now();
     await pushGame(game);
   }
@@ -2052,7 +2063,7 @@ export async function run(token, { signal, api = API } = {}) {
     // A throw with nothing on the board is a throw nobody asked for — at a private table. The
     // world sòng throws anyway, because somebody walking in should find a game already running
     // rather than a bowl waiting for them to start it.
-    const anything = Object.keys(game.placed).some((id) => staked(betsOf(game, id)) > 0);
+    const anything = Object.keys(game.bets).some((id) => staked(betsOf(game, id)) > 0);
     if (!anything && !game.world) return;
 
     game.spinning = true;
@@ -2095,7 +2106,7 @@ export async function run(token, { signal, api = API } = {}) {
 
     // From what is on the board, not from who is sitting at it. Somebody who put money down and
     // then closed the widget still had money down, and the dice do not care who is watching.
-    for (const userId of Object.keys(game.placed)) {
+    for (const userId of Object.keys(game.bets)) {
       const bets = betsOf(game, userId);
       const on = staked(bets);
       if (!on) continue;
@@ -2357,7 +2368,9 @@ export async function run(token, { signal, api = API } = {}) {
         seat,
         bets: betsOf(game, screen.userId),
         staked: staked(betsOf(game, screen.userId)),
-        canUndo: (game.placed[screen.userId] ?? []).length > 0,
+        // What the bot has for them. The page keeps its own copy while a window is open — it
+        // is the one drawing the chips — and takes this back whenever a round turns over.
+        theirs: betsOf(game, screen.userId),
       }
       : null;
 
