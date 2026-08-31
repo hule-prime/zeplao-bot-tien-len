@@ -131,6 +131,14 @@ trong đó là do quyết định chứ không phải xếp bừa rồi mong nó
 
 ## 6. Bầu cua tôm cá
 
+**Sòng thế giới không phải một cái bàn ai đó mở.** Nó có sẵn, nó xóc liên tục, và vào là vào
+giữa một ván đang chạy — đó mới là cái sòng. Một cái bàn phải có người mở trước là cái bàn đóng
+cửa gần hết thời gian, mà bàn thế giới đóng cửa gần hết thời gian là một căn phòng không có ai.
+
+Vòng xóc chạy khi còn người mở nó, **hoặc còn tiền trên bàn**. Vế thứ hai không phải để cho đẹp:
+người cuối cùng có thể rời đi khi chip còn nằm đó, và một khoản cược không bao giờ được thanh
+toán là một khoản cược bị lấy mất. Xúc xắc không quan tâm ai đang nhìn.
+
 Cùng con bot, cùng cái ví, cùng mô hình phiên. Khác ở chỗ nó **không có lượt**: ai cũng đặt cùng
 lúc lên cùng ba con xúc xắc, nên bàn không có "đang chờ ai" và người tới sau ngồi xuống giữa ván
 được — họ đơn giản là đặt cho lần xóc sau.
@@ -164,6 +172,8 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | Chip tiền bay nằm trong ghế | `drawSeats` dựng lại DOM mỗi push → chip bị xoá sau một phần năm quãng đường |
 | Xúc xắc rơi từ `opacity: 0` với `fill-mode: both` | Animation không chạy thì **xúc xắc tàng hình vĩnh viễn**. Animation được quyền quyết định một thứ *đến* thế nào; không được là lý do duy nhất nhìn thấy nó |
 | Người vào sòng giữa ván gọi `openBets()` | **Xoá sạch cửa đã đặt của mọi người**. Tới bàn mà dọn sạch bàn thì không phải là tới bàn |
+| `watchersOf` khai bằng `const` dưới vòng lặp | Vùng chết vĩnh viễn — sòng thế giới không chạy được một dòng nào. Test canh bắt trước khi nó kịp chạy lần đầu |
+| Vòng xóc dừng khi người cuối rời đi | Tiền còn trên bàn không bao giờ được thanh toán — tức là bị lấy mất |
 | `justify-content: center` trên hộp cuộn | Phần tràn nằm **trên** gốc cuộn, không cuộn tới được. Dòng "+10.000 vàng" bị cắt mất đầu |
 | Một lệnh thay thế nuốt cả khối CSS quảng cáo | Màn ADS mất nền, mất căn giữa. Chỉ ảnh chụp mới thấy — nên giờ có `tools/css-check.mjs` |
 | Nút thoát duy nhất tính là **bỏ ván** | Về nhất xong bấm thoát thì ghế ghi "đã rời" thay vì "Nhất" |

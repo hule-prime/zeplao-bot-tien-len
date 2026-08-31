@@ -551,20 +551,21 @@ function drawButtons() {
   if (state.phase === 'choosing') return;
 
   if (state.kind === 'baucua') {
-    button('Rời sòng', 'quiet', (el) => { el.disabled = true; z.send({ leave: true }); });
+    button(state.world ? 'Thoát' : 'Rời sòng', 'quiet',
+      (el) => { el.disabled = true; z.send({ leave: true }); });
     if (!state.me) return;
 
-    const undo = button('Hoàn tác', '', () => z.send({ undo: true }));
+    const undo = button('Hoàn tác', state.world ? 'primary' : '', () => z.send({ undo: true }));
     undo.disabled = state.phase !== 'betting' || !state.me.canUndo;
 
-    // Only whoever opened it throws. On a table with other people the clock throws anyway, so
-    // this is the way to say "everybody is done" rather than the only way it ever happens.
+    // No throw button at the world sòng. It runs on its own clock, and a button that hurried it
+    // along would be one person at it deciding for everybody else.
+    if (state.world) return;
+
     const throwIt = button(
       state.phase === 'rolling' ? 'Đang xóc…' : state.phase === 'paid' ? 'Ván sau…' : 'Xóc',
       'primary', (el) => { el.disabled = true; z.send({ roll: true }); });
-    throwIt.disabled = state.phase !== 'betting'
-      || state.host !== z.viewer.id
-      || !state.me.staked;
+    throwIt.disabled = state.phase !== 'betting' || !state.me.staked;
     return;
   }
 
@@ -1009,12 +1010,13 @@ function drawMenu() {
 
   if (step === 'baucua') {
     body.append(stepHead('Bầu cua tôm cá', 'Chơi kiểu nào?', null));
+    body.append(pick('Sòng thế giới', 'lúc nào cũng đang xóc',
+      purse >= cheapest, () => z.send({ baucua: 'world' })));
     body.append(pick('Chơi một mình', 'xóc lúc nào tuỳ bạn',
       purse >= cheapest, () => z.send({ baucua: 'solo' })));
-    body.append(pick('Mở sòng', 'cả thế giới cùng đặt một ván',
-      purse >= cheapest, () => z.send({ baucua: 'open' })));
     body.append(stepNote('Đặt vào cửa nào, cửa đó ra mấy con thì ăn bấy nhiêu lần. '
-      + 'Không ra thì mất phần đặt.'));
+      + 'Không ra thì mất phần đặt. Sòng thế giới là một sòng duy nhất, ai cũng vào được, '
+      + 'xóc liên tục theo đồng hồ.'));
     return;
   }
 
@@ -1492,7 +1494,10 @@ function drawBaucua() {
   } else if (state.bettingEndsAt) {
     const clock = document.createElement('span');
     clock.className = 'clock';
-    note.append(document.createTextNode('Đặt cửa · '), clock);
+    const many = (state.seats || []).length;
+    note.append(
+      document.createTextNode(state.world ? `Sòng thế giới · ${many} người · ` : 'Đặt cửa · '),
+      clock);
   } else {
     note.textContent = state.me && state.me.staked
       ? 'Xong thì bấm Xóc'

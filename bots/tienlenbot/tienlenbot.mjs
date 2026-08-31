@@ -611,10 +611,14 @@ export const ROLL_MS = Number(process.env.TIENLEN_ROLL_MS ?? 1_600);
 export const SHOW_MS = Number(process.env.TIENLEN_SHOW_MS ?? 3_500);
 
 /// How long a table with more than one person at it takes bets for.
-export const BETTING_MS = 25_000;
+export const BETTING_MS = Number(process.env.TIENLEN_BETTING_MS ?? 25_000);
 
 /// What may be put on a face in one tap.
 export const CHIPS = [1_000, 5_000, 20_000];
+
+/// The one sòng everybody shares. A fixed name rather than a counted one, because there is
+/// exactly one of it and it has to be findable without being looked up.
+export const WORLD = 'world';
 
 /// How many people fit round one board. Wider than a card table because nobody takes turns —
 /// everybody is betting on the same three dice at the same time.
@@ -1514,18 +1518,20 @@ export async function run(token, { signal, api = API } = {}) {
           return pushTo(screen, { says: SAY.tooPoor(CHIPS[0]) });
         }
 
-        const alone = action.baucua === 'solo';
-        const table = newGame(screen, alone ? 1 : BAUCUA_SEATS, CHIPS[0], 'baucua');
-        table.solo = alone;
+        if (action.baucua === 'world') {
+          // Nothing is opened. There is one sòng, it is already going, and this is a door.
+          const song = worldSong();
+          screen.gameId = song.id;
+          seatWatchers(song);
+          await pushGame(song);
+          keepRolling(song).catch((problem) => console.error(String(problem)));
+          return;
+        }
+
+        const table = newGame(screen, 1, CHIPS[0], 'baucua');
+        table.solo = true;
         screen.gameId = table.id;
         startBaucua(table);
-
-        if (!alone) {
-          const invitation = await send(
-            table.conversationId, SAY.openedBaucua(who.displayName), JOIN(table.id),
-            null, [who.userId]);
-          table.invitationId = invitation?.id ?? null;
-        }
 
         await pushTo(screen);
         await pushLobbies();
@@ -1574,6 +1580,10 @@ export async function run(token, { signal, api = API } = {}) {
     const host = game.host.userId === who.userId;
 
     if (game.kind === 'baucua') {
+      // At the world sòng the chair is having it open, so somebody acting on it is somebody at
+      // it. `seatWatchers` keeps that true; this is the belt to its braces.
+      if (game.world && seatOf(game, who.userId) === null) seatWatchers(game);
+
       const seat = seatOf(game, who.userId);
       if (seat === null) {
         // Watching somebody else's table. Nothing here is theirs to press.
@@ -1582,11 +1592,20 @@ export async function run(token, { signal, api = API } = {}) {
       }
 
       if (action.leave) {
+        screen.gameId = null;
+
+        if (game.world) {
+          // Whatever they have on the board stays on it — the throw is coming either way, and
+          // money put down is money put down. Only the chair goes.
+          seatWatchers(game);
+          await pushGame(game);
+          await pushTo(screen);
+          return;
+        }
+
         game.seats.splice(seat, 1);
         delete game.placed[who.userId];
-        screen.gameId = null;
-        // Whoever opened it taking their coat is the table closing. Anybody else leaving is a
-        // chair going back.
+        // Whoever opened a private table taking their coat is that table closing.
         if (host) await endGame(game, 'the table was closed by whoever opened it');
         else { await pushGame(game); await pushTo(screen); await pushLobbies(); }
         return;
@@ -1597,7 +1616,9 @@ export async function run(token, { signal, api = API } = {}) {
 
       // Thrown when somebody says so rather than only when the clock runs out — sitting through
       // twenty-five seconds of nothing because nobody else is betting is not a game.
-      if (action.roll && host) return spin(game);
+      // Only at a private table. The world sòng runs on its own clock and a button that
+      // hurried it along would be one person deciding for everybody else at it.
+      if (action.roll && host && !game.world) return spin(game);
       return;
     }
 
@@ -1852,6 +1873,107 @@ export async function run(token, { signal, api = API } = {}) {
 
   // ---- bầu cua tôm cá ---------------------------------------------------------------------
 
+  /**
+   * The one sòng everybody in the world is at.
+   *
+   * Not a table anybody opens. It exists, it keeps throwing, and walking in is walking in on a
+   * game already going — which is what a sòng is. A table somebody has to open first is a table
+   * that is shut most of the time, and a world table that is shut most of the time is a room
+   * with nobody in it.
+   *
+   * Made once and never swept. It has no room, no host and no invitation: there is nowhere to
+   * post one, because it does not belong to a group.
+   */
+  function worldSong() {
+    let song = games.get(WORLD);
+    if (song) return song;
+
+    song = {
+      id: WORLD,
+      kind: 'baucua',
+      world: true,
+      conversationId: null,
+      state: 'betting',
+      host: { userId: null, displayName: 'Sòng thế giới' },
+      size: 999,
+      stake: CHIPS[0],
+      solo: false,
+      seats: [],
+      hands: null,
+      turn: null,
+      pile: null,
+      passed: new Set(),
+      finished: [],
+      left: new Set(),
+      first: false,
+      opensWith: null,
+      ready: new Set(),
+      paidTo: new Map(),
+      paid: [],
+      placed: {},
+      dice: null,
+      bettingEndsAt: null,
+      invitationId: null,
+      touched: Date.now(),
+    };
+    games.set(WORLD, song);
+    return song;
+  }
+
+  /// Who has it open. The chairs round the world sòng are whoever is looking at it.
+  ///
+  /// A function declaration and not a `const`, like everything else down here. A `const` below
+  /// the endless loop stays in the temporal dead zone for the life of the process — the test at
+  /// the bottom of the suite caught this one before it ever ran.
+  function watchersOf(game) {
+    return [...screens.values()].filter((screen) => screen.gameId === game.id);
+  }
+
+  /// Keeps the chairs the same as the people in them.
+  function seatWatchers(game) {
+    game.seats = watchersOf(game).map((screen) => ({
+      userId: screen.userId, displayName: screen.displayName, bot: false,
+    }));
+  }
+
+  /**
+   * The world sòng, going round.
+   *
+   * Runs while anybody has it open and stops when the last of them leaves — a bowl shaking in an
+   * empty room is work done for nobody, and the next person through the door gets a fresh
+   * window rather than four seconds of somebody else's.
+   */
+  async function keepRolling(game) {
+    if (game.looping) return;
+    game.looping = true;
+
+    try {
+      for (;;) {
+        // Kept going by somebody looking at it, or by money still on it. The second is not
+        // decoration: the last person can walk out with chips down, and a stake that is never
+        // settled is a stake taken. The dice do not care who is watching.
+        const owed = Object.keys(game.placed).some((id) => staked(betsOf(game, id)) > 0);
+        if (!watchersOf(game).length && !owed) {
+          game.bettingEndsAt = null;
+          return;
+        }
+        if (game.state !== 'betting') return;
+
+        if (!game.bettingEndsAt) {
+          game.bettingEndsAt = Date.now() + BETTING_MS;
+          await pushGame(game);
+        }
+
+        const left = game.bettingEndsAt - Date.now();
+        if (left > 0) { await wait(Math.min(left, 500)); continue; }
+
+        await spin(game);
+      }
+    } finally {
+      game.looping = false;
+    }
+  }
+
   /// Everything one person has put down this round, from the order they put it down in.
   ///
   /// Derived rather than stored, so taking a chip back is popping one thing off a list instead
@@ -1872,7 +1994,10 @@ export async function run(token, { signal, api = API } = {}) {
     game.paid = [];
     game.placed = {};
     game.touched = Date.now();
-    game.bettingEndsAt = game.seats.length > 1 ? Date.now() + BETTING_MS : null;
+    // The world sòng always has a clock: it is a table that keeps throwing whether or not
+    // anybody in particular is at it. A private one only needs a clock when there is somebody
+    // to be waited for.
+    game.bettingEndsAt = game.world || game.seats.length > 1 ? Date.now() + BETTING_MS : null;
   }
 
   function startBaucua(game) {
@@ -1924,9 +2049,11 @@ export async function run(token, { signal, api = API } = {}) {
   async function spin(game) {
     if (game.spinning || game.state !== 'betting') return;
 
-    // A throw with nothing on the board is a throw nobody asked for.
-    const anything = game.seats.some((one) => staked(betsOf(game, one.userId)) > 0);
-    if (!anything) return;
+    // A throw with nothing on the board is a throw nobody asked for — at a private table. The
+    // world sòng throws anyway, because somebody walking in should find a game already running
+    // rather than a bowl waiting for them to start it.
+    const anything = Object.keys(game.placed).some((id) => staked(betsOf(game, id)) > 0);
+    if (!anything && !game.world) return;
 
     game.spinning = true;
     try {
@@ -1944,6 +2071,14 @@ export async function run(token, { signal, api = API } = {}) {
       game.touched = Date.now();
       await pushGame(game);
 
+      // And to anybody who put money down and then walked away. Their purse has moved and the
+      // screen they are looking at is not this one — a number changing behind somebody's back
+      // is the one thing a purse must never do.
+      for (const one of game.paid) {
+        const away = screenFor(one.userId);
+        if (away && away.gameId !== game.id) await pushTo(away);
+      }
+
       await wait(SHOW_MS);
       if (game.state !== 'paid') return;
 
@@ -1958,12 +2093,15 @@ export async function run(token, { signal, api = API } = {}) {
   function payBaucua(game) {
     game.paid = [];
 
-    for (const who of game.seats) {
-      const bets = betsOf(game, who.userId);
+    // From what is on the board, not from who is sitting at it. Somebody who put money down and
+    // then closed the widget still had money down, and the dice do not care who is watching.
+    for (const userId of Object.keys(game.placed)) {
+      const bets = betsOf(game, userId);
       const on = staked(bets);
       if (!on) continue;
 
-      const row = rowFor(who.userId, who.displayName);
+      const row = rowFor(userId);
+      const who = { userId, displayName: row.name || 'Ai đó' };
       const worth = boardWorth(bets, game.dice);
       // A loss can only be as large as what is on the board, and the board was checked against
       // the purse when each chip went down. This is the backstop for the seam between the two.
@@ -2083,6 +2221,9 @@ export async function run(token, { signal, api = API } = {}) {
       gameId: game.id,
       size: game.size,
       solo: !!game.solo,
+      // The one everybody is at, as opposed to a private bowl. The widget draws it differently:
+      // there is no throw button on a table that throws on its own.
+      world: !!game.world,
       host: game.host.userId,
       hostName: game.host.displayName,
 
@@ -2281,14 +2422,22 @@ export async function run(token, { signal, api = API } = {}) {
       const idle = Date.now() - (game.touched ?? 0);
 
       if (game.kind === 'baucua') {
-        // The clock running out is the throw. Only ever set when more than one person is at the
-        // table, because alone there is nobody to be waited for.
+        if (game.world) {
+          // Never swept — it is the one table that is always there. Started again if somebody
+          // is looking at it and the loop is not running, which is the seam a lost await or a
+          // failed push would otherwise leave a stalled bowl in.
+          if (watchersOf(game).length && !game.looping) {
+            keepRolling(game).catch((problem) => console.error(String(problem)));
+          }
+          continue;
+        }
+
+        // A private table's clock running out is the throw.
         if (game.state === 'betting' && game.bettingEndsAt && Date.now() >= game.bettingEndsAt) {
           await spin(game);
           continue;
         }
-        // A board nobody has touched. Longer than a card table's wait, because sitting and
-        // watching other people throw is a thing somebody might be doing.
+        // A board nobody has touched.
         if (idle > LOBBY_MS) await endGame(game, 'a sòng nobody was betting at');
         continue;
       }

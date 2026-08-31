@@ -18,9 +18,10 @@ published yet, so only its owner can add it to a conversation — see
 
 **Bầu cua tôm cá**
 
-- **Chơi một mình** — put chips on the six faces and throw when you like.
-- **Mở sòng** — up to eight people from any group betting on the same three dice, a
-  twenty-five second window a round.
+- **Sòng thế giới** — one bowl for everybody, always throwing. Nobody opens it and nobody
+  starts it: walk in, and when the twenty-five second window is open, put chips down. Whoever
+  else is in it can be in any group.
+- **Chơi một mình** — a private bowl where you throw when you like.
 
 A stake on a face comes back with as much again for every die showing it, and goes if none of
 them do. Nothing is taken from anybody's purse until the dice land.
