@@ -1280,3 +1280,182 @@ body {
 }
 
 .chip-pick:disabled { opacity: 0.35; cursor: default; }
+
+/* ---- the plate ------------------------------------------------------------------------------
+ *
+ * The dice are under it and so is everything else about the result: the gold in the purse, the
+ * faces lit on the mat, the line saying what was won. All of it waits. A plate that hid the dice
+ * while the number above it had already changed would be a plate hiding nothing.
+ */
+#plate {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  cursor: grab;
+  touch-action: none;
+  background:
+    radial-gradient(120% 100% at 50% 20%, #f3ece0 0%, #ddd2bd 55%, #b9ab90 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.65), 0 6px 18px rgba(0, 0, 0, 0.45);
+  transition: transform 0.14s ease-out;
+}
+
+#plate span {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  text-indent: 6px;
+  color: rgba(70, 55, 30, 0.32);
+}
+
+/* A rim, so it reads as a dish upside down over a bowl rather than a coloured rectangle. */
+#plate::before {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border-radius: 12px;
+  border: 2px solid rgba(120, 100, 65, 0.22);
+}
+
+#plate.held { cursor: grabbing; transition: none; }
+
+@keyframes lifted {
+  to { transform: translate(78%, -32%) rotate(16deg); opacity: 0; }
+}
+
+#plate.off { animation: lifted 0.42s cubic-bezier(0.4, 0, 0.9, 0.4) forwards; pointer-events: none; }
+
+/* ---- soi cầu -------------------------------------------------------------------------------- */
+
+#bc-tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#bc-tabs button {
+  flex: 1;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 650;
+  font-size: 11.5px;
+  padding: 5px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#bc-tabs button.on {
+  color: var(--rim);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+}
+
+/* Six rows, one a face, newest throw on the left. The shape of a real soi cầu board: a run of
+   marks you can read down a column and across a row without counting anything. */
+#history {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.cau-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 10.5px;
+  color: var(--muted);
+  padding: 0 2px;
+}
+
+.cau-newest { color: var(--gold); font-weight: 700; }
+
+.cau-span { font-variant-numeric: tabular-nums; }
+
+.cau-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+.cau-row { display: flex; align-items: center; gap: 3px; }
+
+/* Face and tally in one block, pinned to the left edge so it survives the scroll. */
+.cau-tag {
+  flex: none;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 5px 0 3px;
+  border-radius: 6px;
+  background: var(--rim);
+  box-shadow: 6px 0 8px -6px rgba(0, 0, 0, 0.55);
+}
+
+.cau-face { display: grid; place-items: center; }
+
+.cau-face .face-art { width: 19px; height: 19px; display: block; }
+
+.cau-cell {
+  flex: none;
+  width: 15px;
+  height: 22px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.045);
+  display: grid;
+  place-items: center;
+  font-size: 9.5px;
+  font-weight: 800;
+  color: transparent;
+}
+
+/* Came up. Two and three get the number on them, because "came up twice" is the thing anybody
+   reading this board is looking for. */
+.cau-cell.hit { background: rgba(233, 196, 106, 0.9); color: #2a1e05; }
+.cau-cell.hit.two { background: #e0a03f; }
+.cau-cell.hit.three { background: var(--danger); color: #2a0d0b; }
+
+.cau-count {
+  min-width: 15px;
+  text-align: right;
+  font-size: 10.5px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* The throw that just happened, so the eye starts in the right place. */
+.cau-cell.now { box-shadow: 0 0 0 1.5px var(--gold-deep); }
+
+.cau-key {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.cau-key-one { display: flex; align-items: center; gap: 4px; }
+
+.cau-key-one .cau-cell { width: 11px; height: 11px; border-radius: 3px; }
+
+.cau-none {
+  text-align: center;
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 18px 8px;
+}

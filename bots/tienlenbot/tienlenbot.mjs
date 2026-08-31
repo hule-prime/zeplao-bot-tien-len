@@ -625,7 +625,19 @@ export const DICE = 3;
 export const ROLL_MS = Number(process.env.TIENLEN_ROLL_MS ?? 1_600);
 
 /// How long a finished throw stays up before the next round opens.
-export const SHOW_MS = Number(process.env.TIENLEN_SHOW_MS ?? 3_500);
+///
+/// Longer than it needs to be for reading a result, because the result is under a plate that
+/// somebody has to lift. Whoever does not lift it has it lifted for them after a moment; this
+/// is the room the two of those need between them.
+export const SHOW_MS = Number(process.env.TIENLEN_SHOW_MS ?? 5_000);
+
+/// How many throws the board of past throws remembers.
+///
+/// Thirty, which is about ten minutes of a sòng and as many columns as fit across a phone. Old
+/// throws say nothing about new ones — the dice have no memory — but reading the run of them is
+/// half of what people are doing while they wait, and a game that hides it is a game pretending
+/// its players are somebody else.
+export const HISTORY = 30;
 
 /// How long a table with more than one person at it takes bets for.
 export const BETTING_MS = Number(process.env.TIENLEN_BETTING_MS ?? 25_000);
@@ -2016,6 +2028,9 @@ export async function run(token, { signal, api = API } = {}) {
   /// somebody has to be waited for; alone, the throw happens when the one person says so.
   function openBets(game) {
     game.state = 'betting';
+    // Counted up, and the whole reason it exists: the page keeps the result covered until
+    // somebody lifts the plate, and it needs a name for the round it has already lifted.
+    game.round = (game.round ?? 0) + 1;
     game.dice = null;
     game.paid = [];
     game.bets = {};
@@ -2105,6 +2120,7 @@ export async function run(token, { signal, api = API } = {}) {
       if (game.state !== 'rolling') return;
 
       game.dice = roll();
+      game.history = [game.dice, ...(game.history ?? [])].slice(0, HISTORY);
       payBaucua(game);
       game.state = 'paid';
       game.touched = Date.now();
@@ -2269,6 +2285,10 @@ export async function run(token, { signal, api = API } = {}) {
       faces: FACES,
       chips: CHIPS,
       dice: game.dice,
+      // Which throw this is, so a page can tell the plate it has lifted from the next one.
+      round: game.round ?? 1,
+      // What has come up lately, newest first.
+      history: game.history ?? [],
       // What is on each face from everybody at the table, so the board reads like a board.
       board: game.seats.reduce((total, one) => {
         const bets = betsOf(game, one.userId);

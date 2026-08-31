@@ -804,7 +804,9 @@ function drawPurse() {
   $('me-name').textContent = z.viewer.displayName || 'Bạn';
 
   const amount = $('purse-amount');
-  amount.textContent = state ? gold(state.gold) : '…';
+  // The number this round paid is under the plate with everything else.
+  const showing = covered() && heldGold !== null ? heldGold : (state ? state.gold : null);
+  amount.textContent = showing === null ? '…' : gold(showing);
 
   // The way to more gold, beside the gold, on every screen and at every balance. A `+` that
   // came and went depending on how much somebody had is a `+` nobody learns is there — and the
@@ -829,8 +831,8 @@ function drawPurse() {
 
   // What just moved. Not on the first push — arriving and being told you have gained ten
   // thousand are different things, and only one of them happened.
-  const moved = purseWas === null ? 0 : state.gold - purseWas;
-  purseWas = state.gold;
+  const moved = purseWas === null || showing === null ? 0 : showing - purseWas;
+  purseWas = showing;
   if (moved) {
     amount.classList.remove('moved');
     void amount.offsetWidth;          // so the same class re-animates rather than sitting still
@@ -1450,6 +1452,29 @@ function drawTabs() {
 
 // ---- bầu cua tôm cá -----------------------------------------------------------------------
 
+/**
+ * Whether the plate is still over this round's result.
+ *
+ * Holds the round number already lifted, so a new throw covers itself again without anybody
+ * having to remember to put the plate back.
+ *
+ * What is under it is not only the dice. The gold has already moved and the mat already knows
+ * which faces came up — so while this is covered the purse shows the number it showed before,
+ * the mat lights nothing, and the line under the bowl says nothing about what was won. A plate
+ * that hid the dice while the number above it had already changed would be a plate hiding
+ * nothing at all.
+ */
+let lifted = 0;
+
+/// The purse as it was before this round paid out, so the number can wait for the plate.
+let heldGold = null;
+
+const covered = () => !!state && state.kind === 'baucua'
+  && state.phase === 'paid' && lifted !== state.round;
+
+/// Which half of the sòng is showing: the mat, or the run of past throws.
+let songTab = 'board';
+
 /// Which chip is being put down. Theirs and local — the table has no opinion about it.
 let chip = null;
 
@@ -1518,6 +1543,9 @@ function drawBaucua() {
   const bowl = $('bowl');
   const dice = $('dice');
   const note = $('bowl-note');
+  const hidden = covered();
+
+  drawPlate(hidden);
 
   bowl.classList.toggle('shaking', state.phase === 'rolling');
   dice.replaceChildren();
@@ -1526,7 +1554,7 @@ function drawBaucua() {
 
   // Three dice, always — an empty bowl before the first throw reads as something not loaded.
   const shown = state.dice || [state.faces[0], state.faces[1], state.faces[2]];
-  const landed = !!state.dice;
+  const landed = !!state.dice && !hidden;
   const hits = landed ? shown.reduce((n, f) => ((n[f] = (n[f] ?? 0) + 1), n), {}) : {};
 
   shown.forEach((face, i) => {
@@ -1563,7 +1591,9 @@ function drawBaucua() {
     stopTumbling();
   }
 
-  if (state.phase === 'paid') {
+  if (hidden) {
+    note.textContent = 'Xóc xong rồi — kéo đĩa ra xem';
+  } else if (state.phase === 'paid') {
     const mine = (state.paid || []).find((one) => one.userId === z.viewer.id);
     if (mine && mine.change) {
       const said = document.createElement('b');
@@ -1598,9 +1628,9 @@ function drawBaucua() {
       const chip = document.createElement('span');
       chip.className = 'punter'
         + (one.id === z.viewer.id ? ' me' : '')
-        + (state.phase === 'paid' && one.change > 0 ? ' up' : '')
-        + (state.phase === 'paid' && one.change < 0 ? ' down' : '');
-      chip.textContent = state.phase === 'paid' && one.change !== null
+        + (!hidden && state.phase === 'paid' && one.change > 0 ? ' up' : '')
+        + (!hidden && state.phase === 'paid' && one.change < 0 ? ' down' : '');
+      chip.textContent = state.phase === 'paid' && one.change !== null && !hidden
         ? `${one.name} ${change(one.change)}`
         : `${one.name} ${one.staked ? gold(one.staked) : '·'}`;
       row.append(chip);
@@ -1608,8 +1638,172 @@ function drawBaucua() {
     $('bowl').append(row);
   }
 
-  drawBoard();
-  drawChips();
+  drawSongTabs();
+  if (songTab === 'cau') drawHistory();
+  else { drawBoard(); drawChips(); }
+}
+
+/**
+ * The plate, and lifting it.
+ *
+ * Dragged off, or tapped — both, because a drag on a frame this size is fiddly and a plate that
+ * only answers to one of the two is a plate somebody prods at. It lifts itself after a moment
+ * for whoever is not looking, so the next round is never waiting on one person's thumb.
+ */
+function drawPlate(hidden) {
+  const plate = $('plate');
+  plate.hidden = !hidden;
+  if (!hidden) { plate.className = ''; plate.style.transform = ''; return; }
+  if (plate.dataset.round === String(state.round)) return;
+
+  plate.dataset.round = String(state.round);
+  plate.className = '';
+  plate.style.transform = '';
+
+  const round = state.round;
+  const lift = () => {
+    if (lifted === round) return;
+    lifted = round;
+    clearTimeout(plate.dataset.timer && Number(plate.dataset.timer));
+    plate.className = 'off';
+    // Redrawn when it is out of the way rather than under it, so the dice land into an empty
+    // bowl and the gold moves onto a screen somebody is looking at.
+    setTimeout(() => { heldGold = null; render(); }, 380);
+  };
+
+  let from = null;
+  plate.onpointerdown = (event) => {
+    from = { x: event.clientX, y: event.clientY };
+    plate.classList.add('held');
+    plate.setPointerCapture(event.pointerId);
+  };
+  plate.onpointermove = (event) => {
+    if (!from) return;
+    const dx = event.clientX - from.x;
+    const dy = event.clientY - from.y;
+    if (Math.hypot(dx, dy) > 34) { from = null; lift(); return; }
+    plate.style.transform = `translate(${dx * 0.7}px, ${dy * 0.7}px) rotate(${dx * 0.06}deg)`;
+  };
+  plate.onpointerup = () => {
+    if (from) { plate.classList.remove('held'); plate.style.transform = ''; lift(); }
+    from = null;
+  };
+  plate.onpointercancel = plate.onpointerup;
+
+  // Nobody's round waits on somebody else's thumb.
+  plate.dataset.timer = String(setTimeout(lift, 2200));
+}
+
+/// Which half of the sòng is showing.
+function drawSongTabs() {
+  const tabs = $('bc-tabs');
+  tabs.replaceChildren();
+
+  const many = (state.history || []).length;
+  for (const [key, label] of [['board', 'Bàn cược'], ['cau', many ? `Soi cầu · ${many}` : 'Soi cầu']]) {
+    const tab = document.createElement('button');
+    tab.className = songTab === key ? 'on' : '';
+    tab.textContent = label;
+    tab.onclick = () => { songTab = key; render(); };
+    tabs.append(tab);
+  }
+
+  $('board').hidden = songTab !== 'board';
+  $('history').hidden = songTab !== 'cau';
+  $('chips').hidden = songTab !== 'board';
+}
+
+/**
+ * The run of past throws: six rows, one a face, newest on the left.
+ *
+ * The shape a real soi cầu board has, and it is the right one — a column is a throw and a row
+ * is a face, so "cua has come up four times running" and "this throw was three of a kind" are
+ * both things you see rather than count.
+ *
+ * The dice have no memory and nothing here predicts anything. Reading it is most of what people
+ * do while they wait, and a game that hides it is a game pretending its players are somebody
+ * else.
+ */
+function drawHistory() {
+  const box = $('history');
+  box.replaceChildren();
+
+  const past = state.history || [];
+  if (!past.length) {
+    const none = document.createElement('div');
+    none.className = 'cau-none';
+    none.textContent = 'Chưa có ván nào. Xóc vài ván là có cầu để soi.';
+    box.append(none);
+    return;
+  }
+
+  // Which end is which, said once at the top, because a board of marks with no direction on it
+  // is a board everybody reads backwards half the time.
+  const head = document.createElement('div');
+  head.className = 'cau-head';
+  const newest = document.createElement('span');
+  newest.className = 'cau-newest';
+  newest.textContent = '\u2190 ván mới nhất';
+  const many = document.createElement('span');
+  many.className = 'cau-span';
+  many.textContent = past.length + ' ván gần đây';
+  head.append(newest, many);
+  box.append(head);
+
+  const grid = document.createElement('div');
+  grid.className = 'cau-grid';
+
+  for (const face of state.faces) {
+    const row = document.createElement('div');
+    row.className = 'cau-row';
+
+    // The face and how often it has come up travel together and stay on screen while the rest
+    // slides, so scrolling back through the run never loses which row is which.
+    const tag = document.createElement('span');
+    tag.className = 'cau-tag';
+    tag.dataset.face = face;
+    const icon = document.createElement('span');
+    icon.className = 'cau-face';
+    icon.append(faceArt(face));
+    const count = document.createElement('span');
+    count.className = 'cau-count';
+    tag.append(icon, count);
+    row.append(tag);
+
+    let total = 0;
+    past.forEach((dice, index) => {
+      const hits = dice.filter((one) => one === face).length;
+      total += hits;
+
+      const cell = document.createElement('span');
+      cell.className = 'cau-cell'
+        + (hits ? ' hit' : '')
+        + (hits === 2 ? ' two' : '')
+        + (hits === 3 ? ' three' : '')
+        + (index === 0 ? ' now' : '');
+      if (hits > 1) cell.textContent = String(hits);
+      row.append(cell);
+    });
+
+    count.textContent = String(total);
+    grid.append(row);
+  }
+
+  box.append(grid);
+
+  // What the two darker colours mean. Three marks of the same face is the moment of the game,
+  // and a board that does not say so is a board somebody has to work out.
+  const key = document.createElement('div');
+  key.className = 'cau-key';
+  for (const [cls, text] of [['', 'ra 1'], ['two', 'ra 2'], ['three', 'ra 3']]) {
+    const one = document.createElement('span');
+    one.className = 'cau-key-one';
+    const dot = document.createElement('i');
+    dot.className = 'cau-cell hit ' + cls;
+    one.append(dot, document.createTextNode(text));
+    key.append(one);
+  }
+  box.append(key);
 }
 
 function drawBoard() {
@@ -1617,7 +1811,9 @@ function drawBoard() {
   board.replaceChildren();
 
   const mine = state.me ? myBets() : {};
-  const hits = state.dice
+  // Nothing lights up while the plate is on. The mat knowing the answer before the bowl does is
+  // the same spoiler by another route.
+  const hits = state.dice && !covered()
     ? state.dice.reduce((n, f) => ((n[f] = (n[f] ?? 0) + 1), n), {})
     : {};
 
@@ -1805,6 +2001,18 @@ z.onState((next) => {
   const held = new Set((next.me && next.me.hand) || []);
   picked = new Set([...picked].filter((card) => held.has(card)));
 
+  // What the purse said before this throw settled it.
+  //
+  // Kept from the push *before* the payout, because the plate has to keep showing it: the gold
+  // moves when the dice land and the dice are under a plate. A number that had already changed
+  // above a plate hiding the dice would be a plate hiding nothing.
+  if (next.kind === 'baucua') {
+    if (next.phase === 'rolling' && state) heldGold = state.gold;
+    if (next.phase === 'betting') heldGold = null;
+  } else {
+    heldGold = null;
+  }
+
   // Whose board is whose.
   //
   // While a betting window is open this page owns its own chips — it drew them, and taking them
@@ -1817,6 +2025,12 @@ z.onState((next) => {
       || !(state && state.kind === 'baucua' && state.gameId === next.gameId);
     if (turned) {
       forgetPending();
+      // Through the shaking and under the plate, the mat goes on showing what was put on it.
+      // Waiting to see how it went while not being able to see what you bet is the one moment
+      // in the round when the board matters most.
+      if (next.phase !== 'betting') {
+        stack = Object.entries(next.me.theirs || {}).map(([face, amount]) => ({ face, amount }));
+      }
     } else if (next.says) {
       // Refused. What is drawn is now a lie, so the bot's board is taken as it stands — one
       // entry a face, which makes undo coarse for a moment and truthful immediately.

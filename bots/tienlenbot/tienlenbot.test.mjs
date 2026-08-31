@@ -11,7 +11,7 @@ import {
   payouts, settlement, dayIn, gold,
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, MIN_STAKE, MAX_STAKE, STAKES, BROKE, ADS_GOLD, asStake,
   FACES, FACE_NAMES, DICE, ROLL_MS, SHOW_MS, CHIPS, roll, faceWorth, boardWorth, staked, tally,
-  chance,
+  chance, HISTORY,
 } from './tienlenbot.mjs';
 
 /// A card by name, which is how anybody talks about one.
@@ -887,4 +887,17 @@ test('the house edge is the one every pavement table plays, and no more', () => 
   // A 216 stake over all 216 throws loses exactly 17 × 216 / 216 = 17 per 216 staked.
   assert.equal(total, -17 * 216);
   assert.equal(-total / (216 * 216), 17 / 216);
+});
+
+test('the board of past throws keeps thirty and forgets the rest', () => {
+  assert.equal(HISTORY, 30);
+
+  let history = [];
+  for (let i = 0; i < 100; i++) {
+    const dice = roll();
+    history = [dice, ...history].slice(0, HISTORY);
+    assert.ok(history.length <= HISTORY);
+    assert.deepEqual(history[0], dice, 'newest first');
+  }
+  assert.equal(history.length, HISTORY);
 });

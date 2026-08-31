@@ -24,7 +24,10 @@ published yet, so only its owner can add it to a conversation — see
 - **Chơi một mình** — a private bowl where you throw when you like.
 
 A stake on a face comes back with as much again for every die showing it, and goes if none of
-them do. Nothing is taken from anybody's purse until the dice land.
+them do. Nothing is taken from anybody's purse until the dice land. The bowl is covered when it
+stops: drag the plate off to see how it went — and until you do, nothing gives it away, not the
+purse and not the mat. **Soi cầu** is the last thirty throws, six rows and a column a throw,
+newest on the left.
 
 Every hand is played for gold. Turning up is worth 10.000 a day, a table against the machines
 pays 2.000 for coming first and takes 2.000 off whoever comes last, and a table between people

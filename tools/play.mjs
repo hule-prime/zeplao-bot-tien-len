@@ -188,6 +188,7 @@ const SHIM = `
   // moment that is otherwise a matter of the deal. Only here; the file the platform writes into
   // a real bundle has nothing of the sort, and nothing in the widget looks for it.
   window.__push = function (state) {
+    window.__last = state;
     listeners.forEach(function (f) { try { f(state); } catch (e) { console.error(e); } });
   };
 
@@ -195,6 +196,7 @@ const SHIM = `
     + '&name=' + encodeURIComponent(name));
   stream.onmessage = function (event) {
     var state = JSON.parse(event.data);
+    window.__last = state;
     listeners.forEach(function (f) { try { f(state); } catch (e) { console.error(e); } });
   };
 })();

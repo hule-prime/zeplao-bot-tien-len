@@ -159,6 +159,24 @@ lúc lên cùng ba con xúc xắc, nên bàn không có "đang chờ ai" và ng�
   còn dưới 3 giây — bàn đặt xong mà chưa kịp gửi là bàn chưa từng đặt.
 - **Bàn là của mọi người.** Ai đặt gì vào cửa nào đều hiện — nửa cái thú của trò này là nhìn
   người khác bỏ tiền vào đâu.
+- **Cái đĩa che cả kết quả, không riêng ba con xúc xắc.** Xóc xong là úp đĩa, kéo ra mới biết ra
+  con gì — đúng cái động tác nặn ở bàn thật. Nhưng che mỗi xúc xắc thì vô nghĩa: còn cái ví đứng
+  ngay trên đầu, còn cửa thắng sáng lên, còn dòng "+40.000 vàng". Bất kỳ chỗ nào trong số đó cũng
+  nói trước kết quả, và người ta sẽ liếc cái ví chứ không thèm kéo đĩa. Nên trong lúc đĩa còn úp:
+  ví hiện **số trước khi thanh toán** (`heldGold`, chốt lại đúng lúc bắt đầu lắc), mặt bàn không
+  cửa nào sáng, hàng người chơi hiện tiền đặt chứ không hiện được mất. Kéo đĩa ra rồi mới trả lại
+  tất cả cùng một lúc. Có kịch bản kiểm đúng chuyện này: đặt 20.000, dưới đĩa ví vẫn 30.000 và
+  không cửa nào sáng; nặn xong mới thành 10.000.
+- **Mặt bàn vẫn hiện tiền mình đặt trong lúc đĩa úp.** Đang hồi hộp chờ mở bát mà không nhớ nổi
+  mình đã bỏ vào cửa nào là lúc cái bàn cần nói nhất. Khi ván chuyển sang lắc, chip tạm trên máy
+  được thay bằng bàn cược chính thức từ bot chứ không bị xoá đi.
+- **Đĩa tự mở sau 2,2 giây.** Kéo được, chạm cũng được — trên khung này kéo hay trượt tay — nhưng
+  một ván chung của cả thế giới thì không thể đứng chờ ngón tay một người.
+- **Soi cầu ba mươi phiên gần nhất.** Sáu hàng, mỗi hàng một con; mỗi cột một ván, **mới nhất bên
+  trái** nên mở tab ra là thấy ngay ván vừa rồi, không phải cuộn. Mặt và tổng số lần ra dính liền
+  ở mép trái và không trôi theo khi cuộn ngang — cuộn về quá khứ mà mất hàng nào là hàng nào thì
+  bảng đó vô dụng. Ra hai và ra ba đổi màu và có số trên ô, vì "về đôi" mới là thứ người soi cầu
+  đi tìm; có chú thích màu ngay dưới bảng. Bot giữ vòng ba mươi ván (`HISTORY`), mới nhất đứng đầu.
 - **Sáu linh vật vẽ bằng SVG**, không dùng emoji. Emoji do hãng làm điện thoại vẽ, nên cùng một
   bàn là sáu phong cách khác nhau trên sáu máy khác nhau và không cái nào là phong cách của bàn
   này. Với lại **không có emoji quả bầu**, mà bầu là chữ đầu tiên của tên trò.
