@@ -959,12 +959,17 @@ export async function run(token, { signal, api = API } = {}) {
       const read = JSON.parse(readFileSync(SCORES, 'utf8'));
       const kept = read && read.people ? read : { people: {}, offset: 0 };
       kept.greeted = kept.greeted ?? {};
+      // The world bowl's run of throws. On disk with the gold rather than in memory with the
+      // tables: the bowl is permanent and a deploy takes minutes, but a soi cầu board that
+      // starts again empty every deploy is a board nobody can use — the whole point of it is
+      // that it reaches further back than the session looking at it.
+      kept.cau = Array.isArray(kept.cau) ? kept.cau.slice(0, HISTORY) : [];
       return kept;
     } catch {
       // No file yet, or one somebody edited into nonsense. An empty ledger is the honest
       // starting point — refusing to run because a scoreboard is missing would take the games
       // down with it.
-      return { people: {}, offset: 0, greeted: {} };
+      return { people: {}, offset: 0, greeted: {}, cau: [] };
     }
   })();
 
@@ -1953,6 +1958,8 @@ export async function run(token, { signal, api = API } = {}) {
       bets: {},
       betAt: {},
       dice: null,
+      // Picked up where the last run of the bot left it, so a deploy costs the board nothing.
+      history: scores.cau ?? [],
       bettingEndsAt: null,
       invitationId: null,
       touched: Date.now(),
@@ -2121,6 +2128,9 @@ export async function run(token, { signal, api = API } = {}) {
 
       game.dice = roll();
       game.history = [game.dice, ...(game.history ?? [])].slice(0, HISTORY);
+      // Only the world bowl is kept. A private bowl belongs to one person for as long as they
+      // have it open, and its run of throws goes when they close it, the same as the bowl does.
+      if (game.world) { scores.cau = game.history; saveScores(); }
       payBaucua(game);
       game.state = 'paid';
       game.touched = Date.now();

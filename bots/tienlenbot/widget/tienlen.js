@@ -1464,6 +1464,10 @@ function drawTabs() {
  * that hid the dice while the number above it had already changed would be a plate hiding
  * nothing at all.
  */
+// How long a plate sits there before it lifts itself. Long enough to be worth dragging, short
+// enough that a bowl the whole world is watching never waits on one person's thumb.
+const NAN_MS = 3400;
+
 let lifted = 0;
 
 /// The purse as it was before this round paid out, so the number can wait for the plate.
@@ -1661,37 +1665,77 @@ function drawPlate(hidden) {
   plate.style.transform = '';
 
   const round = state.round;
-  const lift = () => {
+  let timer = 0;
+
+  // `fling` carries the drag on in the direction it was going. Without it the plate would run
+  // the canned lift, which starts by sliding back the way it came — across the dice that were
+  // just uncovered.
+  const open = (fling) => {
     if (lifted === round) return;
     lifted = round;
-    clearTimeout(plate.dataset.timer && Number(plate.dataset.timer));
-    plate.className = 'off';
+    clearTimeout(timer);
+    plate.classList.remove('held');
+    if (fling) { plate.style.transform = fling; plate.classList.add('gone'); }
+    else { plate.classList.add('off'); }
     // Redrawn when it is out of the way rather than under it, so the dice land into an empty
     // bowl and the gold moves onto a screen somebody is looking at.
     setTimeout(() => { heldGold = null; render(); }, 380);
   };
 
+  // Off the dice, not off a few pixels.
+  //
+  // The plate goes when all three are showing and not before. Dragged an inch and gone was the
+  // gesture cut off at its start: the whole of nặn is the slow part, and a plate that leaves
+  // before the answer is out has taken the game's one moment away.
+  const clear = () => {
+    const dish = plate.getBoundingClientRect();
+    const dice = $('dice').getBoundingClientRect();
+    if (!dice.width) return true;
+    return dish.right <= dice.left || dish.left >= dice.right
+      || dish.bottom <= dice.top || dish.top >= dice.bottom;
+  };
+
   let from = null;
+  let moved = 0;
+
   plate.onpointerdown = (event) => {
+    if (lifted === round) return;
     from = { x: event.clientX, y: event.clientY };
+    moved = 0;
+    // Not while somebody has hold of it. Pulling a plate out of a hand that is pulling it is
+    // the one way this could feel worse than not being able to drag it at all.
+    clearTimeout(timer);
     plate.classList.add('held');
     plate.setPointerCapture(event.pointerId);
   };
+
   plate.onpointermove = (event) => {
     if (!from) return;
     const dx = event.clientX - from.x;
     const dy = event.clientY - from.y;
-    if (Math.hypot(dx, dy) > 34) { from = null; lift(); return; }
-    plate.style.transform = `translate(${dx * 0.7}px, ${dy * 0.7}px) rotate(${dx * 0.06}deg)`;
+    moved = Math.max(moved, Math.hypot(dx, dy));
+    plate.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx * 0.025}deg)`;
+    if (clear()) {
+      from = null;
+      open(`translate(${dx * 1.8}px, ${dy * 1.8}px) rotate(${dx * 0.05}deg)`);
+    }
   };
+
   plate.onpointerup = () => {
-    if (from) { plate.classList.remove('held'); plate.style.transform = ''; lift(); }
+    if (!from) return;
     from = null;
+    plate.classList.remove('held');
+    // A finger put on it and not moved is somebody asking to see it, and that is a whole
+    // gesture rather than half of one.
+    if (moved < 9) { open(); return; }
+    // Let go halfway and it settles back over the bowl, having given nothing away. The round
+    // goes on either way, so the only thing lost is the look at it.
+    plate.style.transform = '';
+    timer = setTimeout(open, NAN_MS);
   };
   plate.onpointercancel = plate.onpointerup;
 
-  // Nobody's round waits on somebody else's thumb.
-  plate.dataset.timer = String(setTimeout(lift, 2200));
+  timer = setTimeout(open, NAN_MS);
 }
 
 /// Which half of the sòng is showing.
@@ -2029,13 +2073,13 @@ z.onState((next) => {
       // Waiting to see how it went while not being able to see what you bet is the one moment
       // in the round when the board matters most.
       if (next.phase !== 'betting') {
-        stack = Object.entries(next.me.theirs || {}).map(([face, amount]) => ({ face, amount }));
+        stack = Object.entries((mine && mine.theirs) || {}).map(([face, amount]) => ({ face, amount }));
       }
     } else if (next.says) {
       // Refused. What is drawn is now a lie, so the bot's board is taken as it stands — one
       // entry a face, which makes undo coarse for a moment and truthful immediately.
       forgetPending();
-      stack = Object.entries(mine.theirs || {}).map(([face, amount]) => ({ face, amount }));
+      stack = Object.entries((mine && mine.theirs) || {}).map(([face, amount]) => ({ face, amount }));
     }
   } else if (stack.length || sending) {
     forgetPending();

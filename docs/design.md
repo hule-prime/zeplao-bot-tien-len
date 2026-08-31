@@ -170,13 +170,25 @@ lúc lên cùng ba con xúc xắc, nên bàn không có "đang chờ ai" và ng�
 - **Mặt bàn vẫn hiện tiền mình đặt trong lúc đĩa úp.** Đang hồi hộp chờ mở bát mà không nhớ nổi
   mình đã bỏ vào cửa nào là lúc cái bàn cần nói nhất. Khi ván chuyển sang lắc, chip tạm trên máy
   được thay bằng bàn cược chính thức từ bot chứ không bị xoá đi.
-- **Đĩa tự mở sau 2,2 giây.** Kéo được, chạm cũng được — trên khung này kéo hay trượt tay — nhưng
-  một ván chung của cả thế giới thì không thể đứng chờ ngón tay một người.
+- **Phải kéo tới lúc hở hết ba con thì đĩa mới đi.** Bản đầu chỉ cần nhích 34px là đĩa bay mất,
+  tức là cắt cụt đúng cái động tác mà cả tính năng này sinh ra để có. Giờ đĩa bám theo ngón tay
+  1:1 và chỉ rời đi khi hình chữ nhật của nó **không còn giao với hình chữ nhật của xúc xắc** —
+  đo bằng `getBoundingClientRect`, không phải bằng một con số ngưỡng đoán mò. Thả tay giữa chừng
+  thì đĩa trượt về úp lại, chưa lộ gì. Chạm mà không kéo vẫn mở luôn: đó là một động tác trọn
+  vẹn, khác với một cú kéo dở dang.
+- **Đĩa tự mở sau 3,4 giây, và không bao giờ trong lúc có ngón tay đang giữ.** Một ván chung của
+  cả thế giới không thể đứng chờ tay một người; nhưng giật cái đĩa khỏi bàn tay đang kéo nó thì
+  còn tệ hơn là không cho kéo.
 - **Soi cầu ba mươi phiên gần nhất.** Sáu hàng, mỗi hàng một con; mỗi cột một ván, **mới nhất bên
   trái** nên mở tab ra là thấy ngay ván vừa rồi, không phải cuộn. Mặt và tổng số lần ra dính liền
   ở mép trái và không trôi theo khi cuộn ngang — cuộn về quá khứ mà mất hàng nào là hàng nào thì
   bảng đó vô dụng. Ra hai và ra ba đổi màu và có số trên ô, vì "về đôi" mới là thứ người soi cầu
   đi tìm; có chú thích màu ngay dưới bảng. Bot giữ vòng ba mươi ván (`HISTORY`), mới nhất đứng đầu.
+- **Cầu nằm trên đĩa cứng, cạnh sổ vàng.** Sòng thế giới là vĩnh viễn, một lần deploy thì không:
+  bảng cầu bắt đầu lại từ trống rỗng sau mỗi lần cập nhật là bảng nhớ ngắn hơn người đang đọc nó,
+  tức là vô dụng. Nên nó đi cùng vàng xuống `scores.json` chứ không nằm cùng các bàn trong bộ nhớ.
+  Chỉ sòng thế giới thôi — bát riêng của một người là của riêng người đó trong lúc họ mở, đem ván
+  của họ nhét vào cầu chung là đem buổi chiều của một người vào lịch sử của tất cả.
 - **Sáu linh vật vẽ bằng SVG**, không dùng emoji. Emoji do hãng làm điện thoại vẽ, nên cùng một
   bàn là sáu phong cách khác nhau trên sáu máy khác nhau và không cái nào là phong cách của bàn
   này. Với lại **không có emoji quả bầu**, mà bầu là chữ đầu tiên của tên trò.
@@ -221,6 +233,8 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | Chào hỏi chỉ dựa vào việc không replay | Một lớp bảo vệ là không đủ cho thứ gửi tin nhắn tới phòng đầy người. Giờ ghi nhớ phòng nào đã chào, và đánh dấu sẵn mọi phòng đang ở lúc khởi động |
 | `enable --now` rồi `restart` ngay | Deploy **lần nào cũng fail một lần** rồi tự lành sau 5 giây — tức là log failure không còn ai đọc |
 | `seat.conversationId` | Ghi ở ba chỗ, đọc ở không chỗ nào. Đúng loại field sẽ mốc rồi có ngày bị tin |
+| Đọc xuyên `next.me` không kiểm tra | Người **xem** sòng có `me: null`, còn push chung thì không có `me`. `next.me.theirs` ném `TypeError`, mà một cú ném trong `onState` là dừng luôn cả `render` — nên bàn **đứng nguyên ván trước**, tiền cược ván cũ còn nằm đó. Nó không trông giống lỗi, nó trông giống bàn bị kẹt, nên được báo về đúng như thế |
+| Đĩa nặn bay mất sau 34px | Cắt cụt đúng cái động tác mà cả tính năng sinh ra để có. Ngưỡng đoán mò thay cho phép đo: cái phải hỏi là "đã hở hết ba con chưa", không phải "đã kéo đủ xa chưa" |
 
 Và một luật rút ra từ carobot, có test canh:
 

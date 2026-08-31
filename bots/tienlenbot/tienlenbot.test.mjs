@@ -901,3 +901,51 @@ test('the board of past throws keeps thirty and forgets the rest', () => {
   }
   assert.equal(history.length, HISTORY);
 });
+
+test('the run of throws is written down, not kept in the head', () => {
+  // The world bowl is permanent and a deploy is not. A soi cầu board that starts again empty
+  // every time the bot restarts is a board reaching back less far than the person reading it,
+  // which is worth nothing — so it goes on disk with the gold rather than in memory with the
+  // tables. Pinned at three points, because it takes all three to work: read at start, seeded
+  // into the bowl, written after a throw.
+  const source = readFileSync(new URL('./tienlenbot.mjs', import.meta.url), 'utf8');
+
+  assert.match(source, /kept\.cau = Array\.isArray\(kept\.cau\)/,
+    'the ledger no longer reads a run of throws back');
+  assert.match(source, /history: scores\.cau/,
+    'the world bowl no longer starts from what was written down');
+  assert.match(source, /game\.world.*scores\.cau = game\.history.*saveScores\(\)/s,
+    'a throw is no longer written down');
+
+  // And only the world one. A private bowl belongs to one person for as long as they have it
+  // open; writing its throws into the shared board would put one person's afternoon into
+  // everybody else's history.
+  const at = source.indexOf('scores.cau = game.history');
+  assert.ok(source.lastIndexOf('game.world', at) > at - 60,
+    'the run of throws is written for bowls that are not the world one');
+});
+
+test('a watcher has no `me`, and the page never reads through it on a bầu cua push', () => {
+  // The one crash that got out. Somebody watching the world bowl gets `me: null`, and the
+  // shared push has no `me` at all — reading `next.me.theirs` threw, and a throw inside onState
+  // stops the render, so the table froze on the round before with the last round's stakes still
+  // on it. It looked like a stuck board rather than an error, which is why it was reported as
+  // one.
+  const widget = readFileSync(new URL('./widget/tienlen.js', import.meta.url), 'utf8');
+
+  for (const match of widget.matchAll(/next\.me\./g)) {
+    const before = widget.slice(Math.max(0, match.index - 26), match.index);
+    assert.ok(/next\.me &&\s*$/.test(before),
+      `read through next.me with nothing checking it, at ${match.index}: ...${before}next.me.`);
+  }
+
+  // The bầu cua half of onState, where a watcher actually turns up.
+  const from = widget.indexOf("if (next.kind === 'baucua') {\n    const mine = next.me;");
+  assert.ok(from !== -1, 'the board-handover block moved');
+  const block = widget.slice(from, widget.indexOf('\n  } else if (stack.length', from));
+  for (const match of block.matchAll(/\bmine\./g)) {
+    const before = block.slice(Math.max(0, match.index - 12), match.index);
+    assert.ok(/mine &&\s*$/.test(before),
+      `read through mine with nothing checking it: ...${before}mine.`);
+  }
+});

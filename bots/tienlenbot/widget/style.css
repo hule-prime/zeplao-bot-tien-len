@@ -1326,6 +1326,15 @@ body {
 
 #plate.off { animation: lifted 0.42s cubic-bezier(0.4, 0, 0.9, 0.4) forwards; pointer-events: none; }
 
+/* Slid off by hand. Carries on the way the finger was going rather than running the canned
+   lift, which would start by crossing back over the dice it just uncovered. After .held, so it
+   wins the transition back. */
+#plate.gone {
+  transition: transform 0.34s ease-out, opacity 0.34s ease-out;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ---- soi cầu -------------------------------------------------------------------------------- */
 
 #bc-tabs {
