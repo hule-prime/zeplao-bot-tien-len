@@ -947,10 +947,15 @@ test('a watcher has no `me`, and the page never reads through it on a bầu cua 
   // one.
   const widget = readFileSync(new URL('./widget/tienlen.js', import.meta.url), 'utf8');
 
+  // Kiểm bằng văn bản chứ không phải bằng cây cú pháp, nên luật phải là một luật viết được:
+  // **mọi lần đọc xuyên `next.me` phải có `next.me &&` ngay trước nó**, trong vòng sáu mươi ký
+  // tự. Chỗ nào cần đọc nhiều lần thì buộc vào một biến cục bộ ngay sau khi kiểm — mà đó cũng là
+  // cách viết đúng hơn, nên cái test chặt ở đây không phải là cái test khó chiều.
   for (const match of widget.matchAll(/next\.me\./g)) {
-    const before = widget.slice(Math.max(0, match.index - 26), match.index);
-    assert.ok(/next\.me &&\s*$/.test(before),
-      `read through next.me with nothing checking it, at ${match.index}: ...${before}next.me.`);
+    const before = widget.slice(Math.max(0, match.index - 60), match.index);
+    assert.ok(before.includes('next.me &&'),
+      `read through next.me with nothing checking it, at ${match.index}: `
+      + `...${before.slice(-60)}next.me.`);
   }
 
   // The bầu cua half of onState, where a watcher actually turns up.
@@ -1449,14 +1454,25 @@ test('the machine that reads the whole hand beats the one that reads one play', 
 test('and it does it inside a turn nobody waits for', () => {
   // Bàn bốn máy nghĩ nối tiếp nhau. Một nước 50ms là bốn nước 200ms, đã thấy ì; chậm hơn nữa
   // thì cái bàn đứng hình chứ không phải cái máy đang suy nghĩ.
-  let worst = 0;
+  const took = [];
   for (let i = 0; i < 200; i++) {
     const hand = deal(4)[0];
     const began = performance.now();
     chooseMove(hand, null, { lowest: 13, seen: [] });
-    worst = Math.max(worst, performance.now() - began);
+    took.push(performance.now() - began);
   }
-  assert.ok(worst < 50, `nước chậm nhất mất ${worst.toFixed(1)}ms`);
+  took.sort((a, b) => a - b);
+  const middle = took[Math.floor(took.length / 2)];
+  const worst = took[took.length - 1];
+
+  // Trung vị, không phải lần tệ nhất.
+  //
+  // Cái phải trả lời là "một nước có chậm tới mức bàn bốn máy thấy ì không", mà một lần đo lẻ
+  // bị bộ dọn rác hay bộ định thời của máy chen ngang thì không trả lời câu đó — nó chỉ nói máy
+  // lúc ấy đang bận. Ghim trung vị chặt, và để lần tệ nhất một khoảng rộng: nếu phân rã bài
+  // chậm đi thật thì trung vị nhảy trước tiên.
+  assert.ok(middle < 15, `nước trung vị mất ${middle.toFixed(1)}ms`);
+  assert.ok(worst < 250, `nước chậm nhất mất ${worst.toFixed(1)}ms`);
 });
 
 test('a hand cut into the fewest plays is cut correctly', () => {

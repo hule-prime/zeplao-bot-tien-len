@@ -31,7 +31,10 @@ money taken rather than money lost.
 - Nine cards each, ten for whoever starts. Four turns each: take the card the player before
   threw — only if it makes a phỏm on the spot — or draw from the nọc, then throw one away.
 - The hand you hold is drawn as it counts: phỏm lit, junk dimmed, and the points you are still
-  carrying written beside your name. **Ù** — nothing left over — stops the hand and takes
+  carrying written beside your name. The card you take comes up large and face down — squeeze it
+  off to see it, or turn squeezing off and it just arrives.
+- **Trình**: before the fourth turn's discard everybody lays their phỏm face up, so the rest of
+  the table can see what is down, what their junk fits onto, and what is safe to throw. **Ù** — nothing left over — stops the hand and takes
   double from everybody. **Móm** — no phỏm at all — loses double. Throwing the card somebody
   ù's on, or feeding the same player three times, is **đền**: you pay for the table.
 

@@ -42,6 +42,18 @@ function gold(amount) {
 /// Keyed by table and seat, and emptied when the table is dealt again. `render` runs on every
 /// push and on every tab, so without this a win would float up the screen once a second for as
 /// long as anybody looked at it.
+/// Ván nào đã chạy hiệu ứng chia bài rồi. `drawHand` dựng lại tay bài ở **mỗi** push, nên nếu
+/// không nhớ thì mười ba lá bay vào lại từ đầu mỗi lần có ai đó đánh một lá.
+let dealtFor = null;
+
+/// Tay bài ở lần đẩy trước, và lá vừa về.
+///
+/// Bot không nói "bạn vừa bốc được con này" — nó chỉ đẩy cả tay bài mới. Lá vừa về là hiệu của
+/// hai tay, và đó cũng là cách duy nhất biết được, vì bốc và ăn về phía trang này trông y hệt
+/// nhau: tay dài thêm một lá.
+let heldHand = null;
+let peeked = null;
+
 let floated = new Set();
 let floatedFor = null;
 
@@ -418,6 +430,26 @@ function chairOf(seat, at, announce) {
     chair.append(ate);
   }
 
+  // Trình: phỏm đã mở ra cho cả bàn, ở vòng bốn. Vẽ nhỏ ngay dưới ghế người ta, vì cái phải trả
+  // lời là "gửi được lá rác của mình vào đâu" — mà muốn trả lời thì phải nhìn thấy chúng.
+  if (phom() && (seat.shown || []).length) {
+    const laid = document.createElement('div');
+    laid.className = 'shown';
+    for (const meld of seat.shown) {
+      const one = document.createElement('span');
+      one.className = 'meld';
+      one.textContent = meld.map(nameOfCard).join(' ');
+      laid.append(one);
+    }
+    chair.append(laid);
+  } else if (phom() && seat.shown) {
+    // Trình rồi mà không có phỏm nào: móm, và cả bàn thấy điều đó.
+    const none = document.createElement('div');
+    none.className = 'shown mom';
+    none.textContent = 'móm';
+    chair.append(none);
+  }
+
   // What going out was worth. Shown the moment they went out rather than at the end, because
   // that is the moment it was won — waiting for the last two to finish makes the number a
   // summary of something that happened rather than the thing happening.
@@ -556,13 +588,25 @@ function drawHand() {
     ? [...state.me.melds.flat(), ...cards.filter((card) => !inMeld.has(card))]
     : cards;
 
-  for (const card of order) {
+  // Chia bài: mười ba lá bay vào, lá này sau lá kia.
+  //
+  // Chỉ một lần cho mỗi ván. `drawHand` dựng lại cả tay ở mỗi push — mà một bàn bốn người thì có
+  // hàng chục push một ván — nên không nhớ thì bài bay vào lại từ đầu mỗi khi ai đó đánh một lá,
+  // và cái đang đọc dở nhảy khỏi tay người ta.
+  const dealing = state.phase === 'playing' && state.gameId !== dealtFor;
+  if (dealing) dealtFor = state.gameId;
+
+  order.forEach((card, index) => {
     const el = cardOf(card, picked.has(card) ? 'up' : '');
     if (state.opensWith === card) el.classList.add('opens');
     if (phom()) el.classList.add(inMeld.has(card) ? 'melded' : 'junk');
+    if (dealing) {
+      el.classList.add('dealing');
+      el.style.setProperty('--i', String(index));
+    }
     el.onclick = () => tap(card);
     fan.append(el);
-  }
+  });
   box.append(fan);
 }
 
@@ -1122,6 +1166,27 @@ const DAILY = 10000;
 
 /// The answer to the one question that is asked before another one is. Everything else is a tap
 /// that does the thing, so nothing else has to be remembered between screens.
+/**
+ * Có nặn hay không, nhớ trên máy người dùng.
+ *
+ * Nặn là cái thú, nhưng đó là cái thú của ván đầu tiên và của người đang rảnh. Ai chơi nhanh thì
+ * mỗi lượt thêm một thao tác là một thao tác thừa — nên tắt được, và tắt rồi thì tắt cả cái đĩa
+ * bầu cua luôn, vì hai chỗ ấy là cùng một động tác.
+ *
+ * `localStorage` bọc trong try/catch: có trình duyệt chặn hẳn, và một cái bàn không mở được vì
+ * không đọc nổi một tuỳ chọn là một cái bàn hỏng vì một thứ không quan trọng.
+ */
+const SQUEEZE = 'tienlen:nan';
+let squeezing = true;
+try {
+  squeezing = localStorage.getItem(SQUEEZE) !== '0';
+} catch (no) { /* không đọc được thì cứ để mặc định */ }
+
+function setSqueezing(on) {
+  squeezing = !!on;
+  try { localStorage.setItem(SQUEEZE, on ? '1' : '0'); } catch (no) { /* không lưu được cũng chạy */ }
+}
+
 let seatsWanted = 4;
 
 /// Which card game the seat count and the stake are being chosen for. Two games share those two
@@ -1248,6 +1313,12 @@ function drawMenu() {
     // Both ways in are dark when there is nothing to play with, and a dark card with no line
     // under it is a screen that has refused somebody without telling them what to do about it.
     // The explanation used to live one screen further in — behind the cards they cannot press.
+    // Bật lại cái nặn.
+    //
+    // Tắt được ở ngay chỗ đang nặn, nên bật lại cũng phải có một chỗ — mà chỗ ấy không thể là
+    // chỗ cũ, vì tắt rồi thì cái màn ấy không hiện ra nữa. Đây là màn đầu, ai cũng đi qua.
+    body.append(squeezeRow());
+
     if (purse < cheapest) {
       body.append(stepNote(state.daily > 0
         ? `Bạn có ${gold(purse)} vàng, chưa đủ vào bàn nào — nhận quà mỗi ngày ở trên đã.`
@@ -1379,6 +1450,27 @@ function drawMenu() {
       ? `Cần ít nhất ${gold(floor)} vàng mới mở được bàn.`
       : `Tự nhập từ ${gold(floor)} đến ${gold(roof)} vàng. Bạn có ${gold(purse)}.`));
   }
+}
+
+/// Nặn bài: bật hay tắt, ở một chỗ ai cũng đi qua.
+function squeezeRow() {
+  const row = document.createElement('label');
+  row.className = 'setting';
+
+  const tick = document.createElement('input');
+  tick.type = 'checkbox';
+  tick.checked = squeezing;
+  tick.onchange = () => { setSqueezing(tick.checked); render(); };
+
+  const what = document.createElement('span');
+  what.textContent = 'Nặn bài';
+  const why = document.createElement('i');
+  why.textContent = squeezing
+    ? 'kéo mới thấy lá vừa bốc, và mới mở được đĩa bầu cua'
+    : 'lá bốc lên là thấy ngay, đĩa bầu cua tự mở';
+
+  row.append(tick, what, why);
+  return row;
 }
 
 /// Opening a table, for whichever of the two games the menu walked in from.
@@ -1761,12 +1853,18 @@ function drawTabs() {
 // enough that a bowl the whole world is watching never waits on one person's thumb.
 const NAN_MS = 3400;
 
+/// Lá bốc lên tự lật sau bằng ấy, nếu không ai nặn. Ngắn hơn cái đĩa bầu cua: đây là lá của
+/// riêng mình và không ai đợi nó, nhưng đợi lâu quá thì chính mình bị chặn.
+const PEEK_MS = 3000;
+
 let lifted = 0;
 
 /// The purse as it was before this round paid out, so the number can wait for the plate.
 let heldGold = null;
 
-const covered = () => !!state && state.kind === 'baucua'
+// Tắt nặn thì không có đĩa nào cả — chứ không phải úp xuống rồi mở ngay. Úp một phần mười giây
+// rồi bật lên là một cái nháy, và một cái nháy thì khó chịu hơn hẳn không có gì.
+const covered = () => squeezing && !!state && state.kind === 'baucua'
   && state.phase === 'paid' && lifted !== state.round;
 
 /// Which half of the sòng is showing: the mat, or the run of past throws.
@@ -2028,7 +2126,99 @@ function drawPlate(hidden) {
   };
   plate.onpointercancel = plate.onpointerup;
 
-  timer = setTimeout(open, NAN_MS);
+  timer = setTimeout(open, squeezing ? NAN_MS : 0);
+}
+
+/**
+ * Nặn lá vừa bốc.
+ *
+ * Cùng động tác với cái đĩa bầu cua và cùng một luật: kéo tới lúc **hở hết** thì lá mới lật, thả
+ * tay giữa chừng thì lớp úp trượt về che lại. Khác một chỗ — ở đây chỉ có một lá và nó nhỏ, nên
+ * lá được phóng to hẳn lên giữa bàn chứ không nặn ngay trong tay: nặn một hình chữ nhật rộng bốn
+ * mươi tư pixel thì không ai nặn được gì.
+ *
+ * Nó **không chặn bàn**: người ta vẫn bấm được nút bên dưới, và sau ba giây nó tự mở rồi tự đi.
+ * Một cái thú mà bắt cả bàn đợi thì không còn là cái thú.
+ */
+function drawPeek() {
+  const box = $('peek');
+  if (!peeked || !phom()) { box.hidden = true; box.replaceChildren(); return; }
+
+  const once = `peek:${state.gameId}:${peeked.card}`;
+  if (box.dataset.at === once) return;
+  box.dataset.at = once;
+  box.hidden = false;
+  box.replaceChildren();
+
+  const stage = document.createElement('div');
+  stage.className = 'peek-card';
+
+  const face = cardOf(peeked.card, 'big-card');
+  const cover = document.createElement('div');
+  cover.className = 'peek-cover';
+  stage.append(face, cover);
+
+  const note = document.createElement('div');
+  note.className = 'peek-note';
+  note.textContent = 'Kéo ra xem';
+
+  const off = document.createElement('label');
+  off.className = 'peek-off';
+  const tick = document.createElement('input');
+  tick.type = 'checkbox';
+  tick.onchange = () => {
+    setSqueezing(!tick.checked);
+    if (tick.checked) { peeked = null; render(); }
+  };
+  off.append(tick, document.createTextNode('Không cần nặn nữa'));
+
+  box.append(stage, note, off);
+
+  let timer = 0;
+  const open = () => {
+    if (peeked && peeked.open) return;
+    if (peeked) peeked.open = true;
+    clearTimeout(timer);
+    cover.classList.add('gone');
+    note.textContent = nameOfCard(peeked ? peeked.card : 0);
+    // Ra khỏi màn hình sau khi đã nhìn thấy. Nó là một khoảnh khắc, không phải một màn hình.
+    setTimeout(() => { peeked = null; render(); }, 900);
+  };
+
+  // Kéo tới lúc mép lớp úp qua khỏi lá bài thì mới lật, y như cái đĩa.
+  let from = null;
+  let moved = 0;
+  cover.onpointerdown = (event) => {
+    from = { x: event.clientX, y: event.clientY };
+    moved = 0;
+    clearTimeout(timer);
+    cover.classList.add('held');
+    cover.setPointerCapture(event.pointerId);
+  };
+  cover.onpointermove = (event) => {
+    if (!from) return;
+    const dx = event.clientX - from.x;
+    const dy = event.clientY - from.y;
+    moved = Math.max(moved, Math.hypot(dx, dy));
+    cover.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx * 0.05}deg)`;
+
+    const lid = cover.getBoundingClientRect();
+    const card = face.getBoundingClientRect();
+    const clear = lid.right <= card.left || lid.left >= card.right
+      || lid.bottom <= card.top || lid.top >= card.bottom;
+    if (clear) { from = null; open(); }
+  };
+  cover.onpointerup = () => {
+    if (!from) return;
+    from = null;
+    cover.classList.remove('held');
+    if (moved < 9) { open(); return; }
+    cover.style.transform = '';
+    timer = setTimeout(open, PEEK_MS);
+  };
+  cover.onpointercancel = cover.onpointerup;
+
+  timer = setTimeout(open, PEEK_MS);
 }
 
 /// Which half of the sòng is showing.
@@ -2315,6 +2505,7 @@ function render() {
   drawBar();
   drawButtons();
   drawResult();
+  drawPeek();
 
   if (state.phase === 'playing') {
     tick();
@@ -2337,6 +2528,30 @@ z.onState((next) => {
   // Cards picked up out of a hand that has since been dealt again are not cards.
   const held = new Set((next.me && next.me.hand) || []);
   picked = new Set([...picked].filter((card) => held.has(card)));
+
+  // Lá vừa bốc lên, hoặc vừa ăn được.
+  //
+  // Nhận ra bằng cách so tay bài với lần đẩy trước — bot không gửi riêng "lá này vừa về", và
+  // đúng ra là không cần: tay dài thêm đúng một lá thì lá thừa ra chính là nó. Chỉ nặn lá của
+  // *mình*, chỉ ở phỏm, và chỉ khi vừa xong nửa lấy bài của lượt mình.
+  const seated = next.kind === 'phom' && next.me && Array.isArray(next.me.hand) ? next.me : null;
+  if (seated) {
+    const before = next.gameId === (state && state.gameId) ? heldHand : null;
+    if (before && next.step === 'throw' && next.turn === seated.seat
+      && seated.hand.length === before.length + 1) {
+      const fresh = seated.hand.filter((card) => !before.includes(card));
+      if (fresh.length === 1 && squeezing) peeked = { card: fresh[0], open: false };
+    }
+    heldHand = [...seated.hand];
+
+    // Nặn xong lượt nào là chuyện của lượt ấy. Bàn nhích sang người khác mà cái lá phóng to vẫn
+    // treo giữa màn hình thì nó không còn là "lá bạn vừa bốc" nữa — nó là một tấm bìa che mất
+    // cái bàn đang chạy.
+    if (peeked && (next.step !== 'throw' || next.turn !== seated.seat)) peeked = null;
+  } else {
+    heldHand = null;
+    peeked = null;
+  }
 
   // What the purse said before this throw settled it.
   //

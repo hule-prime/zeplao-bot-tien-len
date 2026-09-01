@@ -356,6 +356,8 @@ export function dealPhom(game) {
   game.discards = [];
   game.took = game.seats.map(() => 0);
   game.eaten = game.seats.map(() => []);
+  // Phỏm đã trình, của từng ghế. `null` là chưa tới lượt trình.
+  game.shown = game.seats.map(() => null);
   game.fed = game.seats.map(() => game.seats.map(() => 0));
   game.laid = [];
   game.u = null;
@@ -435,6 +437,23 @@ export function phomThrow(game, seat, card) {
   game.took[seat]++;
   game.touched = Date.now();
 
+  // Trình.
+  //
+  // Luật: *trước khi đánh ở vòng bốn, người chơi trình tất cả phỏm mình có cho mọi người biết.*
+  // Không phải lúc ăn — ăn thì chỉ lá vừa ăn là công khai, còn hai lá kia vẫn nằm trên tay — mà
+  // đúng ở lượt cuối, và trình xong thì cả bàn nhìn thấy.
+  //
+  // Đây là thứ làm nên nửa sau của một ván phỏm: người đi sau biết trên bàn đang có những phỏm
+  // nào, biết lá rác của mình gửi được vào đâu, và biết lá nào nhả ra là an toàn. Một ván mà
+  // phỏm chỉ hiện lúc tính điểm là một ván đã bỏ mất đoạn ấy.
+  if (game.took[seat] >= PHOM_TURNS && !game.shown[seat]) {
+    const laid = bestSplit(game.hands[seat]).melds;
+    game.shown[seat] = laid;
+    // Ai trình trước, theo đúng thứ tự trình — bằng điểm thì ai trình sau thua, nên thứ tự này
+    // là một phần của luật chứ không phải để trang trí.
+    if (laid.length) game.laid.push(seat);
+  }
+
   // Everybody has had their four. The last card thrown is the chốt and nobody answers it.
   if (game.took.every((many) => many >= PHOM_TURNS)) { phomEnd(game); return true; }
 
@@ -453,9 +472,13 @@ export function phomThrow(game, seat, card) {
 export function phomEnd(game) {
   if (game.state === 'over') return;
 
-  // Who laid first. Only matters for a tie, and a tie is decided by it.
+  // Ai chưa kịp trình thì trình nốt ở đây — ván có thể dừng giữa chừng vì có người ù hoặc vì
+  // hết nọc, và lúc ấy phỏm vẫn phải mở ra cho cả bàn thấy.
   for (let seat = 0; seat < game.seats.length; seat++) {
-    if (!game.laid.includes(seat) && bestSplit(game.hands[seat]).melds.length) game.laid.push(seat);
+    if (game.shown[seat]) continue;
+    const laid = bestSplit(game.hands[seat]).melds;
+    game.shown[seat] = laid;
+    if (laid.length && !game.laid.includes(seat)) game.laid.push(seat);
   }
 
   game.scores = phomScores(game.hands, { laid: game.laid });
@@ -2189,6 +2212,9 @@ export async function run(token, { signal, api = API } = {}) {
             ? null
             : placeName(game.finished.indexOf(seat), people),
           won: owed.has(one.userId) ? owed.get(one.userId) : null,
+          // Đã trình thì công khai — đó là cả ý nghĩa của việc trình. Chưa trình thì `null`,
+          // và cho tới lúc ấy nó là bài của người ta.
+          shown: game.shown ? game.shown[seat] : null,
           // Only once it is over. Before that these are somebody's cards.
           melds: score ? score.melds : null,
           junk: score ? score.junk : null,

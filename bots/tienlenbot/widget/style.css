@@ -1563,3 +1563,150 @@ body {
   text-overflow: ellipsis;
   max-width: 96px;
 }
+
+/* ---- chia bài -------------------------------------------------------------------------------
+
+   Bài bay vào, lá này sau lá kia. Chỉ **transform**, không đụng tới `opacity`: một lá bài mà lý
+   do duy nhất nhìn thấy nó là animation thì ở đâu đó sẽ có người mở bàn ra và thấy tay trắng.
+   Cùng cái bẫy đã bắt được ở con xúc xắc và ở bảng kết quả. */
+/* Khung đầu là một chỗ **đứng được**, không phải một chỗ ngoài màn hình.
+ *
+ * `backwards` giữ khung đầu suốt quãng chờ so le, nên khung đầu là thứ người ta nhìn thấy nếu
+ * animation không chạy. Đẩy lá đi 190% chiều cao thì lúc ấy cả tay bài văng khỏi khung — cùng
+ * họ với cái bẫy `opacity: 0` đã bắt được ở con xúc xắc, chỉ khác là lệch chỗ thay vì tàng hình.
+ * Ba mươi tư pixel thì bay vẫn ra bay, mà đứng yên vẫn đọc được. */
+@keyframes deal-in {
+  from { transform: translateY(-34px) rotate(-8deg) scale(0.9); }
+  to { transform: none; }
+}
+
+.fan .card.dealing {
+  animation: deal-in 0.36s cubic-bezier(0.2, 0.75, 0.3, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 42ms);
+}
+
+/* ---- nặn lá vừa bốc --------------------------------------------------------------------------
+
+   Cùng động tác với cái đĩa bầu cua, khác ở chỗ chỉ có một lá — nên nó được phóng to hẳn lên
+   giữa bàn. Nặn một hình chữ nhật rộng bốn mươi tư pixel thì không ai nặn được gì. */
+#peek {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* Nền mờ, vì mặt bàn bên dưới có chữ và chữ ấy xuyên thẳng qua: "vòng 2/4 · nọc 15" nằm đè lên
+     "Kéo ra xem" thì cả hai cùng không đọc được. Nền chứ không phải tường — `pointer-events` vẫn
+     là `none`, chỉ cái lớp úp mới nhận ngón tay, nên nút bên dưới vẫn bấm được. */
+  background: rgba(5, 26, 18, 0.82);
+  border-radius: 14px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.peek-card {
+  position: relative;
+  width: 96px;
+  height: 136px;
+  animation: peek-in 0.3s cubic-bezier(0.2, 0.75, 0.3, 1);
+}
+
+@keyframes peek-in {
+  from { transform: translateY(-28px) scale(0.7); }
+  to { transform: none; }
+}
+
+.peek-card .card.big-card {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 9px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+
+.peek-card .card.big-card .pip { top: 7px; left: 9px; font-size: 25px; }
+.peek-card .card.big-card .pip i { font-size: 22px; }
+.peek-card .card.big-card .big { right: 8px; bottom: 4px; font-size: 44px; }
+
+/* Lớp úp. Mặt lưng bài, và nó là thứ duy nhất ở đây nhận ngón tay. */
+.peek-cover {
+  position: absolute;
+  inset: 0;
+  border-radius: 9px;
+  cursor: grab;
+  touch-action: none;
+  pointer-events: auto;
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0 5px, transparent 5px 10px),
+    linear-gradient(150deg, #b4453f, #7d2723);
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.18), 0 10px 26px rgba(0, 0, 0, 0.5);
+  transition: transform 0.14s ease-out;
+}
+
+.peek-cover.held { cursor: grabbing; transition: none; }
+
+.peek-cover.gone {
+  transform: translate(84%, -34%) rotate(15deg);
+  opacity: 0;
+  transition: transform 0.32s ease-out, opacity 0.32s ease-out;
+  pointer-events: none;
+}
+
+.peek-note {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.peek-off {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--muted);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.peek-off input { accent-color: var(--gold); margin: 0; }
+
+/* Một dòng cài đặt trên màn đầu. Nhỏ và ở dưới cùng: nó là thứ người ta chỉnh một lần rồi thôi. */
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.setting input { accent-color: var(--gold); margin: 0; }
+.setting i { font-style: normal; color: var(--muted); font-size: 10.5px; margin-left: auto; text-align: right; }
+
+/* Phỏm đã trình. Nhỏ, ngay dưới ghế: câu người ta hỏi lúc nhìn nó là "lá rác của mình gửi được
+   vào đâu", và câu đó trả lời được bằng một dòng chữ. */
+.shown {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 9.5px;
+  line-height: 1.25;
+  max-width: 104px;
+}
+
+.shown .meld {
+  color: #6fd39a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shown.mom { color: var(--danger); font-weight: 700; }

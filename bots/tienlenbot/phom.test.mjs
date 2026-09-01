@@ -251,15 +251,22 @@ test('a machine at a phỏm table is furniture, the same as at the other one', (
 });
 
 test('the split is worked out inside a turn nobody waits for', () => {
-  let worst = 0;
+  const took = [];
   for (let i = 0; i < 300; i++) {
     const { hands } = phomDeal(4);
     const began = performance.now();
     bestSplit(hands[0]);
     phomDiscard(hands[0]);
-    worst = Math.max(worst, performance.now() - began);
+    took.push(performance.now() - began);
   }
-  assert.ok(worst < 50, `lượt chậm nhất mất ${worst.toFixed(1)}ms`);
+  took.sort((a, b) => a - b);
+  const middle = took[Math.floor(took.length / 2)];
+  const worst = took[took.length - 1];
+
+  // Trung vị chứ không phải lần tệ nhất — cùng lý do như bên tiến lên: một lần đo lẻ bị máy
+  // chen ngang thì nói về cái máy, không nói về cái thuật toán.
+  assert.ok(middle < 15, `lượt trung vị mất ${middle.toFixed(1)}ms`);
+  assert.ok(worst < 250, `lượt chậm nhất mất ${worst.toFixed(1)}ms`);
 });
 
 // ---- một ván đủ, kiểm từng vị trí -------------------------------------------------------------
@@ -442,4 +449,64 @@ test('nobody may act out of turn or out of order', () => {
   assert.ok(phomThrow(game, 0, game.hands[0][0]));
 
   assert.ok(!phomThrow(game, 1, game.hands[1][0]), 'phải lấy một lá trước đã');
+});
+
+test('phỏm are laid face up on the fourth turn, not kept until the count', () => {
+  // Luật: *trước khi đánh ở vòng bốn, người chơi trình tất cả phỏm mình có cho mọi người biết.*
+  // Không phải lúc ăn — ăn thì chỉ lá vừa ăn công khai — mà đúng ở lượt cuối. Đây là nửa sau của
+  // một ván phỏm: ai đi sau thì biết trên bàn có gì, gửi được vào đâu, và nhả lá nào là an toàn.
+  const game = tableOf(3);
+
+  // Ba vòng đầu: chưa ai trình.
+  for (let round = 0; round < PHOM_TURNS - 1; round++) {
+    for (let seat = 0; seat < 3; seat++) {
+      if (game.step === 'take') phomDraw(game, seat);
+      phomThrow(game, seat, phomDiscard(game.hands[seat]));
+      assert.equal(game.shown[seat], null,
+        `ghế ${seat} trình ở vòng ${round + 1} — đáng lẽ phải đợi tới vòng ${PHOM_TURNS}`);
+    }
+  }
+
+  // Vòng bốn: trình ngay khi đánh xong lá cuối.
+  for (let seat = 0; seat < 3 && game.state === 'playing'; seat++) {
+    if (game.step === 'take') phomDraw(game, seat);
+    if (game.state !== 'playing') break;
+    phomThrow(game, seat, phomDiscard(game.hands[seat]));
+    assert.ok(Array.isArray(game.shown[seat]), `ghế ${seat} đánh xong vòng bốn mà chưa trình`);
+    for (const meld of game.shown[seat]) {
+      assert.ok(isMeld(meld), `trình ra một bộ không phải phỏm: ${show(meld)}`);
+      for (const card of meld) {
+        assert.ok(game.hands[seat].includes(card), 'trình lá không còn trên tay');
+      }
+    }
+  }
+});
+
+test('a hand that stops early still lays everything down', () => {
+  // Ù hoặc hết nọc thì ván dừng giữa chừng, mà phỏm vẫn phải mở ra cho cả bàn thấy.
+  const game = tableOf(4);
+  game.stock = [];
+  game.turn = 1;
+  game.step = 'take';
+  phomDraw(game, 1);
+
+  assert.equal(game.state, 'over');
+  for (let seat = 0; seat < 4; seat++) {
+    assert.ok(Array.isArray(game.shown[seat]), `ghế ${seat} chưa trình dù ván đã xong`);
+  }
+});
+
+test('what is laid is public, and what is still held is not', () => {
+  // Trình rồi thì cả bàn thấy — đó là toàn bộ ý nghĩa của trình. Chưa trình thì đó là bài của
+  // người ta, và không có đường nào để lộ ra.
+  const source = readFileSync(new URL('./tienlenbot.mjs', import.meta.url), 'utf8');
+  const from = source.indexOf('function phomState(game)');
+  const to = source.indexOf('\n  /// What somebody at a table is looking at');
+  const body = source.slice(from, to);
+
+  assert.ok(body.includes('shown: game.shown ? game.shown[seat] : null'),
+    'bàn ai cũng thấy không mang theo phỏm đã trình');
+  assert.ok(!/\bhand\b\s*[:,]/.test(body), 'một tay bài lọt vào bàn ai cũng thấy');
+  assert.ok(body.includes('cards: game.hands ? game.hands[seat].length : null'),
+    'ghế phải mang số lá chứ không mang lá');
 });

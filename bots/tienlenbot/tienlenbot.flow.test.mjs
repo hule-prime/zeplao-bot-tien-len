@@ -261,11 +261,21 @@ async function oneMove(app, who) {
   const was = JSON.stringify([now.turn, now.pile, now.me.hand.length, now.phase]);
   app.does(turn, cards ? { play: cards } : { pass: true });
 
-  await app.until(() => {
+  // Chờ có hạn, và hết hạn thì **thử lại** chứ không đỏ.
+  //
+  // Nước đi được tính từ cái state đọc được lúc ấy, mà giữa lúc đọc và lúc gửi thì bàn có thể đã
+  // nhích: lá bắt buộc của nước mở ván biến mất khỏi state một nhịp trước khi bot thôi bắt buộc
+  // nó, và nước gửi lên bị từ chối. Không có gì đổi, nên cái chờ ngồi trọn hai lăm giây rồi mới
+  // đỏ — mà đỏ vì cái test đọc hụt một nhịp, không phải vì cái bàn hỏng. Vòng ngoài `playOut`
+  // vẫn có trần bốn trăm nước, nên một cái bàn treo thật thì vẫn đỏ.
+  for (let waited = 0; waited < 3000; waited += 10) {
     const after = app.mine(turn);
-    return JSON.stringify([after.turn, after.pile, after.me.hand.length, after.phase]) !== was;
-  }, `the table to move after ${cards ? cards.map(nameOf) : 'a pass'}`);
-  return true;
+    if (JSON.stringify([after.turn, after.pile, after.me.hand.length, after.phase]) !== was) {
+      return true;
+    }
+    await nap(10);
+  }
+  return false;
 }
 
 /// Plays a table out, answering for all of these people until none of them is at it any more.

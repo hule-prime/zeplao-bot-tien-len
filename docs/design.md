@@ -244,6 +244,19 @@ buộc phải nhả một lá mười ba điểm là ăn để lỗ mười. Nê
 Ngoài ra: máy nhớ người ngồi sau đã ăn những lá nào và tránh nhả lá quanh đó — đây là thứ phân
 biệt người biết chơi với người mới, và nó rẻ.
 
+**Trình.** Trước khi đánh ở vòng bốn, người chơi mở tất cả phỏm của mình ra cho cả bàn thấy.
+Không phải lúc ăn — ăn thì **chỉ lá vừa ăn** là công khai, hai lá kia vẫn nằm trên tay — mà đúng
+ở lượt cuối. Đây là nửa sau của một ván phỏm: ai đi sau thì biết trên bàn đang có những phỏm
+nào, biết lá rác của mình gửi được vào đâu, và biết lá nào nhả ra là an toàn. Bản đầu tôi làm
+thiếu hẳn đoạn này — phỏm chỉ hiện ra lúc tính điểm, tức là đúng lúc nó không còn dùng để làm gì
+nữa.
+
+Trình xong mà không có phỏm nào thì cả bàn thấy chữ **móm**, và đó cũng là một thông tin.
+
+**Gửi thì làm tự động**, không hỏi. Một lá rác gửi được vào phỏm trên bàn thì gửi luôn là đúng,
+luôn luôn — không có nước nào để chơi sai ở đây, nên một màn hình bắt bấm bốn lần để đồng ý với
+câu trả lời duy nhất là một màn hình bắt người ta làm việc cho nó.
+
 **Tiền** giữ đúng khung tiến lên để một cái ví ba trò không có ba cách hiểu về "thắng bao nhiêu":
 xếp hạng theo điểm rác rồi trả theo `payouts`. Trên đó là ba thứ riêng của phỏm — **móm** thua
 gấp đôi, **ù** ăn gấp đôi từ mỗi người, **đền** trả thay cả làng. Bằng điểm thì ai hạ sau thua.
@@ -255,7 +268,43 @@ sự xảy ra ở bàn.
 
 ---
 
-## 9. Bầu cua tôm cá
+## 9. Chia bài, bốc bài, và nặn
+
+**Chia bài** là hiệu ứng, và hiệu ứng thì phải nhớ đã chạy chưa. `drawHand` dựng lại cả tay bài
+ở **mỗi** push, mà một bàn bốn người có hàng chục push một ván — nên không nhớ thì mười ba lá
+bay vào lại từ đầu mỗi khi ai đó đánh một lá, và cái người ta đang đọc dở nhảy khỏi tay.
+
+Khung đầu của nó là một chỗ **đứng được**, không phải một chỗ ngoài màn hình. `backwards` giữ
+khung đầu suốt quãng chờ so le, nên khung đầu chính là thứ nhìn thấy nếu animation không chạy.
+Bản đầu tôi đẩy lá đi 190% chiều cao — lúc ấy cả tay bài văng khỏi khung. Cùng họ với cái bẫy
+`opacity: 0` ở con xúc xắc, chỉ khác là lệch chỗ thay vì tàng hình. Giờ là ba mươi tư pixel: bay
+vẫn ra bay, mà đứng yên vẫn đọc được.
+
+**Nặn lá vừa bốc** dùng lại đúng động tác của cái đĩa bầu cua, và đúng một luật: kéo tới lúc hở
+hết thì lá mới lật, thả tay giữa chừng thì lớp úp trượt về che lại. Khác một chỗ — ở đây chỉ có
+một lá và nó rộng bốn mươi tư pixel, nặn không được gì — nên lá được **phóng to hẳn** ra giữa
+bàn.
+
+Ba điều nó phải làm được, và cả ba đều là chuyện đã sai ở đâu đó rồi:
+
+- **Không chặn bàn.** `pointer-events: none` trên cả lớp phủ, chỉ cái lớp úp mới nhận ngón tay;
+  và ba giây thì nó tự lật rồi tự đi.
+- **Hết lượt mình là nó đi.** Bàn nhích sang người khác mà lá phóng to vẫn treo giữa màn hình
+  thì nó không còn là "lá bạn vừa bốc" — nó là một tấm bìa che mất cái bàn đang chạy.
+- **Có nền mờ.** Mặt bàn bên dưới có chữ, và chữ ấy xuyên thẳng qua: "vòng 2/4 · nọc 15" nằm đè
+  lên "Kéo ra xem" thì cả hai cùng không đọc được.
+
+**Tắt được, và tắt là tắt hẳn.** Nặn là cái thú của ván đầu và của người đang rảnh; ai chơi
+nhanh thì mỗi lượt thêm một thao tác là một thao tác thừa. Ô "Không cần nặn nữa" nằm ngay trên
+cái đang nặn, nhớ trong `localStorage`, và tắt rồi thì **tắt cả cái đĩa bầu cua** — hai chỗ ấy
+là cùng một động tác. Bật lại thì ở màn đầu, vì chỗ tắt là chỗ không còn hiện ra nữa.
+
+Tắt thì đĩa **không úp xuống** chứ không phải úp rồi mở ngay: úp một phần mười giây rồi bật lên
+là một cái nháy, mà một cái nháy khó chịu hơn hẳn không có gì.
+
+---
+
+## 10. Bầu cua tôm cá
 
 **Sòng thế giới không phải một cái bàn ai đó mở.** Nó có sẵn, nó xóc liên tục, và vào là vào
 giữa một ván đang chạy — đó mới là cái sòng. Một cái bàn phải có người mở trước là cái bàn đóng
@@ -368,6 +417,11 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | Widget giữ bản sao `beats` và không được sửa theo | Thang chặt của bot lên bảy bậc, thang của widget vẫn bốn — người chơi ngồi nhìn dây năm đôi thông không chịu sáng lên |
 | Đền viết thành "gánh nợ người thua" | Chỉ đúng chừng nào người đền cũng đang thua. Người đền mà đang thắng thì bàn in ra một nghìn vàng từ hư không. **Cùng một lỗi nằm ở cả hai trò**, bắt được ở phỏm rồi mới tìm ngược ra ở tiến lên |
 | `placeName(place, số hàng được trả)` | Bàn một người ba máy: người ta về nhất, được cộng tiền, và màn hình báo **"Bạn về bét"** — vì chỉ có một hàng được trả nên hạng 0 vừa là nhất vừa là bét |
+| Phỏm không có bước **trình** | Luật: trước khi đánh ở vòng bốn thì mở phỏm ra cho cả bàn thấy. Bản đầu chỉ hiện lúc tính điểm — tức là đúng lúc nó không còn dùng để làm gì nữa. Cả nửa sau của một ván phỏm nằm ở chỗ nhìn thấy phỏm người khác |
+| Khung đầu của hiệu ứng chia bài đẩy lá ra ngoài khung | `backwards` giữ khung đầu suốt quãng chờ so le, nên đó là thứ nhìn thấy nếu animation không chạy: cả tay bài văng khỏi màn hình. Cùng họ với `opacity: 0` ở con xúc xắc, chỉ khác là lệch chỗ thay vì tàng hình |
+| Lá đang nặn treo lại sau khi hết lượt | Bàn đã nhích sang người khác mà tấm bìa phóng to vẫn nằm giữa màn hình che mất bàn |
+| Test canh `next.me` đòi dấu kiểm dính ngay sát | Đỏ ở `next.me && Array.isArray(next.me.hand)` — một dòng đã kiểm tra tử tế. Sửa **code** cho gọn (buộc một biến cục bộ) chứ không nới test, vì nới test là bỏ mất chính cái nó sinh ra để bắt |
+| Ngưỡng thời gian đo bằng lần chạy tệ nhất | Một lần đo lẻ bị bộ dọn rác chen ngang thì nói về cái máy chứ không nói về thuật toán. Đổi sang **trung vị**, và để lần tệ nhất một khoảng rộng |
 
 Và một luật rút ra từ carobot, có test canh:
 
