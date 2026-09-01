@@ -72,6 +72,10 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Chốt chặn, và nó có thật: một hàng tràn ra khỏi đây thì nó vẽ **đè lên hàng nút** ở đáy
+     trang — hàng chip tiền nằm ngay trên nút "Hoàn tác" là cặp đầu tiên gặp nhau. Cái bát co lại
+     để chuyện đó không xảy ra; dòng này là để nếu nó vẫn xảy ra thì bị cắt, chứ không đè. */
+  overflow: hidden;
 }
 
 /* ---- the purse ---------------------------------------------------------------------------- */
@@ -1117,7 +1121,9 @@ body {
    where anybody is standing. */
 #bowl {
   flex: 1;
-  min-height: 168px;
+  /* Sàn thấp, và cố ý: cái bát là thứ duy nhất trong cột co được, nên mọi chỗ thiếu nó chịu. Ba
+     con đi theo chiều cao thật (`dieFor`), nên bát ngắn là xúc xắc nhỏ đi chứ không có gì vỡ. */
+  min-height: 104px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1167,9 +1173,11 @@ body {
 #dice { gap: 9px; }
 #tx-dice { gap: 8px; }
 
+/* Cỡ đi theo `--die`, đặt từ chiều cao thật của cái bát. Con số ở đây chỉ là khung đầu — nhưng
+   phải là một khung đầu đứng được, phòng khi dòng JavaScript ấy không chạy. */
 .die {
-  width: 46px;
-  height: 46px;
+  width: var(--die, 46px);
+  height: var(--die, 46px);
   border-radius: 11px;
   display: grid;
   place-items: center;
@@ -1179,7 +1187,11 @@ body {
   color: var(--rim);
 }
 
-.die .face-art { width: 34px; height: 34px; display: block; }
+.die .face-art {
+  width: calc(var(--die, 46px) * 0.74);
+  height: calc(var(--die, 46px) * 0.74);
+  display: block;
+}
 
 /* The same colours as the mat. A die drawn in ink is a die somebody has to work out; a die in
    the colour its square is painted is read from across the table. */
@@ -2000,19 +2012,14 @@ body {
   gap: 7px;
 }
 
-/* Hàng người chơi, ngoài cái bát. Một dòng, cuộn ngang nếu đông — xuống dòng thì nó cao dần và
-   ăn vào chỗ của cái bát, mà cái bát là thứ người ta tới đây để nhìn. */
-#tx-punters {
-  flex: none;
-  display: flex;
-  justify-content: center;
-}
-
-#tx-punters .punters {
+/* Hàng người chơi trong khối đáy. Một dòng, cuộn ngang nếu đông — xuống dòng thì nó cao dần và
+   ăn vào chỗ của ba con, mà ba con là thứ người ta tới đây để nhìn. */
+#tx-below .punters {
   flex-wrap: nowrap;
   overflow-x: auto;
   max-height: none;
-  padding: 0;
+  max-width: 100%;
+  padding: 0 8px;
 }
 
 /* Sàn thấp, và cố ý. Ép cái bát cao lên bằng `min-height` thì trên một cái khung ngắn hơn dự
@@ -2022,12 +2029,11 @@ body {
    tổng, dòng chữ và hàng người chơi đều dán xuống đáy. */
 #tx-bowl {
   flex: 1;
-  min-height: 168px;
-  /* Chừa **cả hai đầu bằng nhau**, và đó là cả cách ba con ra được giữa bát: dưới là chỗ của hàng
-     chữ, trên thì chẳng đựng gì — nhưng chừa đúng bằng ấy thì tâm ba con rơi đúng tâm cái bát.
-     Chỉ chừa ở dưới thì ba con nằm cao hơn tâm nửa khoảng chừa. Cùng con số với `TX_PAD` bên
-     `taixiu.js`, và phải cùng. */
-  padding: 40px 8px;
+  min-height: 104px;
+  /* Chừa chỗ dưới đáy cho khối chữ — cùng con số với `TX_BELOW` bên `taixiu.js`, và phải cùng.
+     Chỉ chừa ở dưới, không chừa ở trên: khối ấy đọc ra là mép dưới của cái bát, nên ba con căn
+     giữa phần còn lại là chúng trông đúng giữa, mà không phí một khoảng trống ở trên. */
+  padding: 0 8px 58px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -2099,14 +2105,23 @@ body {
  * đúng bằng một nửa tổng số ấy — người thử nói thẳng "sao nằm sát phía trên thế". Tệ hơn: cái đĩa
  * thì căn giữa **cái bát**, nên nó lệch khỏi ba con ba chục pixel và hở nguyên mép trên. Dán cả
  * khối xuống đáy thì ba con nằm giữa, cái đĩa căn theo ba con, và cả ba thứ về một tâm. */
-/* Một hàng, không phải một cột. Cái tổng và dòng nói được mất là hai nửa của cùng một câu —
-   "11 Tài · +2.000 vàng" — và mỗi hàng thừa trong bát là chỗ ba con mất đi. */
+/* Khối đáy: hàng người chơi ở trên, rồi một dòng duy nhất cho cái tổng và lời được mất. Dán
+   xuống đáy và **đè lên phần chừa sẵn** của cái bát, chứ không phải một hàng riêng trong cột —
+   cột này chỉ có cái bát là co được, nên mỗi hàng thêm vào nó là một hàng đẩy cả cột qua ngưỡng. */
 #tx-below {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 5px;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Cái tổng và lời được mất là hai nửa của cùng một câu, nên một dòng. */
+#tx-line {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;

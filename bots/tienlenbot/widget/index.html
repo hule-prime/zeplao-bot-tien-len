@@ -68,17 +68,19 @@
         <!-- Nắp bát. Che cả kết quả chứ không riêng ba con — cái ví ở ngay trên đầu và cửa
              thắng ở ngay dưới, mà chỗ nào trong số đó cũng nói trước được. -->
         <div id="tx-bat" hidden><span>NẶN</span></div>
-        <!-- Một hàng, không phải hai. Cái tổng và dòng nói được mất là hai nửa của cùng một
-             câu — "11 Tài · +2.000 vàng" — và mỗi hàng thừa trong bát là chỗ ba con mất đi. -->
+        <!-- Mọi chữ nghĩa của cái bát, trong một khối dán xuống đáy: hàng người chơi ở trên,
+             rồi một dòng duy nhất cho cái tổng và lời nói được mất — "11 Tài · +2.000 vàng", hai
+             nửa của cùng một câu. **Đè lên phần chừa sẵn của cái bát**, không phải một hàng
+             riêng trong cột: cột này chỉ có cái bát là co được, nên mỗi hàng thêm vào nó là một
+             hàng đẩy cả cột qua ngưỡng — và tràn ở đây nghĩa là vẽ đè lên hàng nút ở đáy trang. -->
         <div id="tx-below">
-          <!-- Cái tổng, to hết cỡ: toàn bộ trò này là con số ấy. -->
-          <div id="tx-sum" hidden></div>
-          <div id="tx-note"></div>
+          <div id="tx-line">
+            <!-- Cái tổng, to hết cỡ: toàn bộ trò này là con số ấy. -->
+            <div id="tx-sum" hidden></div>
+            <div id="tx-note"></div>
+          </div>
         </div>
       </div>
-      <!-- Ai đang ngồi và đặt bao nhiêu. **Ngoài** cái bát: đây là chuyện về cái bàn, không phải
-           về cú xóc, và nhét nó vào bát là lấy mất chỗ của đúng ba thứ cái bát sinh ra để đựng. -->
-      <div id="tx-punters"></div>
       <nav id="tx-tabs"></nav>
       <div id="tx-board"></div>
       <div id="tx-rule"></div>

@@ -1257,6 +1257,62 @@ test('the page never decides which bowl it is at by naming one of them', () => {
     'the page no longer starts from the board the bot is holding');
 });
 
+test('cái bát là thứ co lại khi cột hết chỗ, và không gì được vẽ đè lên hàng nút', () => {
+  // Báo về là "đám tiền đè lên nút hoàn tác, lúc bị lúc không".
+  //
+  // Cột của một trò xúc xắc chỉ có **một** hàng co được, là cái bát; dải tab, chiếu, dòng luật và
+  // hàng chip đều cứng. Nâng `min-height` của cái bát lên cho vừa cái đĩa tròn là lấy mất đúng
+  // cái tính co ấy: thiếu chỗ thì cái bát không nhường, cả cột tràn khỏi `#screen`, và thứ nằm
+  // ngay dưới `#screen` là hàng nút. Hàng chip tiền — cái sát đáy nhất — rơi đè lên "Hoàn tác".
+  //
+  // "Lúc bị lúc không" là vì đúng một dòng `#says` (một lời từ chối) đủ đẩy nó qua ngưỡng, và
+  // ván sau lời ấy tự mất.
+  const css = readFileSync(new URL('./widget/style.css', import.meta.url), 'utf8');
+
+  // Chốt chặn: tràn thì bị cắt, không được vẽ đè.
+  assert.match(css, /#screen \{[^}]*overflow: hidden/s,
+    'phần giữa không còn cắt phần tràn — nó sẽ vẽ đè lên hàng nút');
+
+  // Và cái bát phải co được thật. Một con số sàn cao là một cái bát không nhường.
+  for (const bowl of ['#bowl {', '#tx-bowl {']) {
+    const at = css.indexOf('\n' + bowl);
+    assert.notEqual(at, -1, bowl + ' đã dời đi');
+    const floor = Number(/min-height: (\d+)px/.exec(css.slice(at, css.indexOf('}', at)))[1]);
+    assert.ok(floor <= 110, `${bowl} có sàn ${floor}px — quá cao để nhường chỗ cho cả cột`);
+  }
+
+  // Cỡ con xúc xắc phải là hệ quả của chiều cao cái bát, không phải một con số trong stylesheet:
+  // đó là cái làm cho việc co lại vô hại.
+  const widget = readFileSync(new URL('./widget/tienlen.js', import.meta.url), 'utf8');
+  assert.match(widget, /function dieFor\(bowlHeight, gap, biggest, below\)/, 'phép cắt đã dời đi');
+  assert.match(css, /\.die \{[^}]*width: var\(--die/s, 'xúc xắc bầu cua không co theo được');
+  assert.match(css, /\.tx-die \{[^}]*width: var\(--die/s, 'xúc xắc tài xỉu không co theo được');
+
+  // Chạy lại đúng phép cắt ấy trên mọi chiều cao khung nền tảng có thể kẹp xuống, có và không có
+  // dòng từ chối. Hai cái phải cùng đúng: cái đĩa phủ kín ba con, và ba con lọt trong cái bát.
+  const dieFor = (h, g, big, below) => {
+    const room = h - 20;
+    if (!(room > 0)) return 20;
+    return Math.max(20, Math.min(big,
+      Math.floor(Math.min((room / Math.SQRT2 - g) / 2, (h - below - g) / 2))));
+  };
+  const FIXED = 42 + 103 + 21 + 41;          // tab, chiếu, dòng luật, hàng chip
+  for (const frame of [460, 500, 540, 570, 620]) {
+    for (const says of [0, 33]) {
+      const screen = frame - 15 - 38 - 40 - 21 - says;
+      const bowl = Math.max(104, screen - FIXED);
+      assert.ok(bowl + FIXED <= screen, `khung ${frame}${says ? ' có says' : ''}: cột tràn`);
+
+      const d = dieFor(bowl, 8, 58, 58);
+      const side = 2 * d + 8;
+      const need = Math.hypot(side, side) + 12;
+      const dish = Math.min(Math.ceil(need), Math.max(60, bowl - 8));
+      assert.ok(dish >= need - 0.5, `khung ${frame}: đĩa ${dish} không phủ nổi ${need.toFixed(0)}`);
+      assert.ok(side <= bowl - 58, `khung ${frame}: ba con ${side} tràn khỏi bát ${bowl}`);
+    }
+  }
+});
+
 test('bàn cược của trang chỉ sống trong đúng cái ván nó được vẽ ra', () => {
   // Ván xóc xong, cửa đặt ván sau mở ra — mà mặt chiếu vẫn còn nguyên chip của ván trước.
   //

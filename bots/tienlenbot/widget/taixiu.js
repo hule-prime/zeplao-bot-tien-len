@@ -94,50 +94,15 @@ function txIdle() {
   txTumbling = null;
 }
 
-/// Khe giữa ba con, và cỡ lớn nhất một con được phép to.
+/// Khe giữa ba con, cỡ lớn nhất một con được phép to, và chỗ chừa dưới đáy bát cho hàng chữ.
+/// `TX_BELOW` phải cùng con số với `padding-bottom` của `#tx-bowl`.
 const TX_GAP = 8;
 const TX_BIGGEST = 58;
+const TX_BELOW = 58;
 
-/**
- * Khoảng chừa trên và dưới trong lòng bát.
- *
- * Chừa **cả hai đầu bằng nhau**, và đó là cả cách ba con ra được giữa bát: dưới là chỗ của hàng
- * chữ, trên thì chẳng đựng gì — nhưng chừa đúng bằng ấy thì tâm của ba con rơi đúng vào tâm cái
- * bát. Chỉ chừa ở dưới thì ba con nằm cao hơn tâm nửa khoảng chừa, và người thử nói ngay "sao
- * nằm sát phía trên thế".
- *
- * Cùng con số với `padding` của `#tx-bowl`, và phải cùng.
- */
-const TX_PAD = 40;
-
-/**
- * Con xúc xắc to bằng bao nhiêu, ở cái bát cao chừng này.
- *
- * Ba con phải nằm lọt trong cái đĩa, mà cái đĩa phải nằm lọt trong cái bát — nên cỡ con xúc xắc
- * là một **hệ quả** của chiều cao cái bát, không phải một con số gõ vào stylesheet. Gõ vào thì
- * trên một cái khung thấp hơn dự tính, cái đĩa bị cắt trần xuống cho vừa bát và **hở mất bốn
- * góc**: kết quả lộ ra trước khi có ai kéo, và không ai báo lỗi chuyện đó.
- *
- * Ba con xếp tam giác, nên khối của chúng là một **hình vuông** cạnh `2d + g`, và cái đĩa phủ
- * được nó cần đường kính bằng đường chéo hình vuông ấy cộng đệm: `√2·(2d + g) + đệm`. Đây là cả
- * lý do xếp tam giác — hàng ngang cần `√((3d+2g)² + d²)`, tức là ở con 54px thì 186 so với 164,
- * và hai mươi hai pixel ấy là chỗ để xúc xắc to lên.
- *
- * Hai điều kiện, lấy cái chặt hơn: cái đĩa phải vừa bát, và khối ba con cộng cái tổng cộng dòng
- * chữ dưới nó cũng phải vừa bát.
- */
-function txDieSize(bowlHeight) {
-  const room = bowlHeight - 8 - 16;
-  if (!(room > 0)) return 34;
-  // √2·(2d + g) = room
-  const byDish = (room / Math.SQRT2 - TX_GAP) / 2;
-  // (2d + g) + chỗ chừa hai đầu = bát
-  const byBowl = (bowlHeight - TX_PAD * 2 - TX_GAP) / 2;
-  // Trần là cỡ đẹp nhất, sàn là cỡ vẫn còn đếm được chấm. Sàn để thấp hơn hẳn chỗ `min-height`
-  // của cái bát cho phép: một cái sàn cao hơn cái bát thật là một cái sàn đẩy ba con tràn ra
-  // ngoài, tức là đúng cái nó sinh ra để tránh.
-  return Math.max(30, Math.min(TX_BIGGEST, Math.floor(Math.min(byDish, byBowl))));
-}
+/// Con xúc xắc to bằng bao nhiêu. Phép cắt nằm ở `dieFor` bên `tienlen.js` — cùng một phép cho cả
+/// hai cái bát, vì cả hai đều là cái thứ co lại khi cột hết chỗ.
+const txDieSize = (bowlHeight) => dieFor(bowlHeight, TX_GAP, TX_BIGGEST, TX_BELOW);
 
 /// Chấm lên mặt một con. Tách ra vì lúc quay nó được gọi mười một lần một giây.
 function setPips(die, pips) {
@@ -500,11 +465,10 @@ function drawTxNote() {
     note.textContent = 'Chọn phần cược rồi chạm vào cửa';
   }
 
-  // Ai đang ngồi và đặt bao nhiêu. Nửa cái thú của một cái sòng là nhìn tiền người khác đi đâu —
-  // nhưng đó là chuyện về cái bàn, không phải về cú xóc, nên nó ở **ngoài** cái bát.
-  const seats = $('tx-punters');
-  seats.replaceChildren(punterRow(hidden));
-  seats.hidden = (state.seats || []).length < 2;
+  // Ai đang ngồi và đặt bao nhiêu. Nửa cái thú của một cái sòng là nhìn tiền người khác đi đâu.
+  // Trong khối đáy, đè lên phần chừa sẵn — chứ không phải một hàng riêng trong cột.
+  for (const gone of $('tx-below').querySelectorAll('.punters')) gone.remove();
+  $('tx-below').prepend(punterRow(hidden));
 }
 
 /**
@@ -519,12 +483,15 @@ function drawTxBat() {
 
   bat.hidden = !showing;
   if (!showing) { bat.className = ''; bat.style.transform = ''; return; }
+
+  // Đo lại mỗi lần vẽ, không chỉ lần dựng cái bát: khung đổi kích thước, hay ba con vừa bị cắt
+  // nhỏ lại, mà cái bát giữ nguyên cỡ cũ thì nó hụt — và hụt là hở góc.
+  fitLid(bat, $('tx-dice'), $('tx-bowl'));
   if (bat.dataset.at === txKey()) return;
 
   bat.dataset.at = txKey();
   bat.className = '';
   bat.style.transform = '';
-  fitLid(bat, $('tx-dice'), $('tx-bowl'));
 
   const round = txKey();
   dragOff(bat, $('tx-dice'), () => {

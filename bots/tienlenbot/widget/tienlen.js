@@ -2170,6 +2170,11 @@ function drawBaucua() {
   const note = $('bowl-note');
   const hidden = covered();
 
+  // Cắt ba con theo chiều cao cái bát thật được chia, trước khi vẽ. Cái bát này cũng co được như
+  // cái bát tài xỉu, và vì lý do y hệt.
+  const room = bowl.getBoundingClientRect().height;
+  if (room) dice.style.setProperty('--die', `${dieFor(room, 9, 46, 50)}px`);
+
   drawPlate(hidden);
 
   bowl.classList.toggle('shaking', state.phase === 'rolling');
@@ -2375,6 +2380,31 @@ function dragOff(lid, under, opened, delay, moving) {
 }
 
 /**
+ * Con xúc xắc to bằng bao nhiêu, ở cái bát cao chừng này.
+ *
+ * Cái bát là thứ **co được** trong cột: mọi hàng khác — dải tab, chiếu, hàng chip — đều cứng, nên
+ * chỗ thiếu bao nhiêu là cái bát chịu bấy nhiêu. Nếu cỡ con xúc xắc là một con số trong stylesheet
+ * thì cái bát không co được thật: nó bị kẹp ở `min-height`, và cả cột **tràn xuống đè lên hàng nút
+ * ở đáy trang**. Đúng một dòng `#says` hiện lên là đủ để đẩy nó qua ngưỡng, nên nó lúc bị lúc
+ * không — mà lúc không thì không ai đi tìm.
+ *
+ * Nên cỡ ấy là một hệ quả, và có hai điều kiện, lấy cái chặt hơn:
+ *
+ *   - cái đĩa phủ được ba con phải lọt trong bát: `√2·(2d + g) + đệm ≤ bát − 8`
+ *   - khối ba con cộng chỗ chừa cho hàng chữ cũng phải lọt: `(2d + g) + chừa ≤ bát`
+ */
+function dieFor(bowlHeight, gap, biggest, below) {
+  const room = bowlHeight - 20;
+  if (!(room > 0)) return 20;
+  const byDish = (room / Math.SQRT2 - gap) / 2;
+  const byBowl = (bowlHeight - below - gap) / 2;
+  // Sàn để rất thấp, và cố ý. Một cái sàn cao hơn chỗ cái bát thật có là một cái sàn đẩy ba con
+  // tràn ra ngoài — tức là đúng cái nó sinh ra để tránh. Ở khung nhỏ tới mức ấy thì con xúc xắc
+  // bé, nhưng bé còn đọc được, còn tràn thì vỡ.
+  return Math.max(20, Math.min(biggest, Math.floor(Math.min(byDish, byBowl))));
+}
+
+/**
  * Cắt cái nắp cho vừa đúng cái nó che.
  *
  * Một hình tròn phủ kín được một hàng ngang rộng `w` cao `h` thì đường kính tối thiểu là
@@ -2409,7 +2439,7 @@ function fitLid(lid, under, bowl) {
   if (need() > most) {
     const die = parseFloat(under.style.getPropertyValue('--die')) || box.width / 2;
     const want = Math.floor(die * (most - 12) / Math.hypot(box.width, box.height));
-    under.style.setProperty('--die', `${Math.max(26, want)}px`);
+    under.style.setProperty('--die', `${Math.max(20, want)}px`);
     box = under.getBoundingClientRect();
   }
 
@@ -2444,12 +2474,15 @@ function drawPlate(hidden) {
   const plate = $('plate');
   plate.hidden = !hidden;
   if (!hidden) { plate.className = ''; plate.style.transform = ''; return; }
+
+  // Đo lại mỗi lần vẽ, không chỉ lần dựng cái đĩa: khung đổi kích thước, hay ba con vừa bị cắt
+  // nhỏ lại, mà cái đĩa giữ nguyên cỡ cũ thì nó hụt — và hụt là hở góc.
+  fitLid(plate, $('dice'), $('bowl'));
   if (plate.dataset.round === String(state.round)) return;
 
   plate.dataset.round = String(state.round);
   plate.className = '';
   plate.style.transform = '';
-  fitLid(plate, $('dice'), $('bowl'));
 
   const round = state.round;
 
