@@ -69,7 +69,19 @@ const LANDS_MS = 420;
 /// hai tay, và đó cũng là cách duy nhất biết được, vì bốc và ăn về phía trang này trông y hệt
 /// nhau: tay dài thêm một lá.
 let heldHand = null;
+let heldMelds = null;
+let heldPoints = null;
 let peeked = null;
+
+/// Tay bài như nó *trước khi* bốc, giữ lại suốt lúc còn nặn.
+///
+/// Nặn mà lá đã nằm sẵn trong tay thì không còn gì để nặn: nhìn xuống là thấy. Mà không chỉ mặt
+/// lá — cái viền xanh của phỏm và con số điểm rác cũng nói ra hết, vì cả hai đều được tính lại
+/// với lá mới. Nên trong lúc đĩa còn úp thì cả tay bài là tay cũ, cộng đúng một lá úp ở cuối.
+let heldSplit = null;
+
+/// Còn đang nặn hay không.
+const peeking = () => !!peeked && !peeked.open;
 
 /// Lá vừa về tay, còn được đánh dấu cho tới khi đánh xong lượt này.
 ///
@@ -591,8 +603,14 @@ function drawHand() {
   const box = $('hand');
   box.replaceChildren();
 
-  const cards = (state && state.me && state.me.hand) || [];
-  if (!cards.length) return;
+  // Còn nặn thì tay bài là tay **trước khi bốc**, cộng đúng một lá úp ở cuối.
+  //
+  // Nặn mà lá đã nằm sẵn trong tay thì không còn gì để nặn. Và không chỉ mặt lá: viền xanh của
+  // phỏm với con số điểm rác cũng nói ra hết, vì cả hai đều được tính lại với lá mới — nhìn thấy
+  // "rác 35" tụt xuống "rác 22" là biết vừa bốc được gì mà chẳng cần lật.
+  const hiding = peeking() && heldSplit ? peeked.card : null;
+  const cards = hiding ? heldSplit.hand : ((state && state.me && state.me.hand) || []);
+  if (!cards.length && !hiding) return;
 
   // One row, always. Thirteen cards in two rows is two rows of a hand nobody holds that way,
   // and it costs the table sixty pixels of felt it has better uses for.
@@ -622,12 +640,13 @@ function drawHand() {
   // makes somebody work that out by eye, every turn, from cards that are half behind each
   // other. So the phỏm are drawn first and lit, the junk after and dimmed, and the answer is
   // the row itself.
+  const melds = hiding ? heldSplit.melds : (phom() && state.me ? state.me.melds : null);
   const inMeld = new Set();
-  if (phom() && state.me && state.me.melds) {
-    for (const meld of state.me.melds) for (const card of meld) inMeld.add(card);
+  if (phom() && melds) {
+    for (const meld of melds) for (const card of meld) inMeld.add(card);
   }
-  const order = phom() && state.me && state.me.melds
-    ? [...state.me.melds.flat(), ...cards.filter((card) => !inMeld.has(card))]
+  const order = phom() && melds
+    ? [...melds.flat(), ...cards.filter((card) => !inMeld.has(card))]
     : cards;
 
   // Chia bài: mười ba lá bay vào, lá này sau lá kia.
@@ -650,6 +669,16 @@ function drawHand() {
     el.onclick = () => tap(card);
     fan.append(el);
   });
+
+  // Và lá úp ở cuối. Có mặt, đếm được, nhưng chưa đọc được — đúng như một lá vừa rút ra khỏi nọc
+  // và còn nằm sấp trong tay.
+  if (hiding !== null) {
+    const back = document.createElement('div');
+    back.className = 'card facedown';
+    if (dealing) back.style.setProperty('--i', String(order.length));
+    fan.append(back);
+  }
+
   box.append(fan);
 }
 
@@ -1875,10 +1904,12 @@ function drawBar() {
   // eye from cards half behind each other every turn is work the screen can do once.
   if (phom()) {
     const score = document.createElement('span');
-    score.className = 'phom-score' + (state.me.points === 0 ? ' clean' : '');
-    score.textContent = state.me.points === 0
-      ? '· không còn rác'
-      : `· rác ${state.me.points} điểm`;
+    score.className = 'phom-score';
+    // Điểm của tay **trước khi bốc** trong lúc còn nặn: con số này một mình nó đủ để nói lá vừa
+    // bốc là con gì.
+    const points = peeking() && heldSplit && heldSplit.points !== null
+      ? heldSplit.points : state.me.points;
+    score.textContent = points === 0 ? '· không còn rác' : `· rác ${points} điểm`;
     bar.append(score, squeezeChip());
     return;
   }
@@ -2293,7 +2324,7 @@ function drawPeek() {
   tick.type = 'checkbox';
   tick.onchange = () => {
     setSqueezing(!tick.checked);
-    if (tick.checked) { peeked = null; render(); }
+    if (tick.checked) { peeked = null; heldSplit = null; render(); }
   };
   off.append(tick, document.createTextNode('Không cần nặn nữa'));
 
@@ -2306,7 +2337,10 @@ function drawPeek() {
     clearTimeout(timer);
     cover.classList.add('gone');
     note.textContent = nameOfCard(peeked ? peeked.card : 0);
-    // Ra khỏi màn hình sau khi đã nhìn thấy. Nó là một khoảnh khắc, không phải một màn hình.
+    // Lá thật vào tay ngay khi đã lật — cái phải giấu là *trước khi* lật, không phải sau. Tấm
+    // phóng to ở lại thêm một nhịp cho người ta nhìn rồi mới đi.
+    heldSplit = null;
+    render();
     setTimeout(() => { peeked = null; render(); }, 900);
   };
 
@@ -2674,15 +2708,26 @@ z.onState((next) => {
         // đang vội.
         // `me` không mang theo danh sách đã ăn — cái ấy ở trên ghế, vì nó công khai.
         const ate = ((next.seats[seated.seat] || {}).eaten || []).includes(fresh[0]);
-        if (squeezing && !ate) peeked = { card: fresh[0], open: false };
+        if (squeezing && !ate) {
+          peeked = { card: fresh[0], open: false };
+          // Chốt lại tay bài như nó vừa lúc trước — `heldHand` ở đây vẫn là tay cũ, vì nó chỉ
+          // được ghi đè ở dưới.
+          heldSplit = { hand: [...before], melds: heldMelds || [], points: heldPoints ?? null };
+        }
       }
     }
     heldHand = [...seated.hand];
+    heldMelds = (seated.melds || []).map((meld) => [...meld]);
+    heldPoints = seated.points ?? null;
 
     // Nặn xong lượt nào là chuyện của lượt ấy. Bàn nhích sang người khác mà cái lá phóng to vẫn
     // treo giữa màn hình thì nó không còn là "lá bạn vừa bốc" nữa — nó là một tấm bìa che mất
     // cái bàn đang chạy.
-    if (next.step !== 'throw' || next.turn !== seated.seat) { peeked = null; justTook = null; }
+    if (next.step !== 'throw' || next.turn !== seated.seat) {
+      peeked = null;
+      justTook = null;
+      heldSplit = null;
+    }
   } else {
     heldHand = null;
     peeked = null;

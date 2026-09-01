@@ -334,6 +334,13 @@ khung hình, không ai kịp thấy nó lấy con gì.
   nhả ra*: biết nó ở đâu là biết nên tránh nhả thêm con nào. Viết ra chữ thì phải đọc rồi dịch
   lại thành hình một lá bài; để nguyên lá bài thì không phải làm gì cả. Và nó ở lại tới cuối ván,
   vì đó là thứ người ta nhìn lại nhiều lần chứ không phải một thông báo thoáng qua.
+- **Đang nặn thì tay bài là tay *trước khi* bốc, cộng một lá úp.** Nặn mà lá đã nằm sẵn trong
+  tay thì không còn gì để nặn. Và không chỉ mặt lá: viền xanh của phỏm với con số điểm rác cũng
+  nói ra hết, vì cả hai được tính lại với lá mới — nhìn "rác 58" tụt xuống "rác 34" là biết vừa
+  bốc được gì mà chẳng cần lật. Nên trong lúc còn nặn, cả ba thứ ấy đều là của tay cũ.
+- **Ghế đối diện xếp thêm gì thì xếp ra hai bên, không xuống dưới.** Ghế trên cùng nằm ngay phía
+  trên cái nọc, nên mọi thứ thêm bên dưới nó rơi thẳng vào giữa bàn và bị nọc đè — che mất đúng
+  những lá cần nhìn. Hai bên thì trống: khoảng giữa ghế trái và ghế phải không ai dùng.
 - **Ăn thì không nặn.** Lá ấy vừa nằm ngửa giữa bàn, cả bàn đã thấy, và chính mình vừa bấm nút để
   lấy đúng nó. Chỉ lá **bốc từ nọc** mới là lá chưa ai biết. Bắt nặn một lá mình đã biết là bắt
   làm một thao tác thừa đúng vào lúc đang vội.

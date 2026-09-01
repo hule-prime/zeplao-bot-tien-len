@@ -1561,7 +1561,15 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.phom-score.clean { color: #6fd39a; }
+/* Lá còn úp trong tay: có mặt, đếm được, chưa đọc được. Mặt lưng y như mặt lưng ở chỗ nặn, vì
+   nó *là* lá ấy — vừa rút khỏi nọc và còn nằm sấp. */
+.card.facedown {
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0 4px, transparent 4px 8px),
+    linear-gradient(150deg, #b4453f, #7d2723);
+  border-color: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 2px var(--gold), 0 3px 8px rgba(0, 0, 0, 0.4);
+}
 
 /* Những lá một người đã ăn. Công khai, và là nửa cái thú của việc nhìn bàn phỏm. */
 /* Những lá một người đã ăn — bài thật, cạnh ghế họ, tới hết ván.
@@ -1571,12 +1579,44 @@ body {
  * cả. */
 .ate {
   display: flex;
-  flex-wrap: wrap;
+  /* Một hàng ngang, không xuống dòng.
+   *
+   * Xuống dòng thì hàng bài của người ngồi đối diện dựng thành một khối cao dần và tụt xuống
+   * giữa bàn — đúng chỗ cái nọc đứng — rồi bị nọc đè lên. Ăn nhiều nhất bốn lá (bốn lượt), mà
+   * bốn lá xếp chồng nhau thì vừa một hàng, nên không có lý do gì để nó cao lên cả. */
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
   gap: 2px;
-  max-width: 92px;
 }
+
+/* Nhỏ hơn và chồng sát hơn so với lúc ngửa bài cuối ván: chỗ này chỉ rộng bằng cái ghế, và ghế
+   đối diện thì nằm ngay trên cái nọc. Chồng vào nọc dù chỉ một pixel cũng là chồng. */
+/* Ghế đối diện: hàng ăn và phỏm đã trình đi **ra hai bên**, không đi xuống.
+ *
+ * Ghế trên cùng nằm ngay phía trên cái nọc, nên mọi thứ xếp thêm bên dưới nó đều rơi thẳng vào
+ * giữa bàn — và cái nọc đè lên, che mất đúng những lá cần nhìn. Hai bên thì trống: ghế trái ở
+ * mép trái, ghế phải ở mép phải, khoảng giữa hai ghế ấy không ai dùng. */
+.seat[data-at="top"] .ate {
+  position: absolute;
+  left: 100%;
+  top: 4px;
+  margin-left: 5px;
+}
+
+.seat[data-at="top"] .shown {
+  position: absolute;
+  right: 100%;
+  top: 4px;
+  margin-right: 5px;
+  max-width: 74px;
+  text-align: right;
+}
+
+.ate .card.mini { width: 17px; height: 22px; }
+.ate .card.mini + .card.mini { margin-left: -5px; }
+.ate .card.mini .pip { top: 0.5px; left: 1.5px; font-size: 7.5px; }
+.ate .card.mini .pip i { font-size: 7px; }
 
 .ate i {
   font-style: normal;
