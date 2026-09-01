@@ -510,3 +510,46 @@ test('what is laid is public, and what is still held is not', () => {
   assert.ok(body.includes('cards: game.hands ? game.hands[seat].length : null'),
     'ghế phải mang số lá chứ không mang lá');
 });
+
+test('the cái moves to whoever won, instead of sitting on one chair for ever', () => {
+  // Lỗi: người mở bàn giữ cái mãi mãi — ván nào cũng họ được thêm một lá và đánh trước, suốt
+  // buổi. Ngồi vào bàn của ai đó không có nghĩa là người ấy mở mọi ván.
+  for (const cai of [0, 1, 2, 3]) {
+    const game = tableOf(4);
+    dealPhom(game, cai);
+
+    assert.equal(game.turn, cai, 'lượt đầu không về tay cái');
+    assert.equal(game.step, 'throw', 'cái đi bằng cách đánh ra một lá');
+    assert.equal(game.hands[cai].length, PHOM_DEAL + 1, 'cái phải cầm mười lá');
+    for (let seat = 0; seat < 4; seat++) {
+      if (seat === cai) continue;
+      assert.equal(game.hands[seat].length, PHOM_DEAL, `ghế ${seat} cầm sai số lá`);
+    }
+
+    // Xoay cái không được làm sinh ra hay mất đi lá nào.
+    const all = [...game.hands.flat(), ...game.stock];
+    assert.equal(all.length, 52);
+    assert.equal(new Set(all).size, 52, 'một lá nằm hai chỗ sau khi xoay cái');
+  }
+});
+
+test('and the hand says who won so the next one knows who deals', () => {
+  const game = tableOf(3);
+  game.stock = [];
+  game.turn = 1;
+  game.step = 'take';
+  phomDraw(game, 1);
+  assert.equal(game.state, 'over');
+
+  assert.ok(Array.isArray(game.wonLast), 'hết ván mà không ghi lại ai về nhất');
+  assert.equal(game.wonLast.length, 3, 'ba người thì ba tên, theo thứ tự');
+  assert.equal(game.wonLast[0], `u${game.finished[0]}`, 'người đầu danh sách là người về nhất');
+
+  // Máy không bao giờ có tên trong đó — máy không cầm cái.
+  const bots = tableOf(3, { bots: [1] });
+  bots.stock = [];
+  bots.turn = 0;
+  bots.step = 'take';
+  phomDraw(bots, 0);
+  assert.ok(!bots.wonLast.some((id) => id.startsWith('machine:')), 'máy lọt vào danh sách cầm cái');
+});

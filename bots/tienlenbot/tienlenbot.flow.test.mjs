@@ -1270,3 +1270,39 @@ test('nothing sent to a phỏm room ever carries a hand', async () => {
     assert.ok(looked > 2, `chỉ soi được ${looked} push`);
   }, { c1: ['u1'] });
 });
+
+test('a phỏm rematch is opened by whoever won, not by whoever opened the table', async () => {
+  // Lỗi: người mở bàn cầm cái mãi. Ván nào cũng họ thêm một lá và đánh trước, cả buổi.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen in c1');
+    await claim(app, 'u1');
+    app.asks('u2', 'c2');
+    await app.until(() => app.mine('u2'), 'a screen in c2');
+    await claim(app, 'u2');
+
+    app.does('u1', { phom: 2, stake: 1000 });
+    await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the table on the list');
+    app.does('u2', { join: app.mine('u2').rooms[0].id });
+    await app.until(() => (app.mine('u2') ?? {}).phase === 'playing', 'the table to deal');
+
+    // Ván đầu: người mở bàn cầm cái.
+    const first = app.mine('u1');
+    assert.equal(first.seats[first.turn].id, 'u1', 'ván đầu thì người mở bàn đi trước');
+    assert.equal(first.me.hand.length, 10, 'và cầm mười lá');
+
+    await playPhom(app, ['u1', 'u2']);
+    const over = app.mine('u1');
+    const won = over.paid.find((one) => one.place === 'Nhất').userId;
+
+    app.does('u1', { rematch: true });
+    app.does('u2', { rematch: true });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'dealt again');
+
+    const again = app.mine('u1');
+    assert.equal(again.seats[again.turn].id, won, 'ván sau thì người về nhất cầm cái');
+    assert.equal(again.seats.find((one) => one.id === won).cards, 10,
+      'và người ấy là người cầm mười lá');
+  }, { c1: ['u1'], c2: ['u2'] });
+});

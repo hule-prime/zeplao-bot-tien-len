@@ -345,10 +345,19 @@ export function reckon(game) {
 // screen. A turn here is two halves — take a card, then throw one — and the half a table is in
 // is the thing most easily got wrong.
 
-/// Deals a phỏm hand. The one on the cái's seat holds ten and starts by throwing one away.
-export function dealPhom(game) {
+/**
+ * Deals a phỏm hand. The cái holds ten and starts by throwing one away.
+ *
+ * **Who the cái is moves.** It was always seat zero, which is whoever opened the table — so the
+ * same person got the extra card and the first throw every hand, for ever. At a real table the
+ * cái passes: whoever won the last hand takes it. Sitting down at somebody's table should not
+ * mean they open every hand of the evening.
+ */
+export function dealPhom(game, cai = 0) {
   const { hands, stock } = phomDeal(game.seats.length);
-  game.hands = hands;
+  // `phomDeal` puts the ten-card hand first; turn the ring so it lands on the cái.
+  const many = hands.length;
+  game.hands = hands.map((_, seat) => hands[(seat - cai + many) % many]);
   game.stock = stock;
   game.table = null;
   game.tableFrom = null;
@@ -365,7 +374,7 @@ export function dealPhom(game) {
   game.owes = null;
   game.owesWhy = null;
   game.scores = null;
-  game.turn = 0;
+  game.turn = cai;
   // The cái already has their card for this turn — it was dealt to them.
   game.step = 'throw';
   game.state = 'playing';
@@ -505,6 +514,13 @@ export function phomEnd(game) {
     const won = game.seats.findIndex((one) => one.userId === game.u);
     if (won >= 0) game.finished = [won, ...game.finished.filter((seat) => seat !== won)];
   }
+
+  // Ai làm cái ván sau. Đọc ở đây, lúc `finished` còn nói — `dealPhom` xoá nó đi, và tới lúc
+  // có người bấm "ván nữa" thì không còn gì để hỏi. Giữ nguyên thứ tự chứ không chỉ giữ người
+  // đầu, vì người về nhất chính là người dễ cầm tiền đi về nhất.
+  game.wonLast = game.finished
+    .filter((seat) => game.seats[seat] && !game.seats[seat].bot)
+    .map((seat) => game.seats[seat].userId);
 
   game.state = 'over';
   game.turn = null;
@@ -1648,7 +1664,12 @@ export async function run(token, { signal, api = API } = {}) {
       game.finished = [];
       game.left = new Set();
       game.ready = new Set();
-      dealPhom(game);
+      // Người về nhất ván trước làm cái. Họ về nhà rồi thì lùi xuống người về nhì; không còn
+      // ai thì mới quay lại ghế đầu bàn.
+      const cai = (game.wonLast ?? [])
+        .map((userId) => game.seats.findIndex((one) => one.userId === userId))
+        .find((seat) => seat >= 0);
+      dealPhom(game, cai ?? 0);
       if (game.invitationId) {
         await edit(game.invitationId,
           SAY.started(game.seats.map((one) => one.displayName), game.kind), WATCH(game.id), []);

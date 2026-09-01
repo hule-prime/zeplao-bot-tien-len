@@ -261,6 +261,12 @@ câu trả lời duy nhất là một màn hình bắt người ta làm việc c
 xếp hạng theo điểm rác rồi trả theo `payouts`. Trên đó là ba thứ riêng của phỏm — **móm** thua
 gấp đôi, **ù** ăn gấp đôi từ mỗi người, **đền** trả thay cả làng. Bằng điểm thì ai hạ sau thua.
 
+**Cái xoay vòng.** Người về nhất ván trước làm cái ván sau: họ được lá thứ mười và đánh trước.
+Bản đầu cái nằm chết ở ghế số không — tức là người mở bàn — nên suốt buổi chỉ một người được
+thêm lá và đi đầu. Ngồi vào bàn của ai đó không có nghĩa là người ấy mở mọi ván. Cùng luật với
+tiến lên, và cùng cách viết: nhớ **cả thứ tự về đích** chứ không chỉ nhớ người đầu, vì người về
+nhất chính là người dễ cầm tiền đi về nhất.
+
 **Một chỗ đổi so với kế hoạch, nói thẳng ra:** kế hoạch ghi đền là "ăn chốt rồi người sau ù".
 Với cấu trúc lượt ở đây thì ván dừng ngay lúc có người ù, nên tình huống ấy không bao giờ tới
 được. Thay bằng **"nhả lá cho người ta ù thì người nhả đền"** — cùng một họ luật, và là cái thật
