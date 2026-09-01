@@ -775,6 +775,11 @@ body {
 
 #pile .card + .card { margin-left: -22px; }
 
+/* Nọc và lá vừa đánh là hai thứ khác nhau, nên chúng đứng rời nhau.
+   Chồng lên nhau -22px là cách xếp một *đống bài đánh ra* của tiến lên; đem nó dùng cho hai vật
+   không liên quan thì lá vừa đánh trông như vừa được rút ra khỏi nọc. */
+#pile .stock + .card { margin-left: 10px; }
+
 #pile-note {
   text-align: center;
   font-size: 11px;
@@ -1559,14 +1564,29 @@ body {
 .phom-score.clean { color: #6fd39a; }
 
 /* Những lá một người đã ăn. Công khai, và là nửa cái thú của việc nhìn bàn phỏm. */
+/* Những lá một người đã ăn — bài thật, cạnh ghế họ, tới hết ván.
+ *
+ * Đây là lá **của mình vừa nhả ra**: biết nó nằm ở đâu là biết nên tránh nhả thêm con nào. Viết
+ * ra chữ thì phải đọc rồi dịch lại thành hình một lá bài; để nguyên lá bài thì không phải làm gì
+ * cả. */
 .ate {
-  font-size: 9.5px;
-  color: var(--gold);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 96px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  max-width: 92px;
 }
+
+.ate i {
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+/* Viền vàng, vì lá này tới từ bãi chứ không phải từ nọc — và đó là điều đáng biết về nó. */
+.card.mini.took { box-shadow: 0 0 0 1px var(--gold-deep), 0 1px 2px rgba(0, 0, 0, 0.4); }
 
 /* ---- chia bài -------------------------------------------------------------------------------
 
@@ -1829,10 +1849,12 @@ body {
  * gì phân biệt nó — bốc xong nhìn xuống là một tay bài đã xáo lại, không biết vừa thêm con gì.
  * Vòng vàng đè lên cả viền xanh của phỏm, vì "lá này vừa về" là câu trả lời trước, còn "lá này
  * nằm trong phỏm" là câu sau. Nhô lên bốn pixel nữa cho chắc, phòng khi ai không phân biệt màu. */
+/* Chỉ vòng sáng, **không** nhấc lên.
+ *
+ * Nhấc lên là dấu hiệu của "đang chọn để đánh" — nó đã có nghĩa rồi, ở `.up`. Dùng lại đúng cái
+ * chuyển động ấy cho "lá vừa về" là làm hai chuyện khác nhau trông giống hệt nhau, và ngay lúc
+ * người ta đang phải chọn lá để đánh đi. */
 .fan .card.fresh {
-  box-shadow: 0 0 0 2px var(--gold), 0 6px 14px rgba(0, 0, 0, 0.45);
-  transform: translateY(-4px);
+  box-shadow: 0 0 0 2px var(--gold), 0 3px 8px rgba(0, 0, 0, 0.4);
   filter: none;
 }
-
-.fan .card.fresh.up { transform: translateY(-13px); }

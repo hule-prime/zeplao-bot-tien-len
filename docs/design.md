@@ -323,9 +323,20 @@ khung hình, không ai kịp thấy nó lấy con gì.
 
 - **Lá vừa được đánh ra thì bay xuống.** Không có hiệu ứng thì lá trên bãi cứ đứng đó và đổi
   mặt — nhìn ra là cái bàn tự sửa mình chứ không phải ai đó vừa đánh một lá.
-- **Lá vừa về tay thì có vòng vàng.** Tay phỏm xếp lại theo phỏm sau mỗi lần lấy bài, nên lá mới
-  không nằm ở cuối hàng: bốc xong nhìn xuống là một tay bài đã xáo lại. Cần cả khi tắt nặn — lúc
-  ấy nó là dấu hiệu **duy nhất**.
+- **Lá vừa về tay thì có vòng vàng — và chỉ có vòng vàng.** Tay phỏm xếp lại theo phỏm sau mỗi
+  lần lấy bài, nên lá mới không nằm ở cuối hàng: bốc xong nhìn xuống là một tay bài đã xáo lại.
+  Cần cả khi tắt nặn — lúc ấy nó là dấu hiệu **duy nhất**.
+
+  Không nhấc lá lên. Nhấc lên đã có nghĩa rồi: đó là "đang chọn để đánh". Dùng lại đúng cái
+  chuyển động ấy cho "lá vừa về" là làm hai chuyện khác nhau trông giống hệt nhau, ngay lúc người
+  ta đang phải chọn lá để đánh đi.
+- **Lá người khác ăn của mình nằm cạnh ghế họ, bằng bài thật, tới hết ván.** Nó là lá *mình vừa
+  nhả ra*: biết nó ở đâu là biết nên tránh nhả thêm con nào. Viết ra chữ thì phải đọc rồi dịch
+  lại thành hình một lá bài; để nguyên lá bài thì không phải làm gì cả. Và nó ở lại tới cuối ván,
+  vì đó là thứ người ta nhìn lại nhiều lần chứ không phải một thông báo thoáng qua.
+- **Ăn thì không nặn.** Lá ấy vừa nằm ngửa giữa bàn, cả bàn đã thấy, và chính mình vừa bấm nút để
+  lấy đúng nó. Chỉ lá **bốc từ nọc** mới là lá chưa ai biết. Bắt nặn một lá mình đã biết là bắt
+  làm một thao tác thừa đúng vào lúc đang vội.
 - **Hết ván thì mở hết bài, bằng bài thật.** Trước đây ván xong là nhảy thẳng sang bảng tiền,
   không ai kịp nhìn người khác có phỏm gì và dư con gì — mà đó chính là lúc người ta muốn nhìn
   nhất, vì nó trả lời câu "mình thua ở đâu". Một con số nói mình thua bao nhiêu; nó không nói vì

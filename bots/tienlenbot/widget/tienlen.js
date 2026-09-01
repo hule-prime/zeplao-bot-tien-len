@@ -449,9 +449,18 @@ function chairOf(seat, at, announce) {
   // What they have taken off the table. Half of reading a phỏm table is this: somebody who ate
   // a 7♥ is collecting round there, and the card you were about to throw might be theirs.
   if (phom() && (seat.eaten || []).length) {
+    // Bài thật, không phải chữ, và ở lại tới hết ván.
+    //
+    // Lá người ta ăn là lá **của mình vừa nhả ra** — biết nó nằm ở đâu là biết nên tránh nhả
+    // thêm con nào. Viết ra chữ thì phải đọc rồi dịch lại thành hình ảnh một lá bài; để nguyên
+    // lá bài thì không phải làm gì cả. Và nó phải còn đó tới cuối ván, vì nó là thứ người ta
+    // nhìn lại nhiều lần chứ không phải một thông báo thoáng qua.
     const ate = document.createElement('div');
     ate.className = 'ate';
-    ate.textContent = `ăn ${seat.eaten.map(nameOfCard).join(' ')}`;
+    const tag = document.createElement('i');
+    tag.textContent = 'ăn';
+    ate.append(tag);
+    for (const card of seat.eaten) ate.append(cardOf(card, 'mini took'));
     chair.append(ate);
   }
 
@@ -2658,7 +2667,14 @@ z.onState((next) => {
       const fresh = seated.hand.filter((card) => !before.includes(card));
       if (fresh.length === 1) {
         justTook = fresh[0];
-        if (squeezing) peeked = { card: fresh[0], open: false };
+        // Chỉ nặn lá **bốc từ nọc**.
+        //
+        // Ăn thì lá ấy vừa nằm ngửa giữa bàn, cả bàn đã nhìn thấy nó, và chính mình vừa bấm nút
+        // để lấy đúng nó. Bắt nặn một lá mình đã biết là bắt làm một thao tác thừa đúng vào lúc
+        // đang vội.
+        // `me` không mang theo danh sách đã ăn — cái ấy ở trên ghế, vì nó công khai.
+        const ate = ((next.seats[seated.seat] || {}).eaten || []).includes(fresh[0]);
+        if (squeezing && !ate) peeked = { card: fresh[0], open: false };
       }
     }
     heldHand = [...seated.hand];
