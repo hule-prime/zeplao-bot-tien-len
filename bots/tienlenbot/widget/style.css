@@ -1898,3 +1898,11 @@ body {
   box-shadow: 0 0 0 2px var(--gold), 0 3px 8px rgba(0, 0, 0, 0.4);
   filter: none;
 }
+
+/* Lá nằm trong một bộ đã ăn. Không đánh đi được — ở bàn thật nó nằm ngửa trước mặt và không ai
+   với tới. Ghim xuống một chút và bỏ con trỏ tay, để cái tay biết trước khi cái đầu kịp thử. */
+.fan .card.pinned {
+  cursor: default;
+  box-shadow: inset 0 0 0 2px rgba(111, 211, 154, 0.95), 0 1px 3px rgba(0, 0, 0, 0.35);
+  filter: none;
+}

@@ -237,6 +237,33 @@ thuật toán mà là câu hỏi: cách chia đúng là cách để lại **ít 
 nhất. 5♥6♥7♥ 7♠7♣ K♦ giữ sảnh thì thừa 27 điểm, giữ bộ ba thì thừa 24 — hai câu nghe giống nhau
 và không phải một.
 
+**Ăn thì khoá bộ lại.** Ăn được một lá là vì nó vào phỏm — nên phỏm ấy phải đứng. Không rút ruột
+nó để ăn tiếp, và không đánh lá của nó đi. Ở bàn thật chuyện này không cần nói: ba lá nằm ngửa
+trước mặt và không ai với tới. Ở đây phải nói ra thành luật, và bản đầu tôi quên:
+
+```
+ăn 7♥  →  bộ 7♠ 7♣ 7♥
+ăn 8♠  →  bộ 6♠ 7♠ 8♠      (cướp mất 7♠)
+chia rẻ nhất thành 5♠ 6♠ 7♠ 8♠, rác gồm 7♣ và 7♥
+                              ↑ 7♥ là lá đã ăn, giờ là rác
+```
+
+Tức là đã ăn một lá rồi không dùng được nó. Người chơi tìm ra, và họ mô tả đúng cái đang xảy ra:
+"ăn lần hai hư bộ ăn lần một".
+
+Sửa thì `bestSplit` nhận thêm danh sách bộ đã khoá và chia phần còn lại quanh chúng — câu hỏi
+không còn là "chia sao cho ít điểm nhất" mà là "chia sao cho ít điểm nhất **mà vẫn giữ những bộ
+đã ăn**". Hai câu trả lời khác nhau, và câu thứ hai đắt hơn: ở ca trên, giữ bộ khoá tốn 45 điểm
+thay vì 40. Đó là cái giá của luật, không phải một chỗ chưa tối ưu.
+
+`eatOptions` cũng chỉ được dùng lá tự do, `phomDiscard` chừa lá đã khoá, và `phomThrow` từ chối
+thẳng. Trên trang thì lá ấy được ghim lại, bỏ con trỏ tay, và bấm vào thì nói ra lý do.
+
+**Từ chối phải nói ra.** Bot lặng lẽ bỏ qua một nước không hợp lệ là cái bàn đứng im mà không ai
+hiểu vì sao — trang đang mở có thể là bản cũ, hoặc vừa lỡ nhịp. Chính chuyện này làm một test
+ngồi chờ hai lăm giây rồi mới đỏ, và nó đỏ đúng: cái máy đo tôi gắn vào chỗ chờ đã chỉ thẳng ra
+"gửi nước đi, không có gì đổi, không có gì bị từ chối".
+
 **Ăn thì phải nhả.** Cái bẫy của trò này: ăn xong vẫn phải đánh đi một lá. Ăn một lá ba điểm rồi
 buộc phải nhả một lá mười ba điểm là ăn để lỗ mười. Nên máy so **điểm rác sau khi đã ăn và đã
 đánh đi lá tốt nhất**, chứ không so điểm rác lúc vừa ăn xong.
@@ -496,6 +523,8 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | Hiệu ứng lá rơi gắn ở lần vẽ đầu tiên | Mỗi nước là **hai** push — một chung, một riêng có bài mình — nên `render` chạy hai lần cách nhau vài mili giây, và lần thứ hai dựng lại lá không còn lớp hiệu ứng. Nhìn ra là chẳng có hiệu ứng nào cả |
 | Phỏm lấy bài và đánh bài trong cùng một nhịp | Tay dài thêm rồi ngắn lại trong cùng một khung hình; không ai thấy nó lấy con gì |
 | Danh sách về đích lọc bỏ máy | Máy là đồ đạc **lúc chia tiền**, không phải lúc xếp thứ tự. Lọc chúng ra thì ở bàn một người với ba máy, danh sách còn đúng một cái tên — và cái tên ấy thành "người về nhất" dù vừa về bét. Về ba, bấm "ván nữa", lại được đánh đầu, ván nào cũng thế. Sai ở **cả hai trò**, cùng một dòng |
+| Ăn xong không khoá bộ lại | Ăn lần hai rút ruột bộ ăn lần một, và lá ăn lần một rơi ra thành rác — đã ăn một lá mà không dùng được nó. Người chơi tìm ra trước tôi |
+| Nước đi bị từ chối trong im lặng | Bàn đứng im, không ai hiểu vì sao. Một cái test ngồi chờ hai lăm giây rồi mới đỏ, và máy đo ở chỗ chờ là thứ chỉ ra được |
 
 Và một luật rút ra từ carobot, có test canh:
 

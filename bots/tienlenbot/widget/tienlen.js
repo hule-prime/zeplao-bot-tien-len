@@ -641,6 +641,7 @@ function drawHand() {
   // other. So the phỏm are drawn first and lit, the junk after and dimmed, and the answer is
   // the row itself.
   const melds = hiding ? heldSplit.melds : (phom() && state.me ? state.me.melds : null);
+  const locked = new Set(phom() && state.me ? (state.me.locked || []).flat() : []);
   const inMeld = new Set();
   if (phom() && melds) {
     for (const meld of melds) for (const card of meld) inMeld.add(card);
@@ -661,6 +662,9 @@ function drawHand() {
     const el = cardOf(card, picked.has(card) ? 'up' : '');
     if (state.opensWith === card) el.classList.add('opens');
     if (phom()) el.classList.add(inMeld.has(card) ? 'melded' : 'junk');
+    // Bộ đã ăn thì đứng yên: những lá ấy không đánh đi được. Vẽ khác đi, vì một lá bấm vào mà
+    // không nhúc nhích và không nói gì là một lá trông như hỏng.
+    if (phom() && !hiding && locked.has(card)) el.classList.add('pinned');
     if (phom() && card === justTook) el.classList.add('fresh');
     if (dealing) {
       el.classList.add('dealing');
@@ -748,6 +752,12 @@ function tap(card) {
   // a play. Tapping a second card moves the choice instead of adding to it.
   if (phom()) {
     if (state.step !== 'throw') { say('Lấy một lá trước đã'); return; }
+    // Nói ra lý do. Ăn được lá nào là vì nó vào phỏm, nên phỏm ấy phải đứng — và một lá bấm vào
+    // mà im lặng thì người ta bấm lại lần nữa rồi nghĩ là màn hình treo.
+    if ((state.me.locked || []).some((meld) => meld.includes(card))) {
+      say('Lá này nằm trong phỏm đã ăn — không đánh đi được');
+      return;
+    }
     picked = picked.has(card) ? new Set() : new Set([card]);
     say('');
     drawHand();

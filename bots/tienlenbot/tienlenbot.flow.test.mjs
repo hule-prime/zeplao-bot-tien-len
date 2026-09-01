@@ -305,6 +305,29 @@ async function oneMove(app, who) {
 }
 
 /// Plays a table out, answering for all of these people until none of them is at it any more.
+/**
+ * Chờ bàn chia xong — và chia lại nếu ván vừa rồi tới trắng.
+ *
+ * Đây là con ma làm bộ test đỏ ngẫu nhiên khoảng một lần trong tám, suốt cả buổi. Không phải
+ * lỗi: một tay bài tới trắng thì ván **kết thúc ngay khi chia**, nên `phase` nhảy thẳng sang
+ * `over` và cái chờ `playing` ngồi tới hết giờ. Ở bàn hai người, mười ba lá mỗi tay, chuyện ấy
+ * xảy ra đủ thường xuyên để gặp.
+ *
+ * Cái máy đo ở chỗ chờ là thứ chỉ ra được — nó in `pha=over` ngay dòng đầu.
+ */
+async function dealt(app, who) {
+  for (let tries = 0; tries < 20; tries++) {
+    await app.until(() => who.every((id) => ['playing', 'over'].includes(app.mine(id).phase)),
+      'the table to deal');
+    if (who.every((id) => app.mine(id).phase === 'playing')) return;
+
+    // Tới trắng: ván xong trước khi ai kịp đánh. Xin ván khác.
+    for (const id of who) app.does(id, { rematch: true });
+    await nap(60);
+  }
+  assert.fail('the table kept dealing tới trắng');
+}
+
 async function playOut(app, who) {
   for (let move = 0; move < 400; move++) {
     // Somebody who went back to the lobby is not waiting for anything, so "over" is not the
@@ -420,7 +443,7 @@ test('two people in different groups sit at the same table', async () => {
     assert.deepEqual(there.names, ['Thọ']);
 
     app.does('u2', { join: there.id });
-    await app.until(() => (app.mine('u2') ?? {}).phase === 'playing', 'the table to deal');
+    await dealt(app, ['u1', 'u2']);
 
     const started = app.mine('u2');
     assert.deepEqual(started.seats.map((one) => one.name).sort(), ['Lan Anh', 'Thọ']);
@@ -663,8 +686,7 @@ test('coming first is paid at once, and leaving after it is not walking out', as
     app.does('u2', { join: table });
     await app.until(() => (app.mine('u2') ?? {}).phase === 'lobby', 'u2 seated');
     app.does('u3', { join: table });
-    await app.until(() => ['u1', 'u2', 'u3'].every((id) => app.mine(id).phase === 'playing'),
-      'the table to deal itself');
+    await dealt(app, ['u1', 'u2', 'u3']);
 
     // Play until somebody is out of cards with the table still going. At three seats that is
     // the first two people to finish, so it always happens.
@@ -1103,7 +1125,7 @@ test('the three of spades opens the first hand of a table and nothing after it',
 
     await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the table on u2\'s list');
     app.does('u2', { join: app.mine('u2').rooms[0].id });
-    await app.until(() => (app.mine('u2') ?? {}).phase === 'playing', 'the table to deal');
+    await dealt(app, ['u1', 'u2']);
 
     const first = app.mine('u1');
     assert.notEqual(first.opensWith, null, 'ván đầu thì có lá bắt buộc');
@@ -1139,10 +1161,13 @@ async function onePhomTurn(app, who) {
   const was = JSON.stringify([now.turn, now.step, now.me.hand.length, now.phase]);
 
   if (now.step === 'take') {
-    app.does(turn, now.me.canEat && phomChoose(now.me.hand, now.table)
+    app.does(turn, now.me.canEat && phomChoose(now.me.hand, now.table,
+      { locked: now.me.locked ?? [] })
       ? { eat: true } : { draw: true });
   } else {
-    app.does(turn, { throw: phomDiscard(now.me.hand) });
+    // Kèm bộ đã ăn: chúng bị khoá, và đánh một lá trong đó thì bot từ chối — bàn đứng im, và
+    // cái chờ ngồi trọn hai lăm giây.
+    app.does(turn, { throw: phomDiscard(now.me.hand, { locked: now.me.locked ?? [] }) });
   }
 
   await app.until(() => {
@@ -1218,7 +1243,7 @@ test('two people in different groups play phỏm at the same table', async () =>
     assert.equal(there.kind, 'phom', 'danh sách phải nói rõ là bàn phỏm');
 
     app.does('u2', { join: there.id });
-    await app.until(() => (app.mine('u2') ?? {}).phase === 'playing', 'the table to deal');
+    await dealt(app, ['u1', 'u2']);
 
     // Không ai nhận được bài của ai.
     const hands = ['u1', 'u2'].map((id) => app.mine(id).me.hand);
@@ -1285,7 +1310,7 @@ test('a phỏm rematch is opened by whoever won, not by whoever opened the table
     app.does('u1', { phom: 2, stake: 1000 });
     await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the table on the list');
     app.does('u2', { join: app.mine('u2').rooms[0].id });
-    await app.until(() => (app.mine('u2') ?? {}).phase === 'playing', 'the table to deal');
+    await dealt(app, ['u1', 'u2']);
 
     // Ván đầu: người mở bàn cầm cái.
     const first = app.mine('u1');

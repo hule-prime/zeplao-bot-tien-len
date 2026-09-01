@@ -143,7 +143,27 @@ export function meldsOf(hand) {
  *
  * Trả về `{ melds, junk, points }`.
  */
-export function bestSplit(hand) {
+export function bestSplit(hand, locked = []) {
+  // Bộ đã ăn thì đã khoá: những lá trong đó không được đem chia lại.
+  //
+  // Không có chỗ này thì ăn lần hai có thể cướp mất một lá của bộ ăn lần một, và lá ăn lần một
+  // rơi ra thành rác — tức là đã ăn một lá mà không dùng được nó, đúng cái luật cấm. Dựng lại
+  // được: ăn 7♥ vào 7♠7♣7♥, rồi ăn 8♠ vào 6♠7♠8♠, thế là 7♥ thành rác.
+  const held = new Set(locked.flat());
+  if (held.size) {
+    const rest = hand.filter((card) => !held.has(card));
+    const split = bestSplit(rest);
+    const melds = [...locked.map((meld) => [...meld]), ...split.melds];
+    // Lá rác nào nối được vào bộ đã khoá thì nối — con thứ tư của một bộ ba là bộ bốn, và để nó
+    // ngoài làm rác là tính điểm cho một lá đang nằm trong phỏm.
+    const junk = [];
+    for (const card of split.junk) {
+      const into = melds.find((meld) => isMeld([...meld, card]));
+      if (into) into.push(card); else junk.push(card);
+    }
+    return { melds, junk, points: junk.reduce((total, card) => total + points(card), 0) };
+  }
+
   const order = [...hand].sort((a, b) => a - b);
   const n = order.length;
   if (!n) return { melds: [], junk: [], points: 0 };
@@ -190,10 +210,11 @@ export function bestSplit(hand) {
 }
 
 /// Điểm rác của tay bài, chia theo cách tốt nhất.
-export const junkOf = (hand) => bestSplit(hand).points;
+export const junkOf = (hand, locked = []) => bestSplit(hand, locked).points;
 
 /// Ù: cả tay vào phỏm hết, không còn lá rác nào.
-export const isU = (hand) => hand.length >= 9 && bestSplit(hand).junk.length === 0;
+export const isU = (hand, locked = []) =>
+  hand.length >= 9 && bestSplit(hand, locked).junk.length === 0;
 
 // ---- ăn và gửi -------------------------------------------------------------------------------
 
@@ -204,13 +225,17 @@ export const isU = (hand) => hand.length >= 9 && bestSplit(hand).junk.length ===
  * Chỉ trả về phỏm đúng ba lá, vì lá thứ tư trở đi vẫn nằm trên tay và gửi được lúc hạ; ăn thành
  * bộ to hơn không cho thêm gì mà lại khoá mất mấy lá kia.
  */
-export function eatOptions(hand, card) {
+export function eatOptions(hand, card, locked = []) {
   if (card === null || card === undefined) return [];
-  return meldsOf([...hand, card])
+  // Lá đang nằm trong một bộ đã ăn thì không rút ra được nữa. Ở bàn thật chúng nằm ngửa trước
+  // mặt; ở đây phải nói ra thành luật, nếu không thì ăn lần hai đi rút ruột bộ ăn lần một.
+  const held = new Set(locked.flat());
+  const free = hand.filter((one) => !held.has(one));
+  return meldsOf([...free, card])
     .filter((meld) => meld.length === 3 && meld.includes(card));
 }
 
-export const canEat = (hand, card) => eatOptions(hand, card).length > 0;
+export const canEat = (hand, card, locked = []) => eatOptions(hand, card, locked).length > 0;
 
 /**
  * Những lá rác gửi được vào phỏm đã hạ trên bàn.
@@ -242,13 +267,13 @@ export function sendable(junk, melds) {
  *
  * `card` là lá người trước vừa đánh, hoặc null nếu không có gì để ăn.
  */
-export function phomChoose(hand, card, { late = false } = {}) {
+export function phomChoose(hand, card, { late = false, locked = [] } = {}) {
   if (card === null || card === undefined) return null;
-  const options = eatOptions(hand, card);
+  const options = eatOptions(hand, card, locked);
   if (!options.length) return null;
 
-  const now = junkOf(hand);
-  const after = bestAfterTaking(hand, card);
+  const now = junkOf(hand, locked);
+  const after = bestAfterTaking(hand, card, [...locked, options[0]]);
   if (after === null) return null;
 
   // Gần chốt thì ăn cẩn thận: ăn lá cuối rồi người sau ù là đền cả làng, mà tay còn nhiều rác
@@ -259,15 +284,17 @@ export function phomChoose(hand, card, { late = false } = {}) {
 }
 
 /// Điểm rác thấp nhất đạt được nếu cầm lá này về rồi đánh đi một lá.
-function bestAfterTaking(hand, card) {
+function bestAfterTaking(hand, card, locked = []) {
   const held = [...hand, card];
-  if (isU(held)) return 0;
+  if (isU(held, locked)) return 0;
 
+  const stuck = new Set(locked.flat());
   let best = null;
   for (const out of held) {
-    if (out === card) continue;              // ăn xong nhả lại đúng lá vừa ăn thì vô nghĩa
+    // Lá trong bộ đã khoá thì không đánh đi được, và lá vừa ăn thì nhả lại là vô nghĩa.
+    if (out === card || stuck.has(out)) continue;
     const rest = held.filter((one) => one !== out);
-    const junk = junkOf(rest);
+    const junk = junkOf(rest, locked);
     if (best === null || junk < best) best = junk;
   }
   return best;
@@ -280,17 +307,20 @@ function bestAfterTaking(hand, card) {
  * người sau đã ăn trong ván này — họ ăn 7♥ thì họ đang gom quanh chỗ đó, và nhả thêm một lá
  * quanh đó là nuôi họ.
  */
-export function phomDiscard(hand, { theirEaten = [], theirDiscarded = [] } = {}) {
-  const split = bestSplit(hand);
-  const junk = split.junk.length ? split.junk : [...hand];
+export function phomDiscard(hand, { theirEaten = [], theirDiscarded = [], locked = [] } = {}) {
+  const split = bestSplit(hand, locked);
+  const stuck = new Set(locked.flat());
+  const loose = hand.filter((card) => !stuck.has(card));
+  const junk = split.junk.length ? split.junk : (loose.length ? loose : [...hand]);
 
   let worst = null;
   let worstCost = -Infinity;
 
   for (const card of junk) {
+    if (stuck.has(card)) continue;
     const rest = hand.filter((one) => one !== card);
     // Bỏ lá này đi thì tay còn lại bao nhiêu điểm. Thấp là tốt, nên điểm bỏ đi là điểm âm của nó.
-    let cost = -junkOf(rest);
+    let cost = -junkOf(rest, locked);
 
     // Lá đang chờ: giữ 6♥7♥ thì còn cửa 5♥ và 8♥, mà một lá rác có cửa thì chưa hẳn là rác.
     cost -= waiting(rest, card) * 4;
@@ -303,7 +333,7 @@ export function phomDiscard(hand, { theirEaten = [], theirDiscarded = [] } = {})
     if (cost > worstCost) { worstCost = cost; worst = card; }
   }
 
-  return worst ?? hand[0];
+  return worst ?? loose[0] ?? hand[0];
 }
 
 /// Lá này còn bao nhiêu cửa để thành phỏm — đếm số lá ngoài kia ghép được với những gì còn lại.
@@ -332,8 +362,8 @@ function feeds(card, eaten) {
  * `laid` là thứ tự hạ bài — bằng điểm thì ai hạ sau thua, nên thứ tự ấy là một phần của luật
  * chứ không phải chuyện trang trí.
  */
-export function phomScores(hands, { laid = [] } = {}) {
-  const splits = hands.map((hand) => bestSplit(hand));
+export function phomScores(hands, { laid = [], locked = [] } = {}) {
+  const splits = hands.map((hand, seat) => bestSplit(hand, locked[seat] ?? []));
   const table = splits.flatMap((split) => split.melds.map((meld) => [...meld]));
 
   return splits.map((split, seat) => {

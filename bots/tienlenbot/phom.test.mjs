@@ -312,8 +312,9 @@ function playOut(players, { bots = [] } = {}) {
 
     if (game.step === 'take') {
       const before = game.hands[seat].length;
-      const took = game.table !== null && canEat(game.hands[seat], game.table)
-        && phomChoose(game.hands[seat], game.table);
+      const locked = game.melded[seat] ?? [];
+      const took = game.table !== null && canEat(game.hands[seat], game.table, locked)
+        && phomChoose(game.hands[seat], game.table, { locked });
       if (took) assert.ok(phomEat(game, seat), 'ăn hợp lệ mà bị từ chối');
       else phomDraw(game, seat);
       if (game.state === 'playing') {
@@ -325,7 +326,7 @@ function playOut(players, { bots = [] } = {}) {
 
     const before = game.hands[seat].length;
     assert.ok(before >= PHOM_DEAL + 1 || game.took[seat] === 0 || true);
-    const out = phomDiscard(game.hands[seat]);
+    const out = phomDiscard(game.hands[seat], { locked: game.melded[seat] ?? [] });
     assert.ok(game.hands[seat].includes(out), 'đánh lá không có trên tay');
     assert.ok(phomThrow(game, seat, out), 'đánh hợp lệ mà bị từ chối');
     assert.equal(game.hands[seat].length, before - 1);
@@ -576,4 +577,100 @@ test('a table of one person and three machines does not hand the same person the
     .map((id) => game.seats.findIndex((one) => one.userId === id))
     .find((seat) => seat >= 0);
   assert.equal(cai, nhat, 'cái phải về tay ghế về nhất, không phải ghế của người chơi');
+});
+
+// ---- ăn thì khoá bộ lại -----------------------------------------------------------------------
+
+test('eating a second card may not gut the phỏm the first one went into', () => {
+  // Lỗi người chơi báo về, dựng lại nguyên văn: ăn 7♥ vào 7♠7♣7♥, rồi ăn 8♠ vào 6♠7♠8♠ — cái
+  // sảnh ấy cướp mất 7♠, và cách chia rẻ nhất trở thành 5♠6♠7♠8♠, đẩy **7♥** ra làm rác. Tức là
+  // đã ăn một lá rồi không dùng được nó, đúng cái luật cấm.
+  const mine = hand('7♠', '7♣', '5♠', '6♠', '2♥', '3♣', '9♦', 'Q♠');
+
+  const first = eatOptions(mine, p('7♥'));
+  assert.deepEqual(first.map((meld) => show(meld)), ['7♠ 7♣ 7♥']);
+
+  const after = [...mine, p('7♥')].sort((a, b) => a - b);
+  const locked = [first[0]];
+
+  // 8♠ chỉ ghép được bằng cách rút 7♠ ra khỏi bộ vừa ăn, nên không ăn được nữa.
+  assert.equal(canEat(after, p('8♠'), locked), false, 'vẫn cho ăn bằng lá đã khoá');
+  assert.deepEqual(eatOptions(after, p('8♠'), locked), []);
+
+  // Lá nào không đụng tới bộ khoá thì vẫn ăn bình thường.
+  assert.equal(canEat(after, p('4♠'), locked), true, '4♠ chỉ cần 5♠6♠, không đụng bộ khoá');
+
+  const both = [...after, p('4♠')].sort((a, b) => a - b);
+  const split = bestSplit(both, [...locked, eatOptions(after, p('4♠'), locked)[0]]);
+  for (const card of [p('7♥'), p('4♠')]) {
+    assert.ok(split.melds.some((meld) => meld.includes(card)),
+      `${phomName(card)} đã ăn mà lại nằm ngoài phỏm`);
+  }
+});
+
+test('a locked phỏm survives the split even when breaking it would score better', () => {
+  // Không phải "chia sao cho ít điểm nhất" nữa — là "chia sao cho ít điểm nhất **mà vẫn giữ
+  // những bộ đã ăn**". Hai câu ấy trả lời khác nhau, và câu thứ hai mới là luật.
+  // Ăn 7♥ vào bộ ba bảy, rồi **bốc** được 8♠. Không khoá thì cách chia rẻ nhất là sảnh
+  // 5♠6♠7♠8♠, và nó đẩy 7♣ với 7♥ ra làm rác — trong đó 7♥ là lá đã ăn.
+  const mine = hand('2♥', '3♣', '5♠', '6♠', '7♠', '7♣', '7♥', '8♠', '9♦', 'Q♠');
+  const locked = [hand('7♠', '7♣', '7♥')];
+
+  const free = bestSplit(mine);
+  const held = bestSplit(mine, locked);
+
+  assert.ok(free.junk.includes(p('7♥')), 'ca dựng ra không còn đúng ý nữa');
+  assert.ok(held.melds.some((meld) => meld.includes(p('7♠')) && meld.includes(p('7♥'))),
+    'bộ đã khoá bị xé ra');
+  assert.ok(!held.junk.includes(p('7♥')), 'lá đã ăn lại nằm ngoài phỏm');
+
+  // Và giữ bộ khoá thì **đắt hơn** — đó là cái giá của luật, không phải một sự tối ưu.
+  assert.ok(held.points > free.points,
+    `giữ bộ khoá phải tốn hơn: ${held.points} so với ${free.points}`);
+});
+
+test('a card in a locked phỏm cannot be thrown away', () => {
+  const game = tableOf(3);
+  game.hands[0] = hand('7♠', '7♣', '5♠', '6♠', '2♥', '3♣', '9♦', 'Q♠', 'K♦', '10♣');
+  game.melded[0] = [hand('7♠', '7♣', '7♥')];
+  game.turn = 0;
+  game.step = 'throw';
+
+  assert.equal(phomThrow(game, 0, p('7♠')), false, 'đánh được lá đang khoá trong bộ đã ăn');
+  assert.ok(phomThrow(game, 0, p('K♦')), 'lá tự do thì vẫn đánh được');
+});
+
+test('and the machine never tries to throw one either', () => {
+  for (let i = 0; i < 200; i++) {
+    const { hands } = phomDeal(4);
+    const mine = hands[0];
+    // Khoá bừa một bộ nếu tay có, để chắc chắn có ca để thử.
+    const locked = bestSplit(mine).melds.slice(0, 1);
+    if (!locked.length) continue;
+    const stuck = new Set(locked.flat());
+    const out = phomDiscard(mine, { locked });
+    assert.ok(!stuck.has(out), `máy định đánh ${phomName(out)} đang nằm trong bộ đã ăn`);
+    assert.ok(mine.includes(out), 'máy đánh lá không có trên tay');
+  }
+});
+
+test('what is locked goes out with the hand, so a screen can say why it will not move', () => {
+  const source = readFileSync(new URL('./tienlenbot.mjs', import.meta.url), 'utf8');
+  assert.match(source, /locked,\n          \/\/ Whether this card makes/,
+    'bài riêng không mang theo danh sách bộ đã khoá');
+});
+
+test('a throw the bot will not take comes back with a reason, not with silence', () => {
+  // Bàn đứng im là thứ tệ nhất có thể xảy ra ở đây: trang đang mở có thể là bản cũ hoặc vừa lỡ
+  // nhịp, và lúc ấy người ta chỉ thấy một cái nút không ăn. Chính chuyện này làm một test ngồi
+  // chờ hai lăm giây rồi mới đỏ — mà nó đỏ đúng.
+  const source = readFileSync(new URL('./tienlenbot.mjs', import.meta.url), 'utf8');
+  const from = source.indexOf("if (game.kind === 'phom') {\n      if (game.state !== 'playing'");
+  assert.ok(from !== -1, 'khối nhận nước đi của phỏm đã dời chỗ');
+  const body = source.slice(from, source.indexOf('\n    }', from));
+
+  assert.ok(/if \(!moved\) \{[\s\S]*says:/.test(body),
+    'nước đi bị từ chối mà không nói gì cả');
+  assert.match(source, /pinned: 'Lá này nằm trong phỏm đã ăn/,
+    'không có câu nào giải thích lá bị khoá');
 });

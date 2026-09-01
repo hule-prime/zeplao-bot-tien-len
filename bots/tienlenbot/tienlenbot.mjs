@@ -64,7 +64,7 @@ import {
   nextInRound, nextActive, opensGame, stillIn, lowestElsewhere,
 } from './rules/tienlen.mjs';
 import {
-  PHOM_DEAL, PHOM_TURNS, PHOM_THINK_MS, phomDeal, bestSplit, junkOf, isU,
+  PHOM_DEAL, PHOM_TURNS, PHOM_THINK_MS, phomDeal, bestSplit, junkOf, isU, isMeld,
   canEat, eatOptions, phomChoose, phomDiscard, phomScores, phomSettle, points as phomPoints,
 } from './rules/phom.mjs';
 import {
@@ -101,6 +101,8 @@ export const SAY = {
   // Said with the number, because "not enough gold" leaves somebody to work out how much a
   // table they cannot see costs.
   tooPoor: (stake) => `Cần ${gold(stake)} vàng mới ngồi được bàn này.`,
+  pinned: 'Lá này nằm trong phỏm đã ăn — không đánh đi được.',
+  notNow: 'Nước này không đi được lúc này.',
 };
 
 /// The one button the room ever sees unprompted.
@@ -371,6 +373,9 @@ export function dealPhom(game, cai = 0) {
   game.discards = [];
   game.took = game.seats.map(() => 0);
   game.eaten = game.seats.map(() => []);
+  // Bộ đã ăn, khoá lại. Ăn được là vì lá ấy vào phỏm, nên phỏm ấy phải đứng: không rút ruột nó
+  // để ăn tiếp, và không đánh lá của nó đi.
+  game.melded = game.seats.map(() => []);
   // Phỏm đã trình, của từng ghế. `null` là chưa tới lượt trình.
   game.shown = game.seats.map(() => null);
   game.fed = game.seats.map(() => game.seats.map(() => 0));
@@ -390,12 +395,27 @@ export function dealPhom(game, cai = 0) {
 /// Takes the card the player before threw, if it makes a phỏm on the spot.
 export function phomEat(game, seat) {
   if (game.step !== 'take' || game.turn !== seat) return false;
-  if (game.table === null || !canEat(game.hands[seat], game.table)) return false;
+  if (game.table === null) return false;
 
+  const locked = game.melded[seat] ?? [];
+  const ways = eatOptions(game.hands[seat], game.table, locked);
+  if (!ways.length) return false;
+
+  // Ăn vào bộ nào, khi có nhiều cách. Chọn cách để lại ít điểm rác nhất — không có nước nào để
+  // chơi sai ở đây, nên hỏi là bắt người ta bấm thêm một lần để đồng ý với câu trả lời duy nhất.
   const card = game.table;
+  const held = [...game.hands[seat], card];
+  let meld = ways[0];
+  let least = Infinity;
+  for (const way of ways) {
+    const junk = junkOf(held, [...locked, way]);
+    if (junk < least) { least = junk; meld = way; }
+  }
+
   const from = game.tableFrom;
-  game.hands[seat] = [...game.hands[seat], card].sort((a, b) => a - b);
+  game.hands[seat] = held.sort((a, b) => a - b);
   game.eaten[seat].push(card);
+  game.melded[seat] = [...locked, [...meld].sort((a, b) => a - b)];
   // Who has been feeding whom. Three times to the same person and the hand is on them.
   if (from !== null && from !== seat) game.fed[from][seat]++;
   game.table = null;
@@ -426,7 +446,7 @@ export function phomDraw(game, seat) {
 
 /// Ù, which stops the hand where it is. `from` is whoever's card it was, if it was anybody's.
 function phomCheckU(game, seat, from) {
-  if (!isU(game.hands[seat])) return;
+  if (!isU(game.hands[seat], game.melded[seat] ?? [])) return;
   game.u = game.seats[seat].userId;
   game.uWith = [...game.hands[seat]];
   game.laid = [seat];
@@ -444,6 +464,9 @@ function phomCheckU(game, seat, from) {
 export function phomThrow(game, seat, card) {
   if (game.step !== 'throw' || game.turn !== seat) return false;
   if (!game.hands[seat].includes(card)) return false;
+  // Lá trong một bộ đã ăn thì không đánh đi được. Ở bàn thật nó nằm ngửa trước mặt và không ai
+  // với tới; ở đây phải nói ra thành luật.
+  if ((game.melded[seat] ?? []).some((meld) => meld.includes(card))) return false;
 
   game.hands[seat] = game.hands[seat].filter((one) => one !== card);
   game.table = card;
@@ -462,7 +485,7 @@ export function phomThrow(game, seat, card) {
   // nào, biết lá rác của mình gửi được vào đâu, và biết lá nào nhả ra là an toàn. Một ván mà
   // phỏm chỉ hiện lúc tính điểm là một ván đã bỏ mất đoạn ấy.
   if (game.took[seat] >= PHOM_TURNS && !game.shown[seat]) {
-    const laid = bestSplit(game.hands[seat]).melds;
+    const laid = bestSplit(game.hands[seat], game.melded[seat] ?? []).melds;
     game.shown[seat] = laid;
     // Ai trình trước, theo đúng thứ tự trình — bằng điểm thì ai trình sau thua, nên thứ tự này
     // là một phần của luật chứ không phải để trang trí.
@@ -491,12 +514,12 @@ export function phomEnd(game) {
   // hết nọc, và lúc ấy phỏm vẫn phải mở ra cho cả bàn thấy.
   for (let seat = 0; seat < game.seats.length; seat++) {
     if (game.shown[seat]) continue;
-    const laid = bestSplit(game.hands[seat]).melds;
+    const laid = bestSplit(game.hands[seat], game.melded[seat] ?? []).melds;
     game.shown[seat] = laid;
     if (laid.length && !game.laid.includes(seat)) game.laid.push(seat);
   }
 
-  game.scores = phomScores(game.hands, { laid: game.laid });
+  game.scores = phomScores(game.hands, { laid: game.laid, locked: game.melded });
 
   // Đền: three of somebody's cards eaten by the same person. Their hand, their bill.
   if (!game.owes) {
@@ -1497,7 +1520,20 @@ export async function run(token, { signal, api = API } = {}) {
       if (action.eat) moved = phomEat(game, seat);
       else if (action.draw) moved = phomDraw(game, seat);
       else if (Number.isInteger(action.throw)) moved = phomThrow(game, seat, action.throw);
-      if (!moved) return;
+
+      // Từ chối thì nói ra.
+      //
+      // Im lặng bỏ qua là cái bàn đứng im và không ai hiểu vì sao — trang đang mở có thể là bản
+      // cũ, hoặc vừa lỡ nhịp, và lúc ấy thứ duy nhất người ta thấy là một nút bấm không ăn.
+      // Lý do hay gặp nhất là đánh một lá đang nằm trong bộ đã ăn.
+      if (!moved) {
+        const stuck = Number.isInteger(action.throw)
+          && (game.melded[seat] ?? []).some((meld) => meld.includes(action.throw));
+        await pushTo(screen, {
+          says: stuck ? SAY.pinned : SAY.notNow,
+        });
+        return;
+      }
 
       if (game.state === 'over') settle(game);
       await pushGame(game);
@@ -2081,7 +2117,8 @@ export async function run(token, { signal, api = API } = {}) {
 
           if (game.step === 'take') {
             const late = game.took.every((many) => many >= PHOM_TURNS - 1);
-            const taking = phomChoose(game.hands[seat], game.table, { late });
+            const taking = phomChoose(game.hands[seat], game.table,
+              { late, locked: game.melded[seat] ?? [] });
             if (taking) phomEat(game, seat); else phomDraw(game, seat);
 
             // Shown before it throws. Taking and throwing in one tick is a hand that grows and
@@ -2100,6 +2137,7 @@ export async function run(token, { signal, api = API } = {}) {
             phomThrow(game, seat, phomDiscard(game.hands[seat], {
               theirEaten: game.eaten[after] ?? [],
               theirDiscarded: game.discards.filter((one) => one.seat === after).map((one) => one.card),
+              locked: game.melded[seat] ?? [],
             }));
           }
           if (game.state === 'over') settle(game);
@@ -2419,18 +2457,21 @@ export async function run(token, { signal, api = API } = {}) {
     const phom = game && game.kind === 'phom' && seat !== null && game.hands
       ? (() => {
         const hand = game.hands[seat];
-        const split = bestSplit(hand);
+        const locked = game.melded[seat] ?? [];
+        const split = bestSplit(hand, locked);
         return {
           seat,
           hand,
           melds: split.melds,
           junk: split.junk,
           points: split.points,
+          // Bộ đã ăn: không đánh đi được, và trang phải vẽ ra cho biết vì sao.
+          locked,
           // Whether this card makes a phỏm on the spot, and out of what.
           canEat: game.step === 'take' && game.turn === seat && game.table !== null
-            && canEat(hand, game.table),
+            && canEat(hand, game.table, locked),
           options: game.step === 'take' && game.turn === seat && game.table !== null
-            ? eatOptions(hand, game.table) : [],
+            ? eatOptions(hand, game.table, locked) : [],
         };
       })()
       : null;
@@ -2547,7 +2588,8 @@ export async function run(token, { signal, api = API } = {}) {
           game.touched = Date.now();
           if (game.step === 'take') phomDraw(game, seat);
           if (game.state === 'playing' && game.step === 'throw' && game.turn === seat) {
-            phomThrow(game, seat, phomDiscard(game.hands[seat]));
+            phomThrow(game, seat, phomDiscard(game.hands[seat],
+              { locked: game.melded[seat] ?? [] }));
           }
           if (game.state === 'over') settle(game);
           await pushGame(game);
