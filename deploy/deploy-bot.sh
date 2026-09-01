@@ -51,6 +51,19 @@ step "upload"
 # data/ is the bot's own and survives every deploy. Made here rather than by the bot, because a
 # container cannot create its own bind mount.
 remote "mkdir -p /opt/zeplao/$BOT/data"
+# The ledger, before anything is touched.
+#
+# It is the one thing here that cannot be rebuilt: who has how much gold, and how they got it.
+# Every other file on that server is a copy of a file in this repository. A dated copy costs
+# nothing and is the difference between a bad deploy and a bad afternoon.
+remote "mkdir -p /opt/zeplao/backup
+  if [ -f /opt/zeplao/$BOT/data/scores.json ]; then
+    cp -a /opt/zeplao/$BOT/data/scores.json \
+      /opt/zeplao/backup/$BOT-scores-\$(date +%Y%m%d-%H%M%S).json
+    ls -t /opt/zeplao/backup/$BOT-scores-*.json | tail -n +31 | xargs -r rm --
+    echo \"sổ vàng: \$(wc -c < /opt/zeplao/$BOT/data/scores.json) byte, đã sao lưu\"
+  fi"
+
 # Everything the bot imports, not a list of files.
 #
 # It used to name two files. Then the rules moved into `rules/` and `economy.mjs`, and a deploy
@@ -59,11 +72,36 @@ remote "mkdir -p /opt/zeplao/$BOT/data"
 # which may be days later and will look like anything but a deploy. So: the whole directory,
 # minus the parts that are not the bot.
 #
-# `widget/` goes up through setWidget below rather than as files, and data/ is the bot's own.
-rsync -a --delete-after \
-  --exclude 'widget/' --exclude 'node_modules/' --exclude '*.test.mjs' --exclude 'data/' \
+# **No `--delete`.** It was there for a day and it deleted the bot's token: `.env` lives on the
+# server and nowhere else, so from rsync's side it was a file the source did not have. Nothing
+# here needs deleting — a file left behind by an older version is inert, and the cost of that is
+# nothing next to the cost of removing something only the server has. The two things only the
+# server has are named again below anyway, because a rule you can only get right by remembering
+# is a rule that gets got wrong.
+rsync -a \
+  --exclude 'widget/' --exclude 'node_modules/' --exclude '*.test.mjs' \
+  --exclude 'data/' --exclude '.env' \
   -e "ssh -i $SSH_KEY -p $SSH_PORT" \
   "$ROOT/bots/$BOT/" "$HOST:/opt/zeplao/$BOT/"
+
+# What the server owns, still owned. Checked rather than assumed: the deploy that deleted the
+# token reported success at every step it had, and only fell over three steps later reading a
+# file that was no longer there.
+remote "test -s /opt/zeplao/$BOT/.env || { echo 'MẤT .env — token của bot không còn'; exit 1; }
+  test -d /opt/zeplao/$BOT/data || { echo 'MẤT data/ — sổ vàng không còn'; exit 1; }
+  echo 'token và sổ vàng còn nguyên'"
+
+# And the ledger is still writable from inside the container.
+#
+# Read-only on the code and writable on data/ is two mounts stacked, and stacking them the wrong
+# way round gives a bot that runs, plays, pays — and loses every gold it paid the moment it
+# restarts. Nothing about that shows up in a log until somebody notices their purse went
+# backwards. Checked after every start, because it costs one line.
+after_start() {
+  remote "docker exec zeplao-$BOT sh -c 'touch /app/data/.probe && rm /app/data/.probe' \
+      || { echo 'SỔ VÀNG KHÔNG GHI ĐƯỢC — mount sai chiều'; exit 1; }
+    echo 'sổ vàng ghi được'"
+}
 
 # Every module it imports, resolved on the server, before it is asked to serve anybody.
 #
@@ -116,6 +154,9 @@ systemctl enable zeplao-$BOT >/dev/null 2>&1
 systemctl restart zeplao-$BOT
 sleep 6
 systemctl is-active zeplao-$BOT"
+
+step "ledger"
+after_start
 
 step "check"
 # What the bot said on the way up: its own handle, read back from the API with its own token.

@@ -31,9 +31,19 @@ Type=simple
 # --rm so a restart is not a pile of dead containers; --network host is deliberately not used,
 # because this has no business on the host's network stack.
 ExecStartPre=-/usr/bin/docker rm -f zeplao-tienlenbot
+# The bot's whole directory, read-only, and its data writable on top.
+#
+# It used to mount the one file. That was true for as long as the bot *was* one file; the day
+# the rules moved into `rules/` the container had an entry point importing four modules that
+# were not in it, and it crash-looped. The copy on to the server was fine and the check that
+# imports it was fine — both of those saw the whole directory. Only the mount did not, which is
+# why nothing caught it until the service tried to start.
+#
+# Read-only, so the code cannot be changed from inside; data/ mounted after, writable, because
+# the ledger is the one thing the bot writes.
 ExecStart=/usr/bin/docker run --rm --name zeplao-tienlenbot \
   --env-file /opt/zeplao/tienlenbot/.env \
-  -v /opt/zeplao/tienlenbot/tienlenbot.mjs:/app/tienlenbot.mjs:ro \
+  -v /opt/zeplao/tienlenbot:/app:ro \
   -v /opt/zeplao/tienlenbot/data:/app/data \
   -w /app \
   --memory 192m --cpus 0.25 \

@@ -142,3 +142,60 @@ ssh $SSH 'printf "ZEPLAO_BOT_TOKEN=%s\n" "<token mới>" > /opt/zeplao/tienlenbo
 
 Xoay có hiệu lực ngay lúc nó trả về. Đó là cách sửa duy nhất khi token lộ, nên nó không thể đợi
 hết hạn.
+
+---
+
+## Sổ vàng, và cái deploy suýt làm mất token
+
+`/opt/zeplao/tienlenbot/data/scores.json` là thứ **duy nhất** trên server không dựng lại được từ
+repo này: ai có bao nhiêu vàng, thắng bao nhiêu ván, và ba mươi ván cầu gần nhất. Mọi file khác
+ở đó đều là bản sao của một file trong git.
+
+`/opt/zeplao/tienlenbot/.env` là thứ duy nhất thứ hai: token của bot, chỉ có trên server, cố ý
+không nằm trong git.
+
+**Ngày 01/09/2026 tôi xoá mất cái thứ hai.** Bản deploy hôm ấy đổi từ `scp` hai file sang
+`rsync -a --delete-after` để mang theo cả thư mục `rules/`. Với rsync, `.env` là một file "nguồn
+không có" — nên nó dọn đi. Sổ vàng thoát vì `data/` nằm trong danh sách loại trừ, mà loại trừ
+trong rsync thì cũng chặn luôn việc xoá.
+
+Cứu được vì container cũ vẫn đang chạy và token nằm trong biến môi trường của nó:
+
+```bash
+docker exec zeplao-tienlenbot printenv ZEPLAO_BOT_TOKEN \
+  | sed 's|^|ZEPLAO_BOT_TOKEN=|' > /opt/zeplao/tienlenbot/.env
+```
+
+**Chỉ chạy được khi container còn sống.** Restart trước khi khôi phục là mất token thật, và lúc
+ấy phải vào `kuku.vn/bot` lấy token mới.
+
+Bốn thứ đã sửa để không lặp lại:
+
+1. **Bỏ hẳn `--delete`.** File thừa sót lại từ bản cũ thì vô hại; xoá nhầm thứ chỉ server mới có
+   thì không.
+2. **Loại trừ thẳng `.env` và `data/`**, dù đã bỏ `--delete`. Luật mà chỉ đúng nhờ nhớ thì sẽ có
+   lúc quên.
+3. **Sao lưu sổ vàng trước mọi thao tác**, vào `/opt/zeplao/backup/`, giữ 30 bản gần nhất.
+4. **Kiểm sau khi upload** rằng `.env` và `data/` còn, và **kiểm sau khi khởi động** rằng sổ vàng
+   ghi được từ trong container.
+
+Điểm thứ tư có lý do riêng. Cùng ngày ấy service còn crash-loop vì một lỗi khác: unit mount đúng
+**một file** `tienlenbot.mjs` vào container — đúng chừng nào bot còn là một file. Hôm luật dọn
+sang `rules/`, bản sao lên server đủ, phép kiểm import đủ (nó mount cả thư mục), chỉ có cái mount
+của service là thiếu. Giờ mount cả thư mục ở chế độ chỉ-đọc, rồi chồng `data/` ghi được lên trên
+— mà chồng ngược chiều thì được một con bot chạy ngon, chia bài, trả tiền, và **mất sạch số vàng
+đã trả ngay khi restart**. Không có dòng log nào báo chuyện đó cho tới lúc có người thấy ví mình
+đi lùi. Nên nó được kiểm bằng một dòng, sau mỗi lần khởi động.
+
+### Lấy lại sổ vàng từ bản sao
+
+```bash
+ls -lt /opt/zeplao/backup/tienlenbot-scores-*.json | head
+systemctl stop zeplao-tienlenbot
+cp -a /opt/zeplao/backup/tienlenbot-scores-<ngày giờ>.json \
+      /opt/zeplao/tienlenbot/data/scores.json
+systemctl start zeplao-tienlenbot
+```
+
+Dừng bot trước khi chép đè: bot đang chạy sẽ ghi lại file sau vài giây và đè mất bản vừa khôi
+phục.
