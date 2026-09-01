@@ -326,10 +326,22 @@ khung hình, không ai kịp thấy nó lấy con gì.
 - **Lá vừa về tay thì có vòng vàng.** Tay phỏm xếp lại theo phỏm sau mỗi lần lấy bài, nên lá mới
   không nằm ở cuối hàng: bốc xong nhìn xuống là một tay bài đã xáo lại. Cần cả khi tắt nặn — lúc
   ấy nó là dấu hiệu **duy nhất**.
-- **Hết ván thì mở hết bài.** Trước đây ván xong là nhảy thẳng sang bảng tiền, không ai kịp nhìn
-  người khác có phỏm gì và dư con gì — mà đó chính là lúc người ta muốn nhìn nhất, vì nó trả lời
-  câu "mình thua ở đâu". Một con số nói mình thua bao nhiêu; nó không nói vì sao. Lá gửi được thì
-  gạch ngang, vì "không tính điểm nữa" phải nhìn thấy chứ không phải tự suy.
+- **Hết ván thì mở hết bài, bằng bài thật.** Trước đây ván xong là nhảy thẳng sang bảng tiền,
+  không ai kịp nhìn người khác có phỏm gì và dư con gì — mà đó chính là lúc người ta muốn nhìn
+  nhất, vì nó trả lời câu "mình thua ở đâu". Một con số nói mình thua bao nhiêu; nó không nói vì
+  sao.
+
+  Bản đầu tôi in ra **chữ**: "8♣ 8♦ 8♥ · A♠ 3♠". Đọc được, nhưng đọc là việc phải làm còn nhìn
+  thì không, và cuối ván là lúc người ta muốn *nhìn*. Giờ là lá thật, nhỏ, phỏm gom thành cụm có
+  viền xanh — viền quanh **cả cụm** chứ không quanh từng lá, vì cái mắt phải thấy là *một bộ*,
+  không phải ba lá tình cờ đứng cạnh nhau.
+
+  Chỗ ngửa bài là **cả mặt bàn**, không phải từng ghế: ghế rộng bảy mươi tám pixel và một tay
+  phỏm có mười lá. Hết ván thì mặt bàn thôi là bàn và trở thành chiếu ngửa.
+
+  Lá **gửi** đứng riêng một cụm có nhãn "gửi". Bản trước để chúng lẫn với rác và chỉ mờ đi — mà
+  "mờ đi" không nói được điều cần nói: gửi rồi là **hết tính điểm**, khác hẳn "còn trên tay và
+  nhỏ", và không ai đoán ra ý ấy từ độ mờ.
 
 **Chỗ suýt hụt.** Hiệu ứng lá rơi gắn ở *lần vẽ đầu tiên* sau mỗi nước — và biến mất. Mỗi nước
 đi tới trang này thành **hai** push: một cái chung cho cả bàn, một cái riêng có bài của mình. Lần

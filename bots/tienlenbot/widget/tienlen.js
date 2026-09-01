@@ -949,28 +949,52 @@ function play() {
 // ---- how it ended -------------------------------------------------------------------------------
 
 /**
- * Cả tay bài của một người, sau khi ván đã xong.
+ * Cả tay bài của một người, ngửa ra, sau khi ván đã xong.
  *
- * Phỏm xanh, lá gửi được thì mờ đi và có dấu — gửi rồi thì nó không tính điểm nữa, mà "không
- * tính điểm" là thứ phải nhìn thấy chứ không phải thứ để tự suy ra. Rác còn lại đỏ, kèm điểm.
+ * **Bài thật, không phải tên bài viết ra chữ.** Bản đầu tôi in "8♣ 8♦ 8♥ · A♠ 3♠" thành một dòng
+ * chữ — đọc được, nhưng đọc là việc phải làm, còn nhìn thì không. Cuối ván phỏm là lúc người ta
+ * muốn *nhìn*: ai gom được bộ nào, ai ôm những con gì. Một hàng chữ không trả lời câu đó nhanh
+ * bằng một hàng bài.
+ *
+ * Ghế thì không nhét được — chúng rộng bảy mươi tám pixel và một tay phỏm có mười lá. Nên chỗ mở
+ * bài là **cả mặt bàn**: hết ván thì mặt bàn thôi là bàn và trở thành chiếu ngửa.
+ *
+ * Phỏm gom thành cụm, viền xanh. Rác rời ra, xám. Lá gửi được thì mờ hẳn và có mũi tên — gửi rồi
+ * thì nó không tính điểm nữa, mà "không tính điểm" phải nhìn thấy chứ không phải tự suy.
  */
 function handOf(seat) {
   const row = document.createElement('div');
   row.className = 'laid';
 
   for (const meld of seat.melds || []) {
-    const one = document.createElement('span');
-    one.className = 'laid-meld';
-    one.textContent = meld.map(nameOfCard).join(' ');
-    row.append(one);
+    const group = document.createElement('span');
+    group.className = 'laid-meld';
+    for (const card of meld) group.append(cardOf(card, 'mini'));
+    row.append(group);
   }
 
-  const sent = new Set(seat.sent || []);
-  for (const card of [...(seat.junk || []), ...sent]) {
-    const one = document.createElement('span');
-    one.className = sent.has(card) ? 'laid-sent' : 'laid-junk';
-    one.textContent = nameOfCard(card) + (sent.has(card) ? ' →' : '');
-    row.append(one);
+  // Lá gửi đứng riêng, có nhãn.
+  //
+  // Bản đầu chúng nằm lẫn với rác và chỉ mờ đi — mà "mờ đi" không nói được điều cần nói. Gửi rồi
+  // là **hết tính điểm**, đó là một chuyện khác hẳn với "còn trên tay và nhỏ", và một người nhìn
+  // vào không có cách nào đoán ra ý ấy từ độ mờ.
+  const sent = [...(seat.sent || [])].sort((a, b) => a - b);
+  if (sent.length) {
+    const group = document.createElement('span');
+    group.className = 'laid-sent';
+    const tag = document.createElement('i');
+    tag.textContent = 'gửi';
+    group.append(tag);
+    for (const card of sent) group.append(cardOf(card, 'mini gone'));
+    row.append(group);
+  }
+
+  const junk = [...(seat.junk || [])].sort((a, b) => a - b);
+  if (junk.length) {
+    const group = document.createElement('span');
+    group.className = 'laid-loose';
+    for (const card of junk) group.append(cardOf(card, 'mini junk'));
+    row.append(group);
   }
 
   if (!(seat.melds || []).length) {

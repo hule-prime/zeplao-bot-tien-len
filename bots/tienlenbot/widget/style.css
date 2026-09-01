@@ -965,12 +965,16 @@ body {
 #result {
   position: absolute;
   inset: 0;
-  background: rgba(6, 26, 18, 0.9);
+  background: rgba(6, 26, 18, 0.94);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
+  /* `safe center` chứ không phải `center`: bốn tay bài ngửa ra có thể cao hơn mặt bàn, và một
+     hộp cuộn được căn giữa thường thì cắt mất phần đầu — cuộn xuống thấy được, cuộn lên thì
+     không. */
+  justify-content: safe center;
+  overflow-y: auto;
+  gap: 2px;
   padding: 10px;
 }
 
@@ -1759,20 +1763,65 @@ body {
  * Trước đây ván xong là nhảy thẳng sang bảng tiền, không ai kịp nhìn người khác có phỏm gì và dư
  * con gì — mà đó chính là lúc người ta muốn nhìn nhất, vì nó trả lời câu "mình thua ở đâu". Một
  * con số nói mình thua bao nhiêu; nó không nói vì sao. */
+/* Bài ngửa ra cuối ván phỏm — bài thật, không phải tên bài viết ra chữ.
+ *
+ * Ghế không nhét được: chúng rộng bảy mươi tám pixel và một tay phỏm có mười lá. Nên chỗ mở bài
+ * là cả mặt bàn — hết ván thì mặt bàn thôi là bàn và trở thành chiếu ngửa. */
 .laid {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px 8px;
-  padding: 1px 10px 5px;
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
+  align-items: center;
+  gap: 4px 9px;
+  padding: 2px 10px 6px;
 }
 
-.laid-meld { color: #6fd39a; font-weight: 650; }
-.laid-junk { color: var(--danger); }
-/* Gửi được thì không tính điểm nữa, và "không tính điểm" phải nhìn thấy chứ không phải tự suy. */
-.laid-sent { color: var(--muted); text-decoration: line-through; }
-.laid-mom { color: var(--danger); font-weight: 800; }
+.laid-meld,
+.laid-loose { display: inline-flex; }
+
+/* Phỏm gom thành cụm, viền xanh quanh cả cụm chứ không quanh từng lá: cái mắt phải thấy là
+   *một bộ*, không phải ba lá tình cờ đứng cạnh nhau. */
+.laid-meld {
+  padding: 2px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1.5px rgba(111, 211, 154, 0.85);
+}
+
+.laid-loose { padding: 2px; }
+
+/* Gửi rồi là hết tính điểm — nói ra bằng chữ, vì "mờ đi" không nói được ý đó. */
+.laid-sent {
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.laid-sent i {
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.card.mini {
+  width: 20px;
+  height: 28px;
+  border-radius: 3px;
+  border-width: 0.5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.card.mini + .card.mini { margin-left: -3px; }
+.card.mini .pip { top: 1px; left: 2px; font-size: 8.5px; line-height: 1; }
+.card.mini .pip i { font-size: 8px; }
+.card.mini .big { display: none; }
+
+.card.mini.junk { filter: saturate(0.5) brightness(0.82); }
+/* Gửi đi rồi thì không tính điểm nữa, và "không tính điểm" phải nhìn thấy chứ không phải tự suy. */
+.card.mini.gone { opacity: 0.4; }
+
+.laid-mom { color: var(--danger); font-weight: 800; font-size: 11px; }
 
 /* Lá vừa về tay.
  *
