@@ -592,12 +592,19 @@ export const REMATCH_MS = 120_000;
 /// How long a table nobody ever sat down at stays open.
 export const LOBBY_MS = 300_000;
 
-/// How long the machine pauses before it plays.
-///
-/// A card that lands in the same instant as your own does not read as somebody playing, it
-/// reads as the screen redrawing. Three machines answering together at a four-handed table is
-/// the case this is really for.
-export const THINK_MS = Number(process.env.TIENLEN_THINK_MS ?? 900);
+/**
+ * How long the machine pauses before it plays.
+ *
+ * A card that lands in the same instant as your own does not read as somebody playing, it reads
+ * as the screen redrawing. Three machines answering together at a four-handed table is the case
+ * this is really for.
+ *
+ * Nine hundred was too quick. Two seconds is roughly how long a person takes to notice a card
+ * has landed, work out what it was, and look at their own hand — and a table that moves faster
+ * than that is a table you are always one play behind, which reads as the game rushing you
+ * rather than as opponents playing well.
+ */
+export const THINK_MS = Number(process.env.TIENLEN_THINK_MS ?? 2_100);
 
 /// Where somebody came in the order. Fourth is "bét" whatever the table size — the name is for
 /// the person left holding cards, not for a place number.

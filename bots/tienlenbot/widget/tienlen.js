@@ -46,6 +46,23 @@ function gold(amount) {
 /// không nhớ thì mười ba lá bay vào lại từ đầu mỗi lần có ai đó đánh một lá.
 let dealtFor = null;
 
+/**
+ * Lá cuối cùng bay xuống bãi, đống bài cuối cùng bay xuống chiếu, và **lúc nào**.
+ *
+ * Ghi cả thời điểm chứ không chỉ ghi "đã vẽ rồi", vì mỗi nước đi tới đây thành **hai** push —
+ * một cái chung cho cả bàn, một cái riêng có bài của mình — nên `render` chạy hai lần cách nhau
+ * vài mili giây. Bản đầu gắn hiệu ứng ở lần vẽ *đầu tiên* rồi thôi: lần vẽ thứ hai dựng lại lá,
+ * không còn lớp ấy nữa, và hiệu ứng biến mất trước khi có ai kịp thấy. Gắn theo thời điểm thì cả
+ * hai lần vẽ đều có, và animation chạy lại sau mười mili giây thì không ai phân biệt được.
+ */
+let landedTable = null;
+let landedPile = null;
+let landedWhen = 0;
+let pileWhen = 0;
+
+/// Hiệu ứng vừa rơi còn tính là vừa rơi trong bao lâu.
+const LANDS_MS = 420;
+
 /// Tay bài ở lần đẩy trước, và lá vừa về.
 ///
 /// Bot không nói "bạn vừa bốc được con này" — nó chỉ đẩy cả tay bài mới. Lá vừa về là hiệu của
@@ -53,6 +70,14 @@ let dealtFor = null;
 /// nhau: tay dài thêm một lá.
 let heldHand = null;
 let peeked = null;
+
+/// Lá vừa về tay, còn được đánh dấu cho tới khi đánh xong lượt này.
+///
+/// Mười lá xếp lại theo phỏm sau mỗi lần lấy bài, nên lá mới không nằm ở cuối hàng và không có
+/// gì phân biệt nó — bốc xong nhìn xuống là một tay bài đã xáo lại, không biết vừa được thêm
+/// con gì. Cái vòng sáng này là câu trả lời, và nó cần cả khi tắt nặn: lúc ấy nó là dấu hiệu
+/// **duy nhất**.
+let justTook = null;
 
 let floated = new Set();
 let floatedFor = null;
@@ -535,7 +560,15 @@ function drawPile() {
     return;
   }
 
-  for (const card of state.pile.cards) box.append(cardOf(card));
+  const at = `${state.gameId}:${state.pile.seat}:${state.pile.cards.join(',')}`;
+  if (landedPile !== at) { landedPile = at; pileWhen = Date.now(); }
+  const fresh = Date.now() - pileWhen < LANDS_MS;
+
+  state.pile.cards.forEach((card, index) => {
+    const el = cardOf(card);
+    if (fresh) { el.classList.add('landing'); el.style.setProperty('--i', String(index)); }
+    box.append(el);
+  });
 
   const who = document.createElement('b');
   who.textContent = state.pile.byName;
@@ -600,6 +633,7 @@ function drawHand() {
     const el = cardOf(card, picked.has(card) ? 'up' : '');
     if (state.opensWith === card) el.classList.add('opens');
     if (phom()) el.classList.add(inMeld.has(card) ? 'melded' : 'junk');
+    if (phom() && card === justTook) el.classList.add('fresh');
     if (dealing) {
       el.classList.add('dealing');
       el.style.setProperty('--i', String(index));
@@ -628,6 +662,14 @@ function drawPhomMiddle(box, note) {
 
   if (state.table !== null && state.table !== undefined) {
     const thrown = cardOf(state.table, 'thrown' + (taking && state.me.canEat ? ' takeable' : ''));
+    // Bay xuống, một lần, đúng lúc nó vừa được đánh ra.
+    //
+    // Không có hiệu ứng thì lá trên bãi cứ đứng đó và đổi mặt — nhìn ra là cái bàn tự sửa mình,
+    // không phải ai đó vừa đánh một lá. Mà biết ai vừa đánh gì là gần như toàn bộ việc phải làm
+    // ở trò này.
+    const at = `${state.gameId}:${state.discards.length}:${state.table}`;
+    if (landedTable !== at) { landedTable = at; landedWhen = Date.now(); }
+    if (Date.now() - landedWhen < LANDS_MS) thrown.classList.add('landing');
     box.append(thrown);
   }
 
@@ -906,6 +948,41 @@ function play() {
 
 // ---- how it ended -------------------------------------------------------------------------------
 
+/**
+ * Cả tay bài của một người, sau khi ván đã xong.
+ *
+ * Phỏm xanh, lá gửi được thì mờ đi và có dấu — gửi rồi thì nó không tính điểm nữa, mà "không
+ * tính điểm" là thứ phải nhìn thấy chứ không phải thứ để tự suy ra. Rác còn lại đỏ, kèm điểm.
+ */
+function handOf(seat) {
+  const row = document.createElement('div');
+  row.className = 'laid';
+
+  for (const meld of seat.melds || []) {
+    const one = document.createElement('span');
+    one.className = 'laid-meld';
+    one.textContent = meld.map(nameOfCard).join(' ');
+    row.append(one);
+  }
+
+  const sent = new Set(seat.sent || []);
+  for (const card of [...(seat.junk || []), ...sent]) {
+    const one = document.createElement('span');
+    one.className = sent.has(card) ? 'laid-sent' : 'laid-junk';
+    one.textContent = nameOfCard(card) + (sent.has(card) ? ' →' : '');
+    row.append(one);
+  }
+
+  if (!(seat.melds || []).length) {
+    const mom = document.createElement('span');
+    mom.className = 'laid-mom';
+    mom.textContent = 'móm';
+    row.append(mom);
+  }
+
+  return row;
+}
+
 function drawResult() {
   const box = $('result');
 
@@ -1006,6 +1083,17 @@ function drawResult() {
 
     row.append(name, place, money);
     box.append(row);
+
+    // Hết ván phỏm là mở hết bài ra.
+    //
+    // Trước đây ván xong là nhảy thẳng sang bảng tiền, không ai kịp nhìn người khác có phỏm gì
+    // và dư con gì — mà đó chính là lúc người ta muốn nhìn nhất, vì nó trả lời câu "mình thua ở
+    // đâu". Bảng điểm không thay được chỗ ấy: một con số nói mình thua bao nhiêu, không nói vì
+    // sao.
+    if (phom()) {
+      const seat = (state.seats || []).find((who) => who.id === one.id);
+      if (seat && (seat.melds || seat.junk)) box.append(handOf(seat));
+    }
 
     // What the number is made of, under the row it belongs to.
     //
@@ -2544,14 +2632,17 @@ z.onState((next) => {
     if (before && next.step === 'throw' && next.turn === seated.seat
       && seated.hand.length === before.length + 1) {
       const fresh = seated.hand.filter((card) => !before.includes(card));
-      if (fresh.length === 1 && squeezing) peeked = { card: fresh[0], open: false };
+      if (fresh.length === 1) {
+        justTook = fresh[0];
+        if (squeezing) peeked = { card: fresh[0], open: false };
+      }
     }
     heldHand = [...seated.hand];
 
     // Nặn xong lượt nào là chuyện của lượt ấy. Bàn nhích sang người khác mà cái lá phóng to vẫn
     // treo giữa màn hình thì nó không còn là "lá bạn vừa bốc" nữa — nó là một tấm bìa che mất
     // cái bàn đang chạy.
-    if (peeked && (next.step !== 'throw' || next.turn !== seated.seat)) peeked = null;
+    if (next.step !== 'throw' || next.turn !== seated.seat) { peeked = null; justTook = null; }
   } else {
     heldHand = null;
     peeked = null;

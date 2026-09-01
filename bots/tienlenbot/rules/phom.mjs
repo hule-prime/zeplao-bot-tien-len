@@ -28,8 +28,15 @@ export const PHOM_DEAL = 9;
 /// Mỗi người bốn lượt. Hết lượt thứ tư của người cuối là hết ván.
 export const PHOM_TURNS = 4;
 
-/// Máy nghĩ bao lâu. Ngắn hơn tiến lên vì một lượt phỏm là hai cú bấm chứ không phải một.
-export const PHOM_THINK_MS = Number(process.env.TIENLEN_PHOM_THINK_MS ?? 700);
+/**
+ * Máy nghĩ bao lâu, cho **mỗi nửa lượt**.
+ *
+ * Một lượt phỏm là hai việc — lấy một lá rồi đánh một lá — và máy làm cả hai trong cùng một
+ * nhịp thì nhìn ra là một cái bàn tự nhảy: tay người ta dài thêm rồi ngắn lại trong cùng một
+ * khung hình, và không ai kịp thấy nó lấy gì. Nên nghỉ hai lần, đẩy trạng thái ở giữa, và mỗi
+ * nửa đủ dài để đọc được.
+ */
+export const PHOM_THINK_MS = Number(process.env.TIENLEN_PHOM_THINK_MS ?? 1_300);
 
 /// Móm — hết ván không có phỏm nào — thua gấp đôi.
 export const MOM = 2;

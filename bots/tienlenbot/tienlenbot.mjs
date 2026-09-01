@@ -2050,6 +2050,15 @@ export async function run(token, { signal, api = API } = {}) {
             const late = game.took.every((many) => many >= PHOM_TURNS - 1);
             const taking = phomChoose(game.hands[seat], game.table, { late });
             if (taking) phomEat(game, seat); else phomDraw(game, seat);
+
+            // Shown before it throws. Taking and throwing in one tick is a hand that grows and
+            // shrinks inside one frame — nobody sees what was taken, and the card that lands on
+            // the bãi looks like it came from nowhere.
+            if (game.state === 'playing') {
+              await pushGame(game);
+              await wait(PHOM_THINK_MS);
+              if (game.state !== 'playing' || game.turn !== seat) return;
+            }
           }
           // Eating can end the hand — ù stops it where it stands — so the throw is asked for
           // again rather than assumed.

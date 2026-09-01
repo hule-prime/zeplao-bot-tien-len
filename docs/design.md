@@ -310,6 +310,33 @@ nổi một tuỳ chọn là một cái bàn hỏng vì một thứ không quan 
 Tắt thì đĩa **không úp xuống** chứ không phải úp rồi mở ngay: úp một phần mười giây rồi bật lên
 là một cái nháy, mà một cái nháy khó chịu hơn hẳn không có gì.
 
+**Nhịp máy.** Chín trăm mili giây một nước là quá nhanh: hai giây là chừng thời gian một người
+kịp thấy lá vừa rơi, đọc ra nó là gì, rồi nhìn xuống tay mình — nhanh hơn thế thì lúc nào cũng
+đi sau bàn một nước, và cái đó đọc ra là **game giục mình**, không phải đối thủ chơi hay. Tiến
+lên 2,1 giây một nước.
+
+Phỏm nghỉ **hai lần một lượt**, mỗi lần 1,3 giây, và đẩy trạng thái ở giữa. Làm cả hai việc
+trong một nhịp thì nhìn ra là cái bàn tự nhảy: tay người ta dài thêm rồi ngắn lại trong cùng một
+khung hình, không ai kịp thấy nó lấy con gì.
+
+**Ba dấu hiệu, và cả ba đều là chuyện "không nhìn thấy thì không chơi được":**
+
+- **Lá vừa được đánh ra thì bay xuống.** Không có hiệu ứng thì lá trên bãi cứ đứng đó và đổi
+  mặt — nhìn ra là cái bàn tự sửa mình chứ không phải ai đó vừa đánh một lá.
+- **Lá vừa về tay thì có vòng vàng.** Tay phỏm xếp lại theo phỏm sau mỗi lần lấy bài, nên lá mới
+  không nằm ở cuối hàng: bốc xong nhìn xuống là một tay bài đã xáo lại. Cần cả khi tắt nặn — lúc
+  ấy nó là dấu hiệu **duy nhất**.
+- **Hết ván thì mở hết bài.** Trước đây ván xong là nhảy thẳng sang bảng tiền, không ai kịp nhìn
+  người khác có phỏm gì và dư con gì — mà đó chính là lúc người ta muốn nhìn nhất, vì nó trả lời
+  câu "mình thua ở đâu". Một con số nói mình thua bao nhiêu; nó không nói vì sao. Lá gửi được thì
+  gạch ngang, vì "không tính điểm nữa" phải nhìn thấy chứ không phải tự suy.
+
+**Chỗ suýt hụt.** Hiệu ứng lá rơi gắn ở *lần vẽ đầu tiên* sau mỗi nước — và biến mất. Mỗi nước
+đi tới trang này thành **hai** push: một cái chung cho cả bàn, một cái riêng có bài của mình. Lần
+vẽ thứ hai, cách vài mili giây, dựng lại lá và không còn lớp hiệu ứng nữa. Sửa bằng cách gắn theo
+**thời điểm** thay vì theo lần vẽ: rơi xong thì trong 420ms lần vẽ nào cũng có, và animation chạy
+lại sau mười mili giây thì không ai phân biệt được.
+
 ---
 
 ## 10. Bầu cua tôm cá
@@ -430,6 +457,8 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | Lá đang nặn treo lại sau khi hết lượt | Bàn đã nhích sang người khác mà tấm bìa phóng to vẫn nằm giữa màn hình che mất bàn |
 | Test canh `next.me` đòi dấu kiểm dính ngay sát | Đỏ ở `next.me && Array.isArray(next.me.hand)` — một dòng đã kiểm tra tử tế. Sửa **code** cho gọn (buộc một biến cục bộ) chứ không nới test, vì nới test là bỏ mất chính cái nó sinh ra để bắt |
 | Ngưỡng thời gian đo bằng lần chạy tệ nhất | Một lần đo lẻ bị bộ dọn rác chen ngang thì nói về cái máy chứ không nói về thuật toán. Đổi sang **trung vị**, và để lần tệ nhất một khoảng rộng |
+| Hiệu ứng lá rơi gắn ở lần vẽ đầu tiên | Mỗi nước là **hai** push — một chung, một riêng có bài mình — nên `render` chạy hai lần cách nhau vài mili giây, và lần thứ hai dựng lại lá không còn lớp hiệu ứng. Nhìn ra là chẳng có hiệu ứng nào cả |
+| Phỏm lấy bài và đánh bài trong cùng một nhịp | Tay dài thêm rồi ngắn lại trong cùng một khung hình; không ai thấy nó lấy con gì |
 
 Và một luật rút ra từ carobot, có test canh:
 

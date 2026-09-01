@@ -1725,3 +1725,65 @@ body {
 }
 
 .shown.mom { color: var(--danger); font-weight: 700; }
+
+/* ---- lá vừa được đánh ra ---------------------------------------------------------------------
+
+   Không có hiệu ứng thì lá trên bãi cứ đứng đó và đổi mặt — nhìn ra là cái bàn tự sửa mình chứ
+   không phải ai đó vừa đánh một lá. Mà biết ai vừa đánh gì là gần như toàn bộ việc phải làm ở cả
+   hai trò này.
+
+   Khung đầu chỉ dịch và xoay, không đụng `opacity`, và nó là một chỗ đứng được: animation không
+   chạy thì lá vẫn nằm đúng chỗ nó phải nằm. Cùng cái bẫy của con xúc xắc và của bảng kết quả. */
+@keyframes card-lands {
+  from { transform: translateY(-38px) rotate(-10deg) scale(1.1); }
+  60%  { transform: translateY(3px) rotate(1deg) scale(0.99); }
+  to   { transform: none; }
+}
+
+.card.landing {
+  animation: card-lands 0.3s cubic-bezier(0.2, 0.8, 0.35, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+/* Trên bãi phỏm nó vốn đã nghiêng sẵn, nên hạ xuống rồi trả về đúng cái nghiêng ấy. */
+@keyframes thrown-lands {
+  from { transform: translateY(-38px) rotate(-16deg) scale(1.1); }
+  60%  { transform: translateY(3px) rotate(-2deg) scale(0.99); }
+  to   { transform: rotate(-4deg); }
+}
+
+.card.thrown.landing { animation-name: thrown-lands; }
+
+/* Cả tay bài của một người, sau khi ván phỏm đã xong.
+ *
+ * Trước đây ván xong là nhảy thẳng sang bảng tiền, không ai kịp nhìn người khác có phỏm gì và dư
+ * con gì — mà đó chính là lúc người ta muốn nhìn nhất, vì nó trả lời câu "mình thua ở đâu". Một
+ * con số nói mình thua bao nhiêu; nó không nói vì sao. */
+.laid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  padding: 1px 10px 5px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.laid-meld { color: #6fd39a; font-weight: 650; }
+.laid-junk { color: var(--danger); }
+/* Gửi được thì không tính điểm nữa, và "không tính điểm" phải nhìn thấy chứ không phải tự suy. */
+.laid-sent { color: var(--muted); text-decoration: line-through; }
+.laid-mom { color: var(--danger); font-weight: 800; }
+
+/* Lá vừa về tay.
+ *
+ * Tay phỏm xếp lại theo phỏm sau mỗi lần lấy bài, nên lá mới không nằm ở cuối hàng và không có
+ * gì phân biệt nó — bốc xong nhìn xuống là một tay bài đã xáo lại, không biết vừa thêm con gì.
+ * Vòng vàng đè lên cả viền xanh của phỏm, vì "lá này vừa về" là câu trả lời trước, còn "lá này
+ * nằm trong phỏm" là câu sau. Nhô lên bốn pixel nữa cho chắc, phòng khi ai không phân biệt màu. */
+.fan .card.fresh {
+  box-shadow: 0 0 0 2px var(--gold), 0 6px 14px rgba(0, 0, 0, 0.45);
+  transform: translateY(-4px);
+  filter: none;
+}
+
+.fan .card.fresh.up { transform: translateY(-13px); }
