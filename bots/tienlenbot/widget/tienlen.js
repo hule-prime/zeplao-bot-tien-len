@@ -1313,12 +1313,6 @@ function drawMenu() {
     // Both ways in are dark when there is nothing to play with, and a dark card with no line
     // under it is a screen that has refused somebody without telling them what to do about it.
     // The explanation used to live one screen further in — behind the cards they cannot press.
-    // Bật lại cái nặn.
-    //
-    // Tắt được ở ngay chỗ đang nặn, nên bật lại cũng phải có một chỗ — mà chỗ ấy không thể là
-    // chỗ cũ, vì tắt rồi thì cái màn ấy không hiện ra nữa. Đây là màn đầu, ai cũng đi qua.
-    body.append(squeezeRow());
-
     if (purse < cheapest) {
       body.append(stepNote(state.daily > 0
         ? `Bạn có ${gold(purse)} vàng, chưa đủ vào bàn nào — nhận quà mỗi ngày ở trên đã.`
@@ -1452,10 +1446,22 @@ function drawMenu() {
   }
 }
 
-/// Nặn bài: bật hay tắt, ở một chỗ ai cũng đi qua.
-function squeezeRow() {
-  const row = document.createElement('label');
-  row.className = 'setting';
+/**
+ * Bật tắt nặn, ngay trên bàn.
+ *
+ * Ở trong ván chứ không phải ở màn đầu, vì đây là thứ người ta muốn đổi **đúng lúc đang chơi** —
+ * nặn vài ván rồi thấy chậm, hoặc tắt rồi lại thấy nhớ. Bắt thoát ra sảnh để đổi một cái công
+ * tắc là bắt bỏ dở một ván.
+ *
+ * Chỉ hiện ở hai trò có gì để nặn: phỏm có lá bốc, bầu cua có cái đĩa. Tiến lên không có, và một
+ * cái công tắc không làm gì thì đứng đó chỉ để gây phân vân.
+ *
+ * Mặc định là **có nặn**. Chỉ khi tự tay tắt mới tắt, và tắt rồi thì nhớ trên máy người ta.
+ */
+function squeezeChip() {
+  const chip = document.createElement('label');
+  chip.className = 'squeeze' + (squeezing ? ' on' : '');
+  chip.title = squeezing ? 'Đang nặn — bấm để tắt' : 'Không nặn — bấm để bật';
 
   const tick = document.createElement('input');
   tick.type = 'checkbox';
@@ -1463,14 +1469,10 @@ function squeezeRow() {
   tick.onchange = () => { setSqueezing(tick.checked); render(); };
 
   const what = document.createElement('span');
-  what.textContent = 'Nặn bài';
-  const why = document.createElement('i');
-  why.textContent = squeezing
-    ? 'kéo mới thấy lá vừa bốc, và mới mở được đĩa bầu cua'
-    : 'lá bốc lên là thấy ngay, đĩa bầu cua tự mở';
+  what.textContent = 'Nặn';
 
-  row.append(tick, what, why);
-  return row;
+  chip.append(tick, what);
+  return chip;
 }
 
 /// Opening a table, for whichever of the two games the menu walked in from.
@@ -1756,7 +1758,7 @@ function drawBar() {
     score.textContent = state.me.points === 0
       ? '· không còn rác'
       : `· rác ${state.me.points} điểm`;
-    bar.append(score);
+    bar.append(score, squeezeChip());
     return;
   }
 
@@ -1946,6 +1948,8 @@ function drawBaucua() {
   dice.replaceChildren();
   note.replaceChildren();
   for (const gone of bowl.querySelectorAll('.punters')) gone.remove();
+  for (const gone of bowl.querySelectorAll('.squeeze')) gone.remove();
+  bowl.append(squeezeChip());
 
   // Three dice, always — an empty bowl before the first throw reads as something not loaded.
   const shown = state.dice || [state.faces[0], state.faces[1], state.faces[2]];

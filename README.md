@@ -32,7 +32,9 @@ money taken rather than money lost.
   threw — only if it makes a phỏm on the spot — or draw from the nọc, then throw one away.
 - The hand you hold is drawn as it counts: phỏm lit, junk dimmed, and the points you are still
   carrying written beside your name. The card you take comes up large and face down — squeeze it
-  off to see it, or turn squeezing off and it just arrives.
+  off to see it. Squeezing is on to begin with and switches off from the table itself — a chip on
+  the status bar, and another in the corner of the bầu cua bowl, since that is where anybody
+  thinks about it.
 - **Trình**: before the fourth turn's discard everybody lays their phỏm face up, so the rest of
   the table can see what is down, what their junk fits onto, and what is safe to throw. **Ù** — nothing left over — stops the hand and takes
   double from everybody. **Móm** — no phỏm at all — loses double. Throwing the card somebody

@@ -294,10 +294,18 @@ Ba điều nó phải làm được, và cả ba đều là chuyện đã sai �
 - **Có nền mờ.** Mặt bàn bên dưới có chữ, và chữ ấy xuyên thẳng qua: "vòng 2/4 · nọc 15" nằm đè
   lên "Kéo ra xem" thì cả hai cùng không đọc được.
 
-**Tắt được, và tắt là tắt hẳn.** Nặn là cái thú của ván đầu và của người đang rảnh; ai chơi
-nhanh thì mỗi lượt thêm một thao tác là một thao tác thừa. Ô "Không cần nặn nữa" nằm ngay trên
-cái đang nặn, nhớ trong `localStorage`, và tắt rồi thì **tắt cả cái đĩa bầu cua** — hai chỗ ấy
-là cùng một động tác. Bật lại thì ở màn đầu, vì chỗ tắt là chỗ không còn hiện ra nữa.
+**Mặc định là có nặn**, và tắt được **ngay trong ván**. Nặn là cái thú của ván đầu và của người
+đang rảnh; ai chơi nhanh thì mỗi lượt thêm một thao tác là một thao tác thừa — nhưng người ta chỉ
+nghĩ tới chuyện ấy *lúc đang chơi*, chứ không phải lúc đứng ở sảnh. Nên cái công tắc nằm trên
+bàn: một cái chip nhỏ ở mép thanh trạng thái của phỏm, và ở góc cái bát bầu cua. Bắt thoát ra
+sảnh để đổi một cái công tắc là bắt bỏ dở một ván.
+
+Chỉ hiện ở hai trò có gì để nặn. Tiến lên không có lá nào để nặn, và một cái công tắc không làm
+gì thì đứng đó chỉ để gây phân vân.
+
+Tắt rồi thì **tắt cả cái đĩa bầu cua** — hai chỗ ấy là cùng một động tác — và nhớ trong
+`localStorage`, bọc try/catch vì có trình duyệt chặn hẳn: một cái bàn không mở được vì không đọc
+nổi một tuỳ chọn là một cái bàn hỏng vì một thứ không quan trọng.
 
 Tắt thì đĩa **không úp xuống** chứ không phải úp rồi mở ngay: úp một phần mười giây rồi bật lên
 là một cái nháy, mà một cái nháy khó chịu hơn hẳn không có gì.
