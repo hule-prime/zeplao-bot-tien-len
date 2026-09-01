@@ -479,6 +479,232 @@ lúc lên cùng ba con xúc xắc, nên bàn không có "đang chờ ai" và ng�
 
 ---
 
+## 11. Tài xỉu
+
+Cùng cái bát của bầu cua, và không cùng một luật nào cả. Ở kia mỗi con xúc xắc đứng riêng: đặt
+vào một *mặt*, mặt ấy ra mấy con thì ăn mấy lần. Ở đây ba con chỉ có nghĩa lúc **cộng lại**, nên
+cửa không phải là một cái hình mà là một *câu nói về con số* — lớn hay nhỏ, chẵn hay lẻ, hay cả
+ba giống hệt nhau.
+
+**Một cái bàn duy nhất, của cả thế giới, và không có bản chơi với máy.** Đây là quyết định, không
+phải một thứ chưa kịp viết. Bầu cua có bát riêng vì bầu cua một mình vẫn là một trò: sáu ô, ba
+con, và một mặt chiếu để đọc. Tài xỉu một mình là **một con số hiện lên mỗi nửa phút** — không có
+chiếu để đọc, không có gì để nhìn, và cái cầu thì chỉ có nghĩa khi nó đứng cạnh tiền của người
+khác. Nửa đáng chơi của trò này là hai chục người cùng đặt lên đúng cái bát ấy. Nên là cái bàn
+chung, hoặc là không có.
+
+### Cửa
+
+| Cửa | Là gì | Trả |
+| --- | --- | --- |
+| Tài | Tổng 11–17 | 1 ăn 1 |
+| Xỉu | Tổng 4–10 | 1 ăn 1 |
+| Chẵn | Tổng là số chẵn | 1 ăn 1 |
+| Lẻ | Tổng là số lẻ | 1 ăn 1 |
+| Bão | Ba con giống hệt nhau | 1 ăn 30 |
+
+**Bão chặn cả bốn cửa kia.** Đây là toàn bộ luật đáng viết ra: ba con giống nhau thì tài, xỉu,
+chẵn và lẻ đều thua, dù cái tổng có rơi vào khoảng nào. 3-3-3 là 9 — nằm gọn trong khoảng xỉu — và
+vẫn thua. 4-4-4 là 12 — nằm gọn trong khoảng tài — và vẫn thua. Vì thế hai khoảng viết là 4–10 và
+11–17 chứ không phải 3–10 và 11–18: tổng 3 chỉ ra được bằng 1-1-1, tổng 18 chỉ ra được bằng
+6-6-6, và cả hai đều là bão.
+
+Đó cũng là chỗ nhà cái sống, và là số duy nhất trong trò này không phải do ai gõ vào: bỏ bão đi
+thì tài xỉu là một đồng xu công bằng, mà một đồng xu công bằng thì không nuôi nổi mười nghìn vàng
+phát mỗi ngày. Có bão thì nhà cái ăn **6/216 = 2,78%** ở bốn cửa đều tiền và **30/216 = 13,89%**
+ở cửa bão. Tính chính xác trên đủ 216 ván chứ không phải đo, và có test ghim từng con số.
+
+Nhẹ tay hơn bầu cua (2,78% so với 7,87%), và đó là chuyện có thật về hai trò chứ không phải một
+lựa chọn: bầu cua trả theo số con ra, tài xỉu trả một ăn một.
+
+**Mỗi ván ăn đúng hai cửa, hoặc đúng một cửa bão.** Một câu nói lớn nhỏ và một câu nói chẵn lẻ
+trên cùng một cái tổng — nên đặt cả năm cửa thì bao giờ cũng thắng hai thua ba, và đó là hình
+dạng của cả cái chiếu. Có test đi hết 216 ván để giữ điều này.
+
+### Nặn, hai chặng
+
+Bầu cua có một cái đĩa: kéo ra là xong. Tài xỉu có **cái nắp bát, rồi tới ba con** — và hai chặng
+ấy không phải để cho dài. Trò này là cái tổng, mà hai con ngửa thì **vẫn chưa có tổng nào cả**:
+đó chính là chỗ hồi hộp nằm, và một cái nắp mở ra ba con cùng lúc là một cái nắp lấy mất nó.
+
+- Nắp bát kéo ra, hoặc chạm. Cùng một hàm với cái đĩa bầu cua và với lớp úp lá phỏm — `dragOff`,
+  một chỗ, mấy cái nắp. Viết ba lần là ba lần nó lệch đi một chút, mà lệch ở đây thì không ai báo
+  lỗi: người ta chỉ thấy "cái này nặn không đã bằng cái kia".
+- **Đúng một cái nắp trong cả ván**, và ba con thì luôn nằm sẵn dưới nó, đúng mặt của nó. Thứ duy
+  nhất giấu chúng là cái bát nằm đè lên.
+- **Kéo tới đâu ba con ló ra tới đó.** `dragOff` gọi `txPeek` mỗi lần ngón tay nhích; cái bát là
+  hình tròn nên phép kiểm là tròn-với-ô — điểm gần tâm nhất trên hình chữ nhật con xúc xắc, xa
+  hơn bán kính thì con ấy đã ra. Kéo chậm thì cái tổng lớn dần: `?`, rồi `6 + ?`, rồi `10 + ?`.
+  Kéo nhanh, chạm một cái, hay không đụng vào thì cả ba ra cùng lúc. **Không ai phải đợi một cái
+  đồng hồ nào.** Đó là chỗ duy nhất nặn thật sự có nghĩa: nó là một thứ mình *được làm*, không
+  phải một thứ mình *phải qua*.
+- **Còn đúng một con chưa ló thì bát bày ra cả sáu khả năng của nó**: sáu con xúc xắc nhỏ, nhuộm
+  theo cửa mỗi khả năng sẽ ra, viền sáng những khả năng trả tiền cho mình. Đây là cả cái thú của
+  nặn tài xỉu — hai con ra rồi thì trò chơi thôi là may rủi và thành một danh sách sáu dòng, và
+  mình biết mình cần dòng nào.
+- **"Xong" là cái bát đã đi hẳn, không phải "ba con đã ló".** Kéo chậm thì có một quãng cả ba con
+  đã thò ra mà cái bát vẫn còn nằm đó: lúc ấy cái tổng đọc được rồi, còn cửa thắng thì chưa được
+  sáng, ví chưa được đổi. Mặt chiếu nói ra kết quả trước cái bát là cùng một chuyện lộ bài, chỉ
+  đi đường khác.
+- Chừng nào cái bát chưa đi thì **không có gì trên màn hình nhúc nhích**: cái ví hiện số trước khi
+  thanh toán, mặt chiếu không cửa nào sáng, hàng người chơi hiện tiền đặt chứ không hiện được mất.
+- Bát tự đi sau **2,8 giây** nếu không ai đụng vào, và không bao giờ trong lúc có ngón tay đang
+  giữ. Một tám là chưa kịp với tay: mắt còn đang ở mặt chiếu xem cửa nào của mình, ngẩng lên thì
+  cái bát đã đi rồi — và một cái nặn tự mở trước khi người ta kịp chạm thì không phải một cái
+  nặn, nó là một hiệu ứng. Trần của nó là `TX_SHOW_MS`, vì mở xong còn phải đủ chỗ để đọc.
+- **Ba con nằm giữa bát, và cái đĩa căn theo ba con — không phải theo cái bát.** Cái đĩa từng
+  căn giữa cái bát, mà ba con thì bị hàng chữ dưới đẩy lên ba chục pixel: cái đĩa **vừa đúng cỡ
+  để phủ nhưng đặt lệch ba chục pixel**, tức là hở nguyên mép trên. Đo đúng kích thước mà đặt sai
+  chỗ thì vẫn là hở. Giờ `fitLid` đặt nó bằng `left`/`top` đo từ tâm ba con; `transform` để nguyên
+  cho cú kéo.
+- **Chừa hai đầu bằng nhau.** Chỉ chừa ở dưới thì ba con nằm cao hơn tâm bát nửa khoảng chừa —
+  người thử nói hai lần "sao nằm sát phía trên thế". Chừa `TX_PAD` ở cả trên lẫn dưới thì tâm ba
+  con rơi đúng tâm cái bát; nửa trên chẳng đựng gì, và đó là cái giá của việc nằm giữa.
+- **Hàng chữ trong bát rút xuống một hàng, và hàng người chơi ra hẳn ngoài bát.** Cái tổng và
+  dòng nói được mất là hai nửa của cùng một câu — "11 Tài · +2.000 vàng". Còn ai đặt bao nhiêu là
+  chuyện về *cái bàn*, không phải về *cú xóc*: để nó trong bát là lấy mất chỗ của đúng ba thứ cái
+  bát sinh ra để đựng.
+- **`fitLid` không tin phép tính kia nữa.** `txDieSize` cắt con xúc xắc theo chiều cao bát, `fitLid`
+  cắt cái đĩa theo ba con — hai phép tính độc lập, và chỉ cần lệch vài pixel là cái đĩa hụt. Hụt
+  thì hở góc, mà hở góc thì kết quả ló ra trước khi có ai kéo. Nên `fitLid` **đo**: nếu cái đĩa
+  lớn nhất cái bát chứa nổi vẫn không phủ hết ba con thì nó tự thu ba con lại rồi đo lại. Một
+  vòng là đủ, vì thu theo đúng tỷ lệ còn thiếu.
+- **Chữ trên chiếu bớt tới mức ít nhất mà vẫn đủ.** Bốn cửa đều ăn một-ăn-một nên không cửa nào
+  phải nói ra; cái đáng nói là cửa nào *khác đi*, và chỉ có bão. Bảng trả tiền đầy đủ nằm ở tab
+  Luật. Mỗi dòng chữ thừa trên chiếu là một dòng lấy mất chỗ của cái bát.
+
+**Hai bản trước đều sai, và sai nặng dần** — cả hai đều do người chơi tìm ra, và cả hai lần câu
+hỏi đều là "cái này để làm gì".
+
+Bản đầu úp thêm lên mỗi con một cái nắp con có chữ `?`: kéo cái bát ra để gặp ba cái nắp nữa, tức
+là mở một thứ để lộ ra ba thứ phải mở. Bản sau bỏ nắp con đi nhưng cho con chưa lật **quay tiếp**
+— mà mở bát ra thì xúc xắc đã nằm rồi, không có cách nào nó còn quay, nên nó đọc ra là cái bàn bị
+treo. Cả hai đều là cùng một sai lầm: dựng thêm một trạng thái giả để có chỗ nhét cái hồi hộp
+vào, thay vì để cái hồi hộp nằm ở chỗ nó vốn có — cái bát đang trượt đi.
+
+Luật rút ra, có test canh: **ba con chỉ quay trong lúc còn lắc**, và không có cái đồng hồ nào bắt
+người ta đợi để xem kết quả của chính mình.
+
+Tắt nặn thì ba con ngửa cùng lúc và không có cái nắp nào — chứ không phải úp xuống rồi mở ngay.
+Cùng một công tắc với phỏm và bầu cua, vì đó là cùng một việc.
+
+### Cái nắp là một cái đĩa, và một cái đĩa thì tròn
+
+Bản đầu là một hình chữ nhật bo góc phủ kín cả cái bát: đúng chức năng, sai hẳn về hình. Chú
+thích cũ ngay trên nó đã tự viết ra "để nó đọc ra là một cái đĩa úp chứ không phải một hình chữ
+nhật có màu" và giải bằng cách thêm một cái viền — cái viền không cứu được một hình chữ nhật.
+Giờ nó tròn thật, có vệt sáng lệch để phồng lên như cái bát úp, và hai vòng đồng tâm làm mép đĩa.
+Đổi ở cả hai cái bát, vì đó là cùng một cái đĩa.
+
+Và kéo theo cách xếp ba con: **hai trên, một dưới**, không phải một hàng ngang. Cũng là hình học
+chứ không phải trang trí — một hình tròn phủ một hàng ngang thì phải lớn bằng **đường chéo** của
+hàng ấy, tức là tốn đúng cái chiều mà hình tròn không có. Xếp tam giác thì khối ba con là một hình
+vuông cạnh `2d + g`, và đường chéo hình vuông ngắn hơn hẳn: ở con 54px, hàng ngang cần đĩa 186,
+tam giác cần 164. Hai mươi hai pixel ấy là chỗ để xúc xắc to lên trong cùng một cái bát. Với lại
+ba con vừa đổ ra khỏi bát thì nằm túm lại, không nằm thành một hàng.
+
+Mấy chuyện kéo theo, và tất cả đều là hình học chứ không phải thẩm mỹ:
+
+- **Cỡ con xúc xắc là hệ quả của chiều cao cái bát**, không phải một con số trong stylesheet. Ba
+  con phải lọt trong đĩa, đĩa phải lọt trong bát — nên `txDieSize` giải ngược phương trình ấy ra
+  `d` rồi đặt vào biến `--die`. Gõ một con số vào CSS thì trên một cái khung thấp hơn dự tính,
+  cái đĩa bị cắt trần cho vừa bát và **hở mất bốn góc**: kết quả lộ ra trước khi có ai kéo. Cái
+  bát vì thế có `min-height` **thấp** — ép nó cao lên thì phần thừa không co lại được và đè xuống
+  hàng chip; để nó thấp thì bát ngắn là xúc xắc nhỏ đi, chứ không có gì vỡ.
+- **Đường kính đĩa cũng được đo, không phải gõ vào.** Một hình tròn phủ kín được một khối rộng `w`
+  cao `h` thì đường kính tối thiểu là `√(w² + h²)`. `fitLid` đo khối ba con **thật** rồi cắt cái
+  nắp cho vừa, và cắt trần lại theo chiều cao cái bát. Hai đầu cùng đo một thứ, nên đổi cách xếp
+  ba con là cả hai tự theo.
+- **Hàng cửa gọn lại còn hai dòng**: tên và luật đứng chung một dòng, tiền đặt xuống dòng dưới. Ba
+  dòng một cửa thì hàng cửa cao hơn cả cái bát — mà cái bát là chỗ trò này thật sự diễn ra.
+- **Căn giữa bằng `inset: 0` + `margin: auto`, không bằng `transform`.** `transform` là của cú
+  kéo — `dragOff` ghi thẳng vào `style.transform` mỗi lần ngón tay nhích — nên một cái đĩa căn
+  giữa bằng transform sẽ nhảy về góc trên bên trái ngay ở pixel đầu tiên của cú kéo.
+- Và cái khung xin cao thêm ba mươi pixel (`setSize` 540 → 570), vì hình tròn thì chiều cao đi
+  theo chiều rộng. `tools/play.mjs` ghim cùng con số ấy: một cái khung thử ở kích thước khác với
+  kích thước máy thật cho là một cái khung thử sai chỗ chật.
+
+### Tiếng xóc, dựng ra chứ không tải về
+
+Widget **không ra được mạng**, nên một file .mp3 từ CDN thì đơn giản là không bao giờ tới nơi, và
+nhét cả một file âm thanh vào bundle dưới dạng data URI là vài trăm kilobyte cho một tiếng lạch
+cạch. Nên nó được tổng hợp bằng Web Audio: một mẩu nhiễu trắng ngắn qua bộ lọc dải hẹp là đúng
+cái tiếng một viên xúc xắc chạm vào thành bát, và rải hai chục mẩu như thế theo nhịp ngẫu nhiên —
+dày ở giữa, thưa ở cuối — là tiếng xóc. Lật một con thì trầm hơn và chắc hơn: nó đã dừng lại.
+
+- **Phát từ lúc trạng thái đổi, không phải từ trong một hàm vẽ.** Hàm vẽ chạy lại mỗi lần đẩy, mà
+  một ván xóc có mấy lần đẩy — tiếng phát ra ở đó là tiếng xóc chồng lên tiếng xóc. Ở bầu cua
+  tiếng ba con rơi vẫn nằm trong hàm vẽ vì nó phải khớp với hiệu ứng, nên nó được ghim bằng khoá
+  `bàn:ván`.
+- **Trình duyệt không cho phát tiếng trước khi có người chạm vào trang**, nên `AudioContext` được
+  đánh thức ở mọi `pointerdown`. Rẻ, và là cách duy nhất chắc chắn.
+- **Không có Web Audio, hoặc dựng `AudioContext` là ném — thì im lặng.** Một cái bàn không mở
+  được vì không phát nổi tiếng lạch cạch là một cái bàn hỏng vì một thứ không quan trọng.
+- **Có công tắc tắt, ngay trong bát, cạnh công tắc nặn**, nhớ trên máy người ta. Đây là một cái
+  widget nổi trong một phòng chat: thứ tự nhiên kêu lên mà không tắt được ngay tại chỗ là thứ
+  người ta đóng cả cái bàn lại để tắt.
+- Chữ trên công tắc ấy là **"Tiếng"**, không phải "Âm". Bản đầu ghi "Âm", và ở một cái sòng có
+  tiền được mất thì một ô tick cạnh chữ ấy đọc ra là *số âm* trước khi đọc ra là *âm thanh* —
+  người thử nó hỏi ngay "cái ô âm là cái gì". Một cái nhãn phải đoán nghĩa thì đã hỏng rồi, dù
+  cái nút phía sau nó chạy đúng. Hai cái `title` cũng viết lại thành câu đủ nghĩa, vì "Đang nặn"
+  chỉ nói được cho người đã biết nặn là gì.
+
+### Ván trước để nguyên trong bát
+
+Cửa đặt mở hai mươi lăm giây, mà cái bát thì trống — nên ba con của ván trước nằm lại đó, mờ đi và
+nhỏ lại. Cái bàn thật cũng để nguyên cho tới lúc xóc lại, và một cái bát trống trơn suốt hai mươi
+lăm giây đọc ra là màn hình chưa tải xong.
+
+Có **chú thích bằng chữ**: "ván trước · 11 · Tài". Ba con mờ đứng đó không kèm dòng này thì hoặc
+người ta không nhìn thấy chúng, hoặc nhìn thấy rồi tưởng là ván đang chạy — mà cái thứ hai còn tệ
+hơn cái thứ nhất. Mờ 0,5 chứ không phải 0,34: trên nền lục sẫm thì 0,34 là một vệt xám đọc ra là
+"không có gì".
+
+### Soi cầu là một con đường, không phải một cái lưới
+
+Bảng bầu cua có sáu hàng, mỗi hàng một mặt, mỗi cột một ván: sáu mặt độc lập thì cái đáng nhìn là
+"mặt nào ra mấy lần". Tài xỉu chỉ có hai bên, nên cái đáng nhìn là **mạch** — bệt mấy ván rồi,
+nhảy mấy lần rồi. Đó là con đường: cùng bên thì rơi xuống dưới trong một cột, đổi bên thì gãy
+sang cột mới, cao nhất sáu ô. Đúng cái bảng mọi sòng tài xỉu đều treo, và số tổng nằm ngay trong
+từng hạt.
+
+Mới nhất bên **phải**, ngược với bầu cua, vì một con đường thì đi từ trái sang phải và cột mới
+mọc ở cuối. Nói ra một lần ở chân bảng, và cuộn sẵn tới đó — một bảng phải cuộn tay mới thấy ván
+vừa rồi là một bảng mở ra để không dùng.
+
+Ba mươi sáu ván chứ không phải ba mươi: một mạch chỉ đọc được khi còn đủ mạch phía sau nó. Nằm
+trên đĩa cứng cạnh sổ vàng, ở **hàng riêng của nó** (`cauTx`) — hai cái bát là hai trò khác nhau ở
+hai độ dài khác nhau, đổ cái này vào cái kia là vẽ cầu bằng xúc xắc của người khác.
+
+### Một bộ máy, hai cái bát
+
+Bầu cua và tài xỉu là cùng một cái bàn với hai mặt chiếu: không có lượt, ai cũng đặt cùng lúc lên
+cùng ba con, một cái đồng hồ đóng cửa, và cú xóc trả mọi khoản cùng một lúc. Khác nhau đúng năm
+thứ — tên cửa, một bàn cược đáng bao nhiêu, trên đó có bao nhiêu, xúc xắc làm ra thế nào, và mỗi
+chặng dài bao lâu. Nên đó là những gì bảng `BOWLS` giữ, và mọi chỗ bên dưới hỏi cái bảng ấy thay
+vì hỏi "đây là trò nào".
+
+Không có bảng ấy thì thêm một trò xúc xắc là thêm một bản sao của con bot: mười hai chỗ trong
+file đều đang gọi tên bầu cua ra, và bỏ sót đúng một chỗ thì cái bàn tài xỉu đếm tiền cược bằng
+danh sách cửa của bầu cua — tức là đọc mọi khoản đặt thành số không, im lặng.
+
+Mặt chiếu thì **không** dùng chung, và đó là chỗ duy nhất hai trò tách hẳn ra. Bầu cua có sáu ô
+vuông bằng nhau, mắt đi tìm hình. Tài xỉu có hai cửa lớn với một hàng nhỏ dưới, vì trò này là một
+câu hỏi lớn — lớn hay nhỏ — và mấy cách đọc khác của cùng ba con ấy. Hai cửa lớn bằng nhau và to
+gấp đôi phần còn lại: đó là hình vẽ của chính cái luật.
+
+### Luật ở ngay trong bàn
+
+Vào thẳng, không có màn hỏi gì ở giữa: bầu cua hỏi một câu vì nó có hai câu trả lời, tài xỉu có
+đúng một cái bàn nên không có gì để hỏi, và một màn hình với đúng một cái nút là một màn hình.
+
+Đổi lại, luật đi tới chỗ có tiền: mỗi cửa trên chiếu tự nói khoảng của nó và trả bao nhiêu, dưới
+chiếu có một dòng nói bão chặn những cửa nào, và cạnh tab cầu có tab **Luật** với đủ bảng trả tiền
+và hai câu về bão. Một màn luật người ta bấm qua trên đường vào là một màn luật chưa ai đọc vào
+lúc nó cần được đọc.
+
+---
+
 ## Những chỗ từng sai
 
 Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nào báo lỗi.
@@ -524,6 +750,13 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | Phỏm lấy bài và đánh bài trong cùng một nhịp | Tay dài thêm rồi ngắn lại trong cùng một khung hình; không ai thấy nó lấy con gì |
 | Danh sách về đích lọc bỏ máy | Máy là đồ đạc **lúc chia tiền**, không phải lúc xếp thứ tự. Lọc chúng ra thì ở bàn một người với ba máy, danh sách còn đúng một cái tên — và cái tên ấy thành "người về nhất" dù vừa về bét. Về ba, bấm "ván nữa", lại được đánh đầu, ván nào cũng thế. Sai ở **cả hai trò**, cùng một dòng |
 | Ăn xong không khoá bộ lại | Ăn lần hai rút ruột bộ ăn lần một, và lá ăn lần một rơi ra thành rác — đã ăn một lá mà không dùng được nó. Người chơi tìm ra trước tôi |
+| `tools/play.mjs` không đặt `TIENLEN_SCORES` | Con bot rơi về mặc định `/app/data/scores.json` — đường dẫn **bên trong container**, mà trên máy người viết thì `/app` không tạo được. Mọi lần ghi đều hỏng, cả cuốn sổ sống trong RAM, và mỗi lần khởi động lại là mất sạch vàng lẫn hai bảng cầu. Nhìn ra thì nó **không giống một cái lỗi**: nó giống "sao mới vào sòng mà không thấy ván trước", nên người ta đi tìm ở chỗ vẽ |
+| Khối bàn giao bàn cược hỏi `state.kind === 'baucua'` | Ở bàn tài xỉu câu ấy **luôn** sai, nên `turned` luôn đúng, nên **mọi** push trong lúc đang đặt đều xoá sạch chip trên trang. Bot vẫn giữ đủ — nó được báo cả bàn cược — nên nhìn ra là "bấm đặt cái là mất, mà backend vẫn ghi nhận": đúng một nửa, và là nửa khó tìm hơn. Thêm một trò là mười hai chỗ phải thôi gọi tên trò cũ, và chỗ bị bỏ sót không nổ ra ở đâu cả |
+| Kéo bát ra để gặp ba cái nắp con có chữ `?` | Mở một thứ để lộ ra ba thứ phải mở. Người thử hỏi "nặn rồi mà còn dấu hỏi làm cái quái gì", và câu ấy không có câu trả lời nào |
+| Rồi bản sửa cho con chưa lật **quay tiếp** | Tệ hơn cái nó sửa. Mở bát ra thì xúc xắc đã nằm rồi — không có cách nào nó còn quay — nên nó đọc ra là bàn bị treo, chứ không phải một hiệu ứng. Cùng một sai lầm hai lần: dựng một trạng thái giả để nhét cái hồi hộp vào, thay vì để nó nằm ở chỗ nó vốn có, là cái bát đang trượt đi |
+| Cái bát dựng ra không có số ván | Suốt cửa đặt đầu tiên nó gửi `round ?? 1`, tức là 1; rồi `openBets` đếm `0 + 1` và gửi 1 lần nữa cho ván thứ hai. **Hai lần xóc liền nhau mang cùng một tên**, mà trang thì nhớ "ván 1 tôi mở đĩa rồi" — nên ván thứ hai không được úp đĩa lên. Nặn được đúng một ván rồi thôi, ở **cả hai** cái bát, và không có gì báo lỗi cả |
+| Cái đĩa căn giữa cái bát, không phải giữa ba con | Dưới ba con còn cái tổng và dòng chữ, nên cả khối bị đẩy lên chừng ba chục pixel. Cái đĩa vừa đúng cỡ để phủ ba con nhưng nằm lệch xuống ba chục pixel thì **hở nguyên mép trên**: kết quả ló ra trước khi có ai kéo. Đo đúng kích thước mà đặt sai chỗ vẫn là hở |
+| Bàn cược của trang không gắn với số ván | Cửa đặt ván sau cũng là `phase === 'betting'` ở cùng một bàn, nên câu hỏi "vẫn cái bàn ấy chứ" trả lời đúng và **chip của ván trước ở nguyên đó**. Không dừng ở chỗ vẽ: `myBets()` đọc từ chính cái chồng chip ấy, nên chạm thêm một cái là gửi đi cả bàn cược cũ kèm cú chạm mới, và bot đặt lại nó **bằng tiền thật**. Một lỗi vẽ hoá lỗi tiền vì hai bên cùng đọc một biến. Cả `me` mang sang từ push chung cũng phải bỏ bàn cược lại — bot đẩy hai lần một nước, và cái cũ sống lại đúng ở khe giữa hai cái đẩy ấy |
 | Nước đi bị từ chối trong im lặng | Bàn đứng im, không ai hiểu vì sao. Một cái test ngồi chờ hai lăm giây rồi mới đỏ, và máy đo ở chỗ chờ là thứ chỉ ra được |
 
 Và một luật rút ra từ carobot, có test canh:

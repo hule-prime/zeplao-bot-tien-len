@@ -801,7 +801,7 @@ function drawButtons() {
 
   if (state.phase === 'choosing') return;
 
-  if (state.kind === 'baucua') {
+  if (diceGame(state)) {
     button(state.world ? 'Thoát' : 'Rời sòng', 'quiet',
       (el) => { el.disabled = true; z.send({ leave: true }); });
     if (!state.me) return;
@@ -811,7 +811,7 @@ function drawButtons() {
       // fewer chip in the next thing it is told.
       stack.pop();
       say('');
-      drawBaucua();
+      if (state.kind === 'taixiu') drawTaixiu(); else drawBaucua();
       drawButtons();
       sendBets();
     });
@@ -1262,7 +1262,7 @@ function drawPurse() {
   // Not twice for the same money. The seat it was won at floats its own chip, and two of the
   // same number rising off the same screen at the same instant reads as a fault rather than as
   // emphasis — it was the ghế that meant something, so the ghế keeps it.
-  const alsoOnTable = !!state && state.kind !== 'baucua' && !!state.me
+  const alsoOnTable = !!state && !diceGame(state) && !!state.me
     && (state.seats[state.me.seat] || {}).won === moved;
 
   if (moved) {
@@ -1468,6 +1468,18 @@ function drawMenu() {
       '', purse >= cheapest,
       () => { step = 'baucua'; render(); }));
 
+    // Straight in, with no screen in between. Bầu cua asks one question first because it has two
+    // answers — the sòng everybody is at, or a bowl of your own. Tài xỉu has **one table**, so
+    // there is nothing to ask, and a screen with a single button on it is a screen.
+    //
+    // The rules go where the money goes instead: every door on the mat says its range and what
+    // it pays, and there is a Luật tab beside the cầu. A rules screen you tap past on the way in
+    // is a rules screen nobody has read by the time it matters.
+    body.append(bigCard('⚅', 'Tài xỉu',
+      purse < cheapest ? `Cần ${gold(cheapest)} vàng` : 'Tài, xỉu, chẵn, lẻ, bão · một sòng',
+      '', purse >= cheapest,
+      (el) => { el.disabled = true; z.send({ taixiu: true }); }));
+
     // Said here, on the screen somebody is actually looking at.
     //
     // Both ways in are dark when there is nothing to play with, and a dark card with no line
@@ -1621,7 +1633,9 @@ function drawMenu() {
 function squeezeChip() {
   const chip = document.createElement('label');
   chip.className = 'squeeze' + (squeezing ? ' on' : '');
-  chip.title = squeezing ? 'Đang nặn — bấm để tắt' : 'Không nặn — bấm để bật';
+  chip.title = squeezing
+    ? 'Đang nặn: kết quả úp lại, tự tay mở — bấm để tắt'
+    : 'Không nặn: mở kết quả luôn — bấm để bật';
 
   const tick = document.createElement('input');
   tick.type = 'checkbox';
@@ -1633,6 +1647,45 @@ function squeezeChip() {
 
   chip.append(tick, what);
   return chip;
+}
+
+/**
+ * Công tắc tiếng xúc xắc, ngay cạnh công tắc nặn.
+ *
+ * Ở trong bát, vì đây là thứ người ta muốn tắt **đúng lúc nó vừa kêu** — chứ không phải lúc đang
+ * chọn trò. Mặc định là có tiếng; ai tắt thì nhớ trên máy người ta, như công tắc nặn.
+ *
+ * Chữ là **"Tiếng"**, không phải "Âm". Bản đầu ghi "Âm", và ở một cái sòng có tiền được mất thì
+ * một ô tick cạnh chữ ấy đọc ra là *số âm* trước khi đọc ra là *âm thanh* — người thử nó hỏi
+ * ngay "cái ô âm là cái gì". Tiếng Việt gọi cái công tắc này là bật tiếng và tắt tiếng, nên nó
+ * là "Tiếng".
+ */
+function soundChip() {
+  const chip = document.createElement('label');
+  chip.className = 'squeeze' + (sounding ? ' on' : '');
+  chip.title = sounding
+    ? 'Đang có tiếng xúc xắc — bấm để tắt'
+    : 'Đang tắt tiếng xúc xắc — bấm để bật';
+
+  const tick = document.createElement('input');
+  tick.type = 'checkbox';
+  tick.checked = sounding;
+  tick.onchange = () => { setSounding(tick.checked); render(); };
+
+  const what = document.createElement('span');
+  what.textContent = 'Tiếng';
+
+  chip.append(tick, what);
+  return chip;
+}
+
+/// Cả hai công tắc, trong một góc bát. Một hàng chứ không phải hai cái cùng dán vào góc trên bên
+/// phải — hai cái tuyệt đối cùng toạ độ thì cái sau nằm đè lên cái trước.
+function cornerChips() {
+  const corner = document.createElement('div');
+  corner.className = 'corner';
+  corner.append(squeezeChip(), soundChip());
+  return corner;
 }
 
 /// Opening a table, for whichever of the two games the menu walked in from.
@@ -2028,8 +2081,18 @@ let heldGold = null;
 
 // Tắt nặn thì không có đĩa nào cả — chứ không phải úp xuống rồi mở ngay. Úp một phần mười giây
 // rồi bật lên là một cái nháy, và một cái nháy thì khó chịu hơn hẳn không có gì.
-const covered = () => squeezing && !!state && state.kind === 'baucua'
-  && state.phase === 'paid' && lifted !== state.round;
+//
+// Hai cái bát, hai kiểu úp. Bầu cua có một cái đĩa: kéo ra là xong. Tài xỉu có cái nắp **rồi
+// tới ba con** — nặn xong là lật đủ ba, vì trò này là cái tổng, mà hai con đã ngửa thì vẫn chưa
+// có tổng nào cả. Chừng nào chưa lật đủ thì cả kết quả còn đậy: cái ví, cửa thắng, dòng được
+// mất, tất cả.
+const covered = () => squeezing && !!state && state.phase === 'paid'
+  && (state.kind === 'baucua' ? lifted !== state.round
+    : state.kind === 'taixiu' ? !txAllUp()
+      : false);
+
+/// Trò xúc xắc, cả hai. Đặt cùng lúc lên cùng ba con, không có lượt, và cùng một đường chip.
+const diceGame = (what) => !!what && (what.kind === 'baucua' || what.kind === 'taixiu');
 
 /// Which half of the sòng is showing: the mat, or the run of past throws.
 let songTab = 'board';
@@ -2087,6 +2150,9 @@ function sendBets() {
   else sending = setTimeout(post, 200);
 }
 
+/// Ván nào đã nghe thấy tiếng xúc xắc rơi. Xem `drawBaucua`.
+let heardFor = '';
+
 /// The dice, while they are still in the air.
 ///
 /// Cycled here rather than pushed: the bot has not decided what they are yet, and cannot, or
@@ -2110,8 +2176,8 @@ function drawBaucua() {
   dice.replaceChildren();
   note.replaceChildren();
   for (const gone of bowl.querySelectorAll('.punters')) gone.remove();
-  for (const gone of bowl.querySelectorAll('.squeeze')) gone.remove();
-  bowl.append(squeezeChip());
+  for (const gone of bowl.querySelectorAll('.corner')) gone.remove();
+  bowl.append(cornerChips());
 
   // Three dice, always — an empty bowl before the first throw reads as something not loaded.
   const shown = state.dice || [state.faces[0], state.faces[1], state.faces[2]];
@@ -2136,6 +2202,14 @@ function drawBaucua() {
     // first frame and a die whose first frame is small is a die nobody can read until its turn.
     if (landed) setTimeout(() => die.classList.add('landing'), i * 120);
   });
+
+  // And heard, once a round. `drawBaucua` runs on every push — a bowl the whole world is at
+  // pushes several times a second — so a knock fired from here without a key on it is three dice
+  // landing over and over for as long as the result is up.
+  if (landed && heardFor !== `${state.gameId}:${state.round}`) {
+    heardFor = `${state.gameId}:${state.round}`;
+    for (let i = 0; i < shown.length; i++) landedSound(i * 0.12);
+  }
 
   if (state.phase === 'rolling') {
     // Faces flicking past while the bowl shakes. Whatever is showing has nothing to do with
@@ -2178,30 +2252,185 @@ function drawBaucua() {
       : 'Chọn phần cược rồi chạm vào cửa';
   }
 
-  // Who else is at it, and what they have on. At a pavement table half the game is watching
-  // where everybody put their money — and on a phone this is also what fills the space under
-  // the bowl that a solo table has no use for.
-  const others = (state.seats || []).filter((one) => one.id !== z.viewer.id);
-  if (others.length) {
-    const row = document.createElement('div');
-    row.className = 'punters';
-    for (const one of (state.seats || [])) {
-      const chip = document.createElement('span');
-      chip.className = 'punter'
-        + (one.id === z.viewer.id ? ' me' : '')
-        + (!hidden && state.phase === 'paid' && one.change > 0 ? ' up' : '')
-        + (!hidden && state.phase === 'paid' && one.change < 0 ? ' down' : '');
-      chip.textContent = state.phase === 'paid' && one.change !== null && !hidden
-        ? `${one.name} ${change(one.change)}`
-        : `${one.name} ${one.staked ? gold(one.staked) : '·'}`;
-      row.append(chip);
-    }
-    $('bowl').append(row);
-  }
+  $('bowl').append(punterRow(hidden));
 
   drawSongTabs();
   if (songTab === 'cau') drawHistory();
-  else { drawBoard(); drawChips(); }
+  else { drawBoard(); drawChips($('chips')); }
+}
+
+/**
+ * Who else is at it, and what they have on.
+ *
+ * At a pavement table half the game is watching where everybody put their money — and on a phone
+ * this is also what fills the space under the bowl that a table of one has no use for.
+ *
+ * While the result is still covered this shows **stakes and not winnings**, at both bowls. A row
+ * of green and red under a lid that has not been lifted is the lid hiding nothing.
+ */
+function punterRow(hidden) {
+  const row = document.createElement('div');
+  row.className = 'punters';
+
+  const seats = state.seats || [];
+  if (seats.length < 2) return row;
+
+  for (const one of seats) {
+    const chip = document.createElement('span');
+    chip.className = 'punter'
+      + (one.id === z.viewer.id ? ' me' : '')
+      + (!hidden && state.phase === 'paid' && one.change > 0 ? ' up' : '')
+      + (!hidden && state.phase === 'paid' && one.change < 0 ? ' down' : '');
+    chip.textContent = state.phase === 'paid' && one.change !== null && !hidden
+      ? `${one.name} ${change(one.change)}`
+      : `${one.name} ${one.staked ? gold(one.staked) : '·'}`;
+    row.append(chip);
+  }
+  return row;
+}
+
+/**
+ * Nặn: kéo một cái nắp ra khỏi cái nó đang che.
+ *
+ * Một chỗ, ba cái nắp. Cái đĩa bầu cua, cái nắp bát tài xỉu, và cái nắp trên từng con xúc xắc —
+ * ba thứ trông khác nhau, cùng một động tác, và động tác ấy là thứ người ta tới đây để làm. Viết
+ * ba lần là ba lần nó lệch đi một chút, mà lệch ở đây thì không ai báo lỗi: người ta chỉ thấy
+ * "cái này nặn không đã bằng cái kia".
+ *
+ * Luật của nó nằm ở `clear()`: nắp chỉ đi khi hình chữ nhật của nó **không còn giao** với hình
+ * chữ nhật của thứ nó che — đo bằng `getBoundingClientRect`, không phải bằng một con số ngưỡng
+ * đoán mò. Bản đầu của cái đĩa bay mất sau 34px, tức là cắt cụt đúng cái động tác mà cả tính
+ * năng này sinh ra để có.
+ *
+ * Ba lối ra, và cả ba đều phải có: kéo hở hết thì bay theo đà tay; chạm mà không kéo thì mở —
+ * đó là một động tác trọn vẹn chứ không phải nửa cái; thả tay giữa chừng thì trượt về úp lại,
+ * chưa lộ gì. Và nó tự mở sau `delay`, nhưng **không bao giờ trong lúc có ngón tay đang giữ**:
+ * giật cái nắp khỏi bàn tay đang kéo nó thì còn tệ hơn là không cho kéo.
+ *
+ * `moving` được gọi mỗi lần ngón tay nhích, cho cái nắp nào **để lộ dần** cái nó che thay vì để
+ * lộ một lúc: cái bát tài xỉu trượt tới đâu thì con xúc xắc ló ra tới đó, và cái tổng lớn dần
+ * theo. Đó là chỗ duy nhất nặn thật sự có nghĩa — kéo chậm là được nặn, kéo nhanh là xong ngay,
+ * và không ai bị bắt đợi.
+ */
+function dragOff(lid, under, opened, delay, moving) {
+  let timer = 0;
+  const later = () => { if (delay !== null) timer = setTimeout(open, delay); };
+  let from = null;
+  let moved = 0;
+  let gone = false;
+
+  // `fling` carries the drag on in the direction it was going. Without it the lid would run the
+  // canned lift, which starts by sliding back the way it came — across what it just uncovered.
+  const open = (fling) => {
+    if (gone) return;
+    gone = true;
+    clearTimeout(timer);
+    lid.classList.remove('held');
+    if (fling) { lid.style.transform = fling; lid.classList.add('gone'); }
+    else { lid.classList.add('off'); }
+    opened();
+  };
+
+  const clear = () => {
+    const cap = lid.getBoundingClientRect();
+    const box = under.getBoundingClientRect();
+    if (!box.width) return true;
+    return cap.right <= box.left || cap.left >= box.right
+      || cap.bottom <= box.top || cap.top >= box.bottom;
+  };
+
+  lid.onpointerdown = (event) => {
+    if (gone) return;
+    from = { x: event.clientX, y: event.clientY };
+    moved = 0;
+    clearTimeout(timer);
+    lid.classList.add('held');
+    lid.setPointerCapture(event.pointerId);
+  };
+
+  lid.onpointermove = (event) => {
+    if (!from) return;
+    const dx = event.clientX - from.x;
+    const dy = event.clientY - from.y;
+    moved = Math.max(moved, Math.hypot(dx, dy));
+    lid.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx * 0.025}deg)`;
+    if (moving) moving();
+    if (clear()) {
+      from = null;
+      open(`translate(${dx * 1.8}px, ${dy * 1.8}px) rotate(${dx * 0.05}deg)`);
+    }
+  };
+
+  lid.onpointerup = () => {
+    if (!from) return;
+    from = null;
+    lid.classList.remove('held');
+    if (moved < 9) { open(); return; }
+    lid.style.transform = '';
+    later();
+  };
+  lid.onpointercancel = lid.onpointerup;
+
+  later();
+}
+
+/**
+ * Cắt cái nắp cho vừa đúng cái nó che.
+ *
+ * Một hình tròn phủ kín được một hàng ngang rộng `w` cao `h` thì đường kính tối thiểu là
+ * `√(w² + h²)`. Nên nó được **đo**, không phải gõ vào: gõ vào thì mỗi lần con xúc xắc to lên vài
+ * pixel là một lần cái đĩa hở ra bốn góc — mà hở một góc thôi là cả cái nặn mất nghĩa, và không
+ * ai báo lỗi chuyện đó, người ta chỉ biết kết quả trước khi kéo.
+ *
+ * Và không bao giờ cao hơn cái bát. Một cái đĩa tràn khỏi bát thì đè lên dải tab ngay bên dưới,
+ * mà cái nó đè lên là cái người ta bấm để đi xem cầu.
+ */
+function fitLid(lid, under, bowl) {
+  const room = bowl.getBoundingClientRect();
+  let box = under.getBoundingClientRect();
+  if (!box.width || !room.height) return;
+
+  /**
+   * Cái đĩa lớn nhất mà cái bát này chứa nổi. Lớn hơn thế thì nó tràn ra ngoài và đè lên dải tab
+   * ngay dưới — mà cái nó đè lên là cái người ta bấm để đi xem cầu.
+   */
+  const most = Math.max(60, room.height - 8);
+
+  /**
+   * Và nếu cái lớn nhất ấy **vẫn không phủ hết ba con** thì ba con phải nhỏ lại.
+   *
+   * Đây là chỗ hai phép tính từng cãi nhau: `txDieSize` cắt con xúc xắc theo chiều cao cái bát,
+   * `fitLid` cắt cái đĩa theo ba con, và hai bên chỉ cần lệch nhau vài pixel là cái đĩa hụt —
+   * hụt thì hở góc, mà hở góc thì kết quả ló ra trước khi có ai kéo, và không ai báo lỗi chuyện
+   * đó. Nên chỗ này không tin phép tính kia nữa: nó **đo**, và nếu không đủ thì tự thu ba con
+   * lại rồi đo lại. Một vòng là đủ, vì thu theo đúng tỷ lệ còn thiếu.
+   */
+  const need = () => Math.hypot(box.width, box.height) + 12;
+  if (need() > most) {
+    const die = parseFloat(under.style.getPropertyValue('--die')) || box.width / 2;
+    const want = Math.floor(die * (most - 12) / Math.hypot(box.width, box.height));
+    under.style.setProperty('--die', `${Math.max(26, want)}px`);
+    box = under.getBoundingClientRect();
+  }
+
+  const size = Math.min(Math.ceil(need()), most);
+  lid.style.width = `${size}px`;
+  lid.style.height = `${size}px`;
+
+  // Và đặt lên **ba con**, không phải lên cái bát.
+  //
+  // Chỗ này từng căn giữa bằng `inset: 0; margin: auto`, tức là căn vào giữa cái bát. Nhưng ba
+  // con không nằm giữa bát — dưới chúng còn cái tổng và dòng chữ, nên cả khối bị đẩy lên trên
+  // chừng ba chục pixel. Cái đĩa vừa đúng cỡ để phủ ba con, nhưng nằm lệch xuống ba chục pixel,
+  // thì **hở nguyên mép trên**: kết quả ló ra trước khi có ai kéo.
+  //
+  // `transform` để nguyên cho cú kéo — `dragOff` ghi thẳng vào đó — nên chỗ đứng phải nói bằng
+  // `left`/`top`.
+  lid.style.margin = '0';
+  lid.style.right = 'auto';
+  lid.style.bottom = 'auto';
+  lid.style.left = `${(box.left + box.right) / 2 - room.left - size / 2}px`;
+  lid.style.top = `${(box.top + box.bottom) / 2 - room.top - size / 2}px`;
 }
 
 /**
@@ -2220,79 +2449,18 @@ function drawPlate(hidden) {
   plate.dataset.round = String(state.round);
   plate.className = '';
   plate.style.transform = '';
+  fitLid(plate, $('dice'), $('bowl'));
 
   const round = state.round;
-  let timer = 0;
 
-  // `fling` carries the drag on in the direction it was going. Without it the plate would run
-  // the canned lift, which starts by sliding back the way it came — across the dice that were
-  // just uncovered.
-  const open = (fling) => {
+  // Off the dice, not off a few pixels: the plate goes when all three are showing and not
+  // before. Redrawn when it is out of the way rather than under it, so the dice land into an
+  // empty bowl and the gold moves onto a screen somebody is looking at.
+  dragOff(plate, $('dice'), () => {
     if (lifted === round) return;
     lifted = round;
-    clearTimeout(timer);
-    plate.classList.remove('held');
-    if (fling) { plate.style.transform = fling; plate.classList.add('gone'); }
-    else { plate.classList.add('off'); }
-    // Redrawn when it is out of the way rather than under it, so the dice land into an empty
-    // bowl and the gold moves onto a screen somebody is looking at.
     setTimeout(() => { heldGold = null; render(); }, 380);
-  };
-
-  // Off the dice, not off a few pixels.
-  //
-  // The plate goes when all three are showing and not before. Dragged an inch and gone was the
-  // gesture cut off at its start: the whole of nặn is the slow part, and a plate that leaves
-  // before the answer is out has taken the game's one moment away.
-  const clear = () => {
-    const dish = plate.getBoundingClientRect();
-    const dice = $('dice').getBoundingClientRect();
-    if (!dice.width) return true;
-    return dish.right <= dice.left || dish.left >= dice.right
-      || dish.bottom <= dice.top || dish.top >= dice.bottom;
-  };
-
-  let from = null;
-  let moved = 0;
-
-  plate.onpointerdown = (event) => {
-    if (lifted === round) return;
-    from = { x: event.clientX, y: event.clientY };
-    moved = 0;
-    // Not while somebody has hold of it. Pulling a plate out of a hand that is pulling it is
-    // the one way this could feel worse than not being able to drag it at all.
-    clearTimeout(timer);
-    plate.classList.add('held');
-    plate.setPointerCapture(event.pointerId);
-  };
-
-  plate.onpointermove = (event) => {
-    if (!from) return;
-    const dx = event.clientX - from.x;
-    const dy = event.clientY - from.y;
-    moved = Math.max(moved, Math.hypot(dx, dy));
-    plate.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx * 0.025}deg)`;
-    if (clear()) {
-      from = null;
-      open(`translate(${dx * 1.8}px, ${dy * 1.8}px) rotate(${dx * 0.05}deg)`);
-    }
-  };
-
-  plate.onpointerup = () => {
-    if (!from) return;
-    from = null;
-    plate.classList.remove('held');
-    // A finger put on it and not moved is somebody asking to see it, and that is a whole
-    // gesture rather than half of one.
-    if (moved < 9) { open(); return; }
-    // Let go halfway and it settles back over the bowl, having given nothing away. The round
-    // goes on either way, so the only thing lost is the look at it.
-    plate.style.transform = '';
-    timer = setTimeout(open, NAN_MS);
-  };
-  plate.onpointercancel = plate.onpointerup;
-
-  timer = setTimeout(open, squeezing ? NAN_MS : 0);
+  }, squeezing ? NAN_MS : 0);
 }
 
 /**
@@ -2576,8 +2744,10 @@ function drawBoard() {
   }
 }
 
-function drawChips() {
-  const row = $('chips');
+/// The chips, under whichever mat asked for them. The ladder is the same at both bowls on
+/// purpose: they sit side by side on one menu and share one purse, and two ladders would be two
+/// things to learn about one pile of gold.
+function drawChips(row) {
   row.replaceChildren();
 
   const chips = state.chips || [1000];
@@ -2593,7 +2763,7 @@ function drawChips() {
     el.className = 'chip-pick' + (chip === one ? ' on' : '');
     el.textContent = gold(one);
     el.disabled = state.phase !== 'betting' || one > left;
-    el.onclick = () => { chip = one; say(''); drawChips(); };
+    el.onclick = () => { chip = one; say(''); drawChips(row); };
     row.append(el);
   }
 }
@@ -2602,7 +2772,9 @@ function drawChips() {
 /// counted down, so a phone that was asleep comes back to the right number.
 function betTick() {
   if (!state || !state.bettingEndsAt) return;
-  const clock = document.querySelector('#bowl-note .clock');
+  // Either bowl. One clock, two mats — and a selector naming only one of them is a tài xỉu
+  // window that counts down by staying still.
+  const clock = document.querySelector('#bowl-note .clock, #tx-note .clock');
   if (!clock) return;
 
   const left = Math.max(0, Math.round((state.bettingEndsAt - Date.now()) / 1000));
@@ -2630,16 +2802,19 @@ function render() {
   const watching = !!(state && state.adsEndsAt);
   const deciding = !!(state && state.phase === 'choosing');
 
-  // Two games, two boards. A card table seen from your chair and a mat seen from above have
-  // nothing in common but the frame round them, so they are two sections rather than one in two
-  // moods.
+  // Three boards, and none of them is a mood of another. A card table seen from your chair, a
+  // mat seen from above, and a bát with one number under it have nothing in common but the frame
+  // round them — bầu cua stakes on a *face* and tài xỉu on the *total*, so even the two dice
+  // games do not lay out alike.
   const dice = !!(state && state.kind === 'baucua');
+  const sicbo = !!(state && state.kind === 'taixiu');
 
   $('ads').hidden = !watching;
   $('menu').hidden = watching || !deciding || screen !== 'play';
   $('browse').hidden = watching || !deciding || screen === 'play';
   $('baucua').hidden = watching || deciding || !dice;
-  $('table').hidden = watching || deciding || dice;
+  $('taixiu').hidden = watching || deciding || !sicbo;
+  $('table').hidden = watching || deciding || dice || sicbo;
   $('buttons').hidden = watching;
 
   if (watching) {
@@ -2655,18 +2830,28 @@ function render() {
 
   if (deciding) {
     stopTumbling();
+    txIdle();
     if (screen === 'play') drawMenu(); else drawBrowse();
     drawButtons();
     return;
   }
 
+  if (sicbo) {
+    drawTaixiu();
+    drawButtons();
+    if (state.bettingEndsAt) { betTick(); ticking = setInterval(betTick, 250); }
+    return;
+  }
+
   if (dice) {
+    txIdle();
     drawBaucua();
     drawButtons();
     if (state.bettingEndsAt) { betTick(); ticking = setInterval(betTick, 250); }
     return;
   }
 
+  txIdle();
   drawFeltTop();
   drawSeats();
   drawPile();
@@ -2692,7 +2877,13 @@ z.onState((next) => {
   //
   // So a push with no hand in it does not mean there is no hand. It means this one was for
   // everybody.
-  if (!next.me && state && state.me && state.gameId === next.gameId) next.me = state.me;
+  if (!next.me && state && state.me && state.gameId === next.gameId) {
+    // Ở hai cái bát thì mang sang **cái ghế**, không mang sang **bàn cược**. Ván mới là bàn cược
+    // mới; bê nguyên cái cũ sang thì mặt chiếu hiện tiền của ván trước như thể nó đang nằm đó.
+    next.me = diceGame(next) && state.round !== next.round
+      ? { ...state.me, bets: {}, staked: 0, theirs: {} }
+      : state.me;
+  }
 
   // Cards picked up out of a hand that has since been dealt again are not cards.
   const held = new Set((next.me && next.me.hand) || []);
@@ -2748,9 +2939,17 @@ z.onState((next) => {
   // Kept from the push *before* the payout, because the plate has to keep showing it: the gold
   // moves when the dice land and the dice are under a plate. A number that had already changed
   // above a plate hiding the dice would be a plate hiding nothing.
-  if (next.kind === 'baucua') {
+  if (diceGame(next)) {
     if (next.phase === 'rolling' && state) heldGold = state.gold;
     if (next.phase === 'betting') heldGold = null;
+
+    // Tiếng xóc, bắt từ **lúc trạng thái đổi** chứ không phải từ trong một hàm vẽ. Hàm vẽ chạy
+    // lại mỗi lần đẩy, mà một ván xóc có mấy lần đẩy — nên tiếng phát ra ở đó là tiếng xóc chồng
+    // lên tiếng xóc. Cái bát chỉ bắt đầu lắc đúng một lần, nên tiếng cũng chỉ nổ đúng một lần.
+    if (next.phase === 'rolling' && (!state || state.phase !== 'rolling'
+      || state.gameId !== next.gameId)) {
+      rattle(next.rollMs || 1700);
+    }
   } else {
     heldGold = null;
   }
@@ -2761,18 +2960,27 @@ z.onState((next) => {
   // back from the bot in the middle of somebody tapping would make chips flicker. It hands the
   // board over when the round turns, and when the bot refuses one: at that point what is drawn
   // is a lie, and the truth is whatever the bot says it is holding.
-  if (next.kind === 'baucua') {
+  if (diceGame(next)) {
     const mine = next.me;
+    // Cùng cái bàn ấy, **và cùng cái ván ấy**.
+    //
+    // Hai lỗi đã nằm ở đúng dòng này. Nó từng viết `state.kind === 'baucua'`, và ở bàn tài xỉu
+    // thì câu ấy luôn sai — nên mọi push trong lúc đang đặt đều xoá sạch chip trên trang, mà bot
+    // thì vẫn giữ đủ: "bấm đặt cái là mất, mà backend vẫn ghi nhận".
+    //
+    // Rồi nó thiếu số ván. Cửa đặt ván sau mở ra cũng là `phase === 'betting'` ở cùng một bàn,
+    // nên `turned` sai và trang **giữ nguyên chip của ván trước**. Không chỉ vẽ sai: `myBets()`
+    // đọc từ chính cái chồng chip ấy, nên chạm thêm một cái là gửi đi nguyên bàn cược cũ và đặt
+    // lại nó bằng tiền thật. Ván là ván nào phải nằm trong câu hỏi.
     const turned = next.phase !== 'betting'
-      || !(state && state.kind === 'baucua' && state.gameId === next.gameId);
+      || !(state && diceGame(state) && state.gameId === next.gameId
+        && state.round === next.round);
     if (turned) {
       forgetPending();
-      // Through the shaking and under the plate, the mat goes on showing what was put on it.
-      // Waiting to see how it went while not being able to see what you bet is the one moment
-      // in the round when the board matters most.
-      if (next.phase !== 'betting') {
-        stack = Object.entries((mine && mine.theirs) || {}).map(([face, amount]) => ({ face, amount }));
-      }
+      // Bàn cược của bot là bàn thật, nên lúc vừa tới — ván mới, bàn mới, hay quay lại giữa
+      // chừng — trang lấy nguyên nó làm chỗ bắt đầu. Ván mới thì nó rỗng; quay lại giữa cửa đặt
+      // thì nó là mấy đồng mình đã bỏ xuống, và không thấy chúng là tưởng mất.
+      stack = Object.entries((mine && mine.theirs) || {}).map(([face, amount]) => ({ face, amount }));
     } else if (next.says) {
       // Refused. What is drawn is now a lie, so the bot's board is taken as it stands — one
       // entry a face, which makes undo coarse for a moment and truthful immediately.
@@ -2820,8 +3028,9 @@ say('Đang mở bàn…');
 // showing — which is what stops a widget covering the app with something that looks like the
 // app — so this is a request rather than a size.
 //
-// Shorter than it was. The hand used to take two rows, and the felt above it was given the
-// height for that whether the row was there or not; one row of thirteen gave sixty pixels back
-// and a shorter frame covers less of the conversation it is floating over.
-z.setSize(390, 540);
+// Taller than it was, by thirty. Cái bát mọc lên: cái đĩa nặn giờ là một cái đĩa **tròn** phải
+// phủ kín ba con xúc xắc, mà một hình tròn phủ được một hàng ngang thì cao đúng bằng chiều rộng
+// của hàng ấy. Ba mươi pixel là chỗ cho việc đó và không hơn — cái khung này nổi lên trên một
+// cuộc trò chuyện, và mỗi pixel nó lấy là một pixel của cuộc trò chuyện ấy.
+z.setSize(390, 570);
 z.ready();

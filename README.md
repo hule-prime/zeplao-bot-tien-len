@@ -1,7 +1,7 @@
 # tienlenbot
 
-A bot for [Cúc Cu](https://kuku.vn) with three games in it: **tiến lên miền nam**, **đánh
-phỏm** and **bầu cua tôm cá**, played in a group chat for one purse of gold.
+A bot for [Cúc Cu](https://kuku.vn) with four games in it: **tiến lên miền nam**, **đánh
+phỏm**, **bầu cua tôm cá** and **tài xỉu**, played in a group chat for one purse of gold.
 
 Live as **`@tienlenbot`** on `kuku.vn`, running as its own service beside `@carobot`. It is not
 published yet, so only its owner can add it to a conversation — see
@@ -52,6 +52,45 @@ them do. Nothing is taken from anybody's purse until the dice land. The bowl is 
 stops: drag the plate off to see how it went — and until you do, nothing gives it away, not the
 purse and not the mat. **Soi cầu** is the last thirty throws, six rows and a column a throw,
 newest on the left.
+
+**Tài xỉu**
+
+One table, the whole world's, and no other kind of it — no private bát and no machines. Three
+dice under a bowl and a twenty-five second window to stake on what their **total** will be:
+**tài** 11–17, **xỉu** 4–10, **chẵn**, **lẻ**, all at one for one, and **bão** — three of the
+same — at one for thirty. Bão is the rule everybody forgets exactly once: it pays its own door
+and takes tài, xỉu, chẵn and lẻ with it, whatever the total came to. That is why the two ranges
+are written 4–10 and 11–17 rather than 3–10 and 11–18, and it is where the house's 2,78% lives.
+
+Nặn is the whole of it, and it is one gesture: the bát is dragged off, and **the dice come out
+as it goes**. Drag it slowly and they emerge one at a time with the total building behind them —
+`?`, then `6 + ?`, then `10 + ?` — and while one is still under the rim the bowl lays out all six
+things it could be, coloured by which way each would send the throw and ringed where it would pay
+you. Drag it fast, tap it, or leave it alone and all three arrive at once. Nobody is ever made to
+wait on a clock to see their own result. Until the bát is clear away, nothing else on the screen
+has moved — not the purse, not the mat, not the row of what everybody won.
+
+The bát rattles while it shakes and each die knocks as it turns over. The sound is **built, not
+fetched** — a widget cannot reach the network, so a file from a CDN would simply never arrive:
+it is a short burst of filtered noise per clack, twenty of them scattered across the shake.
+There is a switch for it in the corner of the bowl beside the nặn one, and it is remembered on
+the reader's own machine.
+
+The lid over both bowls is a **round dish**, so the three dice sit under it in a triangle rather
+than a row — a circle over a row has to be as wide as that row's diagonal, which is exactly the
+direction a circle does not have. Both the dish and the dice are then sized by measurement rather
+than by numbers in a stylesheet: the dish from the block it has to cover, the dice from the height
+the bowl actually got. A lid a few pixels short of covering is a lid showing the corner of the
+answer, and nothing would report that as a fault.
+
+During the betting window the previous throw stays in the bowl, dimmed and captioned `ván trước ·
+11 · Tài` — a bowl sitting empty for twenty-five seconds reads as a screen that failed to load,
+and three faint dice with nothing naming them read as this round's.
+
+**Soi cầu** here is a road rather than a grid: a column a run, dropping down while it stays on
+one side and breaking to a new column when it turns over. That is the board every tài xỉu table
+in the country hangs, and it is the right one, because the thing worth reading in a two-sided
+game is the streak.
 
 Every hand is played for gold. Turning up is worth 10.000 a day, a table against the machines
 pays 2.000 for coming first and takes 2.000 off whoever comes last, and a table between people
@@ -132,6 +171,7 @@ A few things that are the way they are on purpose:
 | A table between people | Whatever the room was opened at — **1.000** to 1.000.000, and never more than the opener has. Three presets for the common answers, and a field for anything else |
 | More gold | A ten second advertisement, worth **4.000**, behind the `+` beside the purse at any balance. The daily cap is a thousand, which is a guard against a counting bug rather than a ration — ten seconds a time is the ration |
 | The board | Gold, the world's, everybody |
+| What the two bowls keep | Bầu cua **7,87%** — 17/216, the number every pavement table plays. Tài xỉu **2,78%** on tài, xỉu, chẵn and lẻ, and **13,89%** on bão. Worked out exactly over all 216 throws rather than measured, and pinned by a test |
 
 **One person is one purse.** The ledger is keyed by the person and by nothing else — not the
 room, not the screen, not the session. Somebody in five groups has one pile of gold and one
@@ -181,9 +221,10 @@ because a widget is a file anybody can edit.
 | `bots/tienlenbot/rules/tienlen.mjs` | Tiến lên: shapes, the ladder of chặt, the money on a bomb, and the machine that plays it |
 | `bots/tienlenbot/rules/phom.mjs` | Phỏm: melds, the best way to cut a hand up, eating, sending, and its own machine |
 | `bots/tienlenbot/rules/baucua.mjs` | Six faces, three dice, and what a stake on one is worth |
+| `bots/tienlenbot/rules/taixiu.mjs` | Three dice, one total, five doors, and what bão does to four of them |
 | `bots/tienlenbot/economy.mjs` | Gold: what a day is worth, what a table costs, and how a hand is paid |
-| `bots/tienlenbot/widget/` | The page in the frame — `index.html`, `style.css`, `tienlen.js`, `faces.js` |
-| `bots/tienlenbot/tienlenbot.test.mjs` | Tiến lên and the money, played out over a few thousand dealt hands |
+| `bots/tienlenbot/widget/` | The page in the frame — `index.html`, `style.css`, `tienlen.js`, `taixiu.js`, `faces.js`, `sound.js` |
+| `bots/tienlenbot/tienlenbot.test.mjs` | Tiến lên, the dice and the money — a few thousand dealt hands, and both bowls over all 216 throws |
 | `bots/tienlenbot/phom.test.mjs` | Phỏm, the same way |
 | `bots/tienlenbot/tienlenbot.flow.test.mjs` | The bot, end to end against a stand-in for the app |
 

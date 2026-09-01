@@ -54,6 +54,39 @@
       <div id="chips"></div>
     </section>
 
+    <!-- Tài xỉu: một cái bát, ba con xúc xắc, và cái tổng của chúng. Màn riêng chứ không phải
+         một kiểu khác của chiếu bầu cua — ở kia đặt vào một *mặt*, ở đây đặt vào một *câu nói về
+         con số*, và hai thứ ấy không xếp giống nhau ở chỗ nào cả. -->
+    <section id="taixiu" hidden>
+      <!-- Ba con là thứ **duy nhất** nằm trong dòng chảy của cái bát, nên chúng nằm đúng giữa
+           nó. Mọi chữ nghĩa — cái tổng, hàng người chơi, dòng dưới cùng — nằm trong một khối
+           dán xuống đáy, và cái bát chừa sẵn chỗ cho khối ấy bằng `padding-bottom`. Để chúng
+           trong dòng thì ba con bị đẩy lên sát mép trên, mà cái đĩa lại căn giữa bát: cái đĩa
+           lệch khỏi ba con ba chục pixel và hở nguyên mép trên. -->
+      <div id="tx-bowl">
+        <div id="tx-dice"></div>
+        <!-- Nắp bát. Che cả kết quả chứ không riêng ba con — cái ví ở ngay trên đầu và cửa
+             thắng ở ngay dưới, mà chỗ nào trong số đó cũng nói trước được. -->
+        <div id="tx-bat" hidden><span>NẶN</span></div>
+        <!-- Một hàng, không phải hai. Cái tổng và dòng nói được mất là hai nửa của cùng một
+             câu — "11 Tài · +2.000 vàng" — và mỗi hàng thừa trong bát là chỗ ba con mất đi. -->
+        <div id="tx-below">
+          <!-- Cái tổng, to hết cỡ: toàn bộ trò này là con số ấy. -->
+          <div id="tx-sum" hidden></div>
+          <div id="tx-note"></div>
+        </div>
+      </div>
+      <!-- Ai đang ngồi và đặt bao nhiêu. **Ngoài** cái bát: đây là chuyện về cái bàn, không phải
+           về cú xóc, và nhét nó vào bát là lấy mất chỗ của đúng ba thứ cái bát sinh ra để đựng. -->
+      <div id="tx-punters"></div>
+      <nav id="tx-tabs"></nav>
+      <div id="tx-board"></div>
+      <div id="tx-rule"></div>
+      <div id="tx-cau" hidden></div>
+      <div id="tx-help" hidden></div>
+      <div id="tx-chips"></div>
+    </section>
+
     <!-- A table: the felt, whoever is round it, and whatever is in the middle. The same element
          through the waiting and the playing, because a seat filling up while you look at it is
          what makes a waiting room feel like a table rather than a form. -->
@@ -95,4 +128,10 @@
      whether this is running on a phone or in a browser. -->
 <script src="zeplao.js"></script>
 <script src="faces.js"></script>
+<!-- Trước `tienlen.js`, không phải sau. `render()` bên kia gọi tới mấy hàm ở đây, mà khai báo hàm
+     thì được hoist ra toàn cục ngay khi file này chạy xong; còn thứ file này đọc của bên kia thì
+     chỉ đọc trong lòng hàm, tức là lúc đã chạy rồi. Ngược lại thì `z.ready()` ở cuối `tienlen.js`
+     có thể gọi vào một hàm chưa tồn tại. -->
+<script src="sound.js"></script>
+<script src="taixiu.js"></script>
 <script src="tienlen.js"></script>

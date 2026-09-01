@@ -3,10 +3,16 @@
 // Written after a search-and-replace quietly ate the whole advertisement screen's styling and
 // the only thing that noticed was a screenshot. An id is covered when the same element carries
 // a class that is styled — most of them do, and flagging those would make this cry wolf.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 const dir = process.argv[2];
 const css = readFileSync(dir + '/style.css', 'utf8');
-const js = readFileSync(dir + '/tienlen.js', 'utf8');
+// Every script in the bundle, not one of them by name. The page grew a second file the day tài
+// xỉu arrived, and a checker that reads `tienlen.js` alone would have passed a whole screen with
+// no styling on it — which is the exact failure it was written for.
+const js = readdirSync(dir)
+  .filter((name) => name.endsWith('.js') && name !== 'zeplao.js')
+  .map((name) => readFileSync(dir + '/' + name, 'utf8'))
+  .join('\n');
 const html = readFileSync(dir + '/index.html', 'utf8');
 
 const has = (sel) => css.includes(sel);

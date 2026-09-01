@@ -52,6 +52,7 @@ export * from './rules/cards.mjs';
 export * from './rules/tienlen.mjs';
 export * from './rules/phom.mjs';
 export * from './rules/baucua.mjs';
+export * from './rules/taixiu.mjs';
 export * from './economy.mjs';
 
 import {
@@ -72,15 +73,63 @@ import {
   BAUCUA_SEATS, roll, faceWorth, boardWorth, staked, tally,
 } from './rules/baucua.mjs';
 import {
+  TX_DOORS, TX_DOOR_NAMES, TX_PAYS, TX_SMALL, TX_BIG, TX_WORLD,
+  TX_ROLL_MS, TX_SHOW_MS, TX_BETTING_MS, TX_HISTORY, TX_CHIPS,
+  txRoll, txBoardWorth, txStaked, txOutcome,
+} from './rules/taixiu.mjs';
+import {
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, STAKES, MIN_STAKE, MAX_STAKE, asStake,
   ADS_MS, ADS_GOLD, ADS_PER_DAY, BROKE, payouts, dayIn, gold, settlement,
 } from './economy.mjs';
+
+// ---- two bowls, one set of machinery --------------------------------------------------------
+//
+// Bầu cua and tài xỉu are the same table with different mats: nobody takes turns, everybody
+// stakes on the same three dice at once, a clock closes the board, and the throw pays every
+// stake at the same instant. What actually differs between them is five things — what the doors
+// are called, what a board on them is worth, how much is on it, how the dice are made, and how
+// long each part of the round takes. So that is what this table holds, and everything below asks
+// it rather than asking which game this is.
+//
+// Module scope on purpose. Everything inside `run` that would want this sits *below* the endless
+// loop, where a `const` stays in the temporal dead zone for the life of the process.
+const BOWLS = {
+  baucua: {
+    doors: FACES,
+    worth: boardWorth,
+    staked,
+    roll,
+    chips: CHIPS,
+    history: HISTORY,
+    betting: BETTING_MS,
+    rolling: ROLL_MS,
+    showing: SHOW_MS,
+    // Where this bowl's run of throws is kept between deploys, in the ledger beside the gold.
+    cau: 'cau',
+  },
+  taixiu: {
+    doors: TX_DOORS,
+    worth: txBoardWorth,
+    staked: txStaked,
+    roll: txRoll,
+    chips: TX_CHIPS,
+    history: TX_HISTORY,
+    betting: TX_BETTING_MS,
+    rolling: TX_ROLL_MS,
+    showing: TX_SHOW_MS,
+    cau: 'cauTx',
+  },
+};
+
+/// Whether this table is one of the two bowls. Asked in a dozen places, and every one of them
+/// used to name bầu cua — which is how a second dice game turns into a second copy of the bot.
+const isDice = (game) => !!game && !!BOWLS[game.kind];
 
 // ---- what the room is told ----------------------------------------------------------------
 
 export const SAY = {
   greeting: (handle) => `Chào cả nhà. Gõ @${handle} để mở bàn: tiến lên miền nam, đánh phỏm, `
-    + 'hoặc bầu cua tôm cá.',
+    + 'bầu cua tôm cá, hoặc tài xỉu.',
   // Which game, by name. A room can hold a table of each at once, and a line that only said
   // "mở bàn" would have somebody sitting down at phỏm expecting thirteen cards.
   opened: (who, size, stake, kind = 'tienlen') =>
@@ -289,7 +338,7 @@ export function finish(game) {
     .filter((seat) => game.seats[seat])
     .map((seat) => game.seats[seat].userId);
 
-  if (game.kind !== 'baucua' && !game.blanche) reckon(game);
+  if (!isDice(game) && !game.blanche) reckon(game);
 }
 
 /**
@@ -598,7 +647,10 @@ export async function run(token, { signal, api = API } = {}) {
   console.log(`@${me.username} is dealing`);
 
   await call('setCommands', {
-    commands: [{ command: 'tienlen', description: 'Mở bàn: tiến lên, phỏm, hay bầu cua' }],
+    commands: [{
+      command: 'tienlen',
+      description: 'Mở bàn: tiến lên, phỏm, bầu cua hay tài xỉu',
+    }],
   });
 
   // Reaching for this bot should not leave a line in the room. Asked for once, here, rather
@@ -679,12 +731,15 @@ export async function run(token, { signal, api = API } = {}) {
       // starts again empty every deploy is a board nobody can use — the whole point of it is
       // that it reaches further back than the session looking at it.
       kept.cau = Array.isArray(kept.cau) ? kept.cau.slice(0, HISTORY) : [];
+      // And the tài xỉu one, which is its own run and its own length. Two bowls, two boards:
+      // pouring one into the other would be reading somebody else's game as this one's cầu.
+      kept.cauTx = Array.isArray(kept.cauTx) ? kept.cauTx.slice(0, TX_HISTORY) : [];
       return kept;
     } catch {
       // No file yet, or one somebody edited into nonsense. An empty ledger is the honest
       // starting point — refusing to run because a scoreboard is missing would take the games
       // down with it.
-      return { people: {}, offset: 0, greeted: {}, cau: [] };
+      return { people: {}, offset: 0, greeted: {}, cau: [], cauTx: [] };
     }
   })();
 
@@ -897,10 +952,14 @@ export async function run(token, { signal, api = API } = {}) {
   /// Tables still short of people, anywhere. The list somebody looking for a game is shown.
   const openTables = () => [...games.values()]
     .filter((game) => (game.state === 'lobby'
-      // A bầu cua table is open for as long as it is running: there is no hand in progress to
-      // wait out, only the next throw.
-      || (game.kind === 'baucua' && game.state !== 'over'))
-      && !game.solo && game.seats.length < game.size)
+      // A bowl is open for as long as it is running: there is no hand in progress to wait out,
+      // only the next throw.
+      || (isDice(game) && game.state !== 'over'))
+      // Never the world bowls. Nobody opened them, there is nowhere to be invited from, and
+      // they have a door of their own on the first screen — a line on the list saying "vào"
+      // beside a table that is simply always there is a line that teaches the wrong thing
+      // about it.
+      && !game.world && !game.solo && game.seats.length < game.size)
     .map((game) => ({
       id: game.id,
       kind: game.kind,
@@ -1196,9 +1255,9 @@ export async function run(token, { signal, api = API } = {}) {
       return null;
     }
 
-    // A bầu cua table takes anybody at any moment: there is no hand in progress to wait out,
-    // only the next throw, and somebody who sits down mid-throw simply bets on the one after.
-    const midRound = game.kind === 'baucua' && game.state !== 'over';
+    // A bowl takes anybody at any moment: there is no hand in progress to wait out, only the
+    // next throw, and somebody who sits down mid-throw simply bets on the one after.
+    const midRound = isDice(game) && game.state !== 'over';
 
     if (game.state !== 'lobby' && !midRound) {
       // Not a refusal so much as a redirection: a table that has started is a table to watch.
@@ -1232,14 +1291,14 @@ export async function run(token, { signal, api = API } = {}) {
 
     // A full table deals itself. Waiting for the host to press a button once the last seat is
     // taken is four people looking at each other — and the host may be the one who wandered off.
-    if (game.kind === 'baucua') {
+    if (isDice(game)) {
       if (game.state === 'lobby') {
-        startBaucua(game);
+        openBets(game);
       } else if (game.state === 'betting' && !game.bettingEndsAt && game.seats.length > 1) {
         // A second person is somebody to wait for, so the clock starts. Only the clock: this
         // used to re-open the board, which swept every chip anybody had already put down —
         // arriving at a table and clearing it is not arriving at a table.
-        game.bettingEndsAt = Date.now() + BETTING_MS;
+        game.bettingEndsAt = Date.now() + BOWLS[game.kind].betting;
       }
       await pushGame(game);
     } else if (game.seats.length >= game.size) {
@@ -1358,10 +1417,27 @@ export async function run(token, { signal, api = API } = {}) {
         const table = newGame(screen, 1, CHIPS[0], 'baucua');
         table.solo = true;
         screen.gameId = table.id;
-        startBaucua(table);
+        openBets(table);
 
         await pushTo(screen);
         await pushLobbies();
+        return;
+      }
+
+      // Tài xỉu, and it is one answer rather than two: there is **one** table, it is the whole
+      // world's, and nobody opens it. No private bowl and no machines — three dice under a bát
+      // with nobody else at the table is a number appearing, and the half of this game that is
+      // worth anything is the twenty other people staking on the same throw.
+      if (action.taixiu) {
+        if (goldOf(who.userId) < TX_CHIPS[0]) {
+          return pushTo(screen, { says: SAY.tooPoor(TX_CHIPS[0]) });
+        }
+
+        const bowl = worldTaixiu();
+        screen.gameId = bowl.id;
+        seatWatchers(bowl);
+        await pushGame(bowl);
+        keepRolling(bowl).catch((problem) => console.error(String(problem)));
         return;
       }
 
@@ -1411,8 +1487,8 @@ export async function run(token, { signal, api = API } = {}) {
 
     const host = game.host.userId === who.userId;
 
-    if (game.kind === 'baucua') {
-      // At the world sòng the chair is having it open, so somebody acting on it is somebody at
+    if (isDice(game)) {
+      // At a world bowl the chair is having it open, so somebody acting on it is somebody at
       // it. `seatWatchers` keeps that true; this is the belt to its braces.
       if (game.world && seatOf(game, who.userId) === null) seatWatchers(game);
 
@@ -1447,8 +1523,8 @@ export async function run(token, { signal, api = API } = {}) {
 
       // Thrown when somebody says so rather than only when the clock runs out — sitting through
       // twenty-five seconds of nothing because nobody else is betting is not a game.
-      // Only at a private table. The world sòng runs on its own clock and a button that
-      // hurried it along would be one person deciding for everybody else at it.
+      // Only at a private table. A world bowl runs on its own clock and a button that hurried
+      // it along would be one person deciding for everybody else at it.
       if (action.roll && host && !game.world) return spin(game);
       return;
     }
@@ -1584,7 +1660,9 @@ export async function run(token, { signal, api = API } = {}) {
       ready: new Set(),
       paidTo: new Map(),
       paid: [],
-      // Bầu cua: what everybody has on the board this round, and what came up.
+      // Bầu cua: what everybody has on the board this round, and what came up. The count starts
+      // at one so that no two throws are ever named the same — see `worldBowl`.
+      round: 1,
       bets: {},
       betAt: {},
       dice: null,
@@ -1806,10 +1884,10 @@ export async function run(token, { signal, api = API } = {}) {
     await maybeBotTurn(game);
   }
 
-  // ---- bầu cua tôm cá ---------------------------------------------------------------------
+  // ---- the two bowls ------------------------------------------------------------------------
 
   /**
-   * The one sòng everybody in the world is at.
+   * A bowl the whole world is at, made the first time somebody walks in on it.
    *
    * Not a table anybody opens. It exists, it keeps throwing, and walking in is walking in on a
    * game already going — which is what a sòng is. A table somebody has to open first is a table
@@ -1819,19 +1897,19 @@ export async function run(token, { signal, api = API } = {}) {
    * Made once and never swept. It has no room, no host and no invitation: there is nowhere to
    * post one, because it does not belong to a group.
    */
-  function worldSong() {
-    let song = games.get(WORLD);
-    if (song) return song;
+  function worldBowl(id, kind, host, stake, history) {
+    let bowl = games.get(id);
+    if (bowl) return bowl;
 
-    song = {
-      id: WORLD,
-      kind: 'baucua',
+    bowl = {
+      id,
+      kind,
       world: true,
       conversationId: null,
       state: 'betting',
-      host: { userId: null, displayName: 'Sòng thế giới' },
+      host,
       size: 999,
-      stake: CHIPS[0],
+      stake,
       solo: false,
       seats: [],
       hands: null,
@@ -1848,18 +1926,45 @@ export async function run(token, { signal, api = API } = {}) {
       bets: {},
       betAt: {},
       dice: null,
-      // Picked up where the last run of the bot left it, so a deploy costs the board nothing.
-      history: scores.cau ?? [],
+      // Which throw this is. Counted from **one and not from nothing**, and that is not a
+      // cosmetic choice: a bowl made without it sent `round ?? 1` for its whole first window,
+      // and then `openBets` counted `0 + 1` and sent 1 again for the second. Two throws running
+      // carried the same name — so the page, which remembers "I have already lifted the lid on
+      // round 1", did not put a lid on the second one at all. Nặn worked once and then stopped,
+      // at both bowls, and nothing anywhere said why.
+      round: 1,
+      history,
       // A clock from the moment it exists, not from the moment the throwing loop gets round to
       // starting one. The first push otherwise carries a bowl with no clock on it, and whoever
-      // walked in reads that as a table waiting for somebody — which is the one thing the world
-      // sòng never is.
-      bettingEndsAt: Date.now() + BETTING_MS,
+      // walked in reads that as a table waiting for somebody — which is the one thing a world
+      // bowl never is.
+      bettingEndsAt: Date.now() + BOWLS[kind].betting,
       invitationId: null,
       touched: Date.now(),
     };
-    games.set(WORLD, song);
-    return song;
+    games.set(id, bowl);
+    return bowl;
+  }
+
+  /// The one bầu cua sòng everybody in the world is at.
+  function worldSong() {
+    return worldBowl(WORLD, 'baucua',
+      { userId: null, displayName: 'Sòng thế giới' }, CHIPS[0], scores.cau ?? []);
+  }
+
+  /**
+   * The one tài xỉu table everybody in the world is at, and the only one there is.
+   *
+   * Bầu cua has a private bowl beside its sòng; this has none, and that is a decision rather
+   * than a thing not written yet. A private bầu cua bowl is still a game — six faces, three
+   * dice, and a mat somebody is reading. Tài xỉu alone is one number appearing every half
+   * minute: there is no mat to read and no run to watch, because the run of throws only means
+   * anything against everybody else's money. The whole of it is the twenty people staking on
+   * the same bát, so it is that or it is nothing.
+   */
+  function worldTaixiu() {
+    return worldBowl(TX_WORLD, 'taixiu',
+      { userId: null, displayName: 'Sòng tài xỉu' }, TX_CHIPS[0], scores.cauTx ?? []);
   }
 
   /// Who has it open. The chairs round the world sòng are whoever is looking at it.
@@ -1894,7 +1999,7 @@ export async function run(token, { signal, api = API } = {}) {
         // Kept going by somebody looking at it, or by money still on it. The second is not
         // decoration: the last person can walk out with chips down, and a stake that is never
         // settled is a stake taken. The dice do not care who is watching.
-        const owed = Object.keys(game.bets).some((id) => staked(betsOf(game, id)) > 0);
+        const owed = Object.keys(game.bets).some((id) => onBoard(game, id) > 0);
         if (!watchersOf(game).length && !owed) {
           game.bettingEndsAt = null;
           return;
@@ -1902,7 +2007,7 @@ export async function run(token, { signal, api = API } = {}) {
         if (game.state !== 'betting') return;
 
         if (!game.bettingEndsAt) {
-          game.bettingEndsAt = Date.now() + BETTING_MS;
+          game.bettingEndsAt = Date.now() + BOWLS[game.kind].betting;
           await pushGame(game);
         }
 
@@ -1925,6 +2030,13 @@ export async function run(token, { signal, api = API } = {}) {
     return game.bets[userId] ?? {};
   }
 
+  /// How much of it there is. Counted through the bowl's own doors, because a bầu cua board adds
+  /// up six faces and a tài xỉu board adds up five doors, and counting one with the other's list
+  /// quietly reads every stake as nothing.
+  function onBoard(game, userId) {
+    return BOWLS[game.kind].staked(betsOf(game, userId));
+  }
+
   /// Opens the board. A table with more than one person at it takes bets on a clock, because
   /// somebody has to be waited for; alone, the throw happens when the one person says so.
   function openBets(game) {
@@ -1937,14 +2049,12 @@ export async function run(token, { signal, api = API } = {}) {
     game.bets = {};
     game.betAt = {};
     game.touched = Date.now();
-    // The world sòng always has a clock: it is a table that keeps throwing whether or not
-    // anybody in particular is at it. A private one only needs a clock when there is somebody
-    // to be waited for.
-    game.bettingEndsAt = game.world || game.seats.length > 1 ? Date.now() + BETTING_MS : null;
-  }
-
-  function startBaucua(game) {
-    openBets(game);
+    // A world bowl always has a clock: it is a table that keeps throwing whether or not anybody
+    // in particular is at it. A private one only needs a clock when there is somebody to be
+    // waited for.
+    game.bettingEndsAt = game.world || game.seats.length > 1
+      ? Date.now() + BOWLS[game.kind].betting
+      : null;
   }
 
   /**
@@ -1966,11 +2076,13 @@ export async function run(token, { signal, api = API } = {}) {
     if (!Number.isFinite(when)) return;
     if (when <= (game.betAt[screen.userId] ?? 0)) return;
 
-    // Everything here came from a page anybody can edit.
+    // Everything here came from a page anybody can edit — the doors included. A tài xỉu board
+    // arriving with `cua` on it is a page that is not the page this bot ships.
+    const doors = BOWLS[game.kind].doors;
     const bets = {};
     let total = 0;
     for (const [face, amount] of Object.entries(asked ?? {})) {
-      if (!FACES.includes(face)) return;
+      if (!doors.includes(face)) return;
       const on = Math.round(Number(amount));
       if (!Number.isFinite(on) || on < 0) return;
       if (on === 0) continue;
@@ -2004,11 +2116,13 @@ export async function run(token, { signal, api = API } = {}) {
   async function spin(game) {
     if (game.spinning || game.state !== 'betting') return;
 
-    // A throw with nothing on the board is a throw nobody asked for — at a private table. The
-    // world sòng throws anyway, because somebody walking in should find a game already running
+    // A throw with nothing on the board is a throw nobody asked for — at a private table. A
+    // world bowl throws anyway, because somebody walking in should find a game already running
     // rather than a bowl waiting for them to start it.
-    const anything = Object.keys(game.bets).some((id) => staked(betsOf(game, id)) > 0);
+    const anything = Object.keys(game.bets).some((id) => onBoard(game, id) > 0);
     if (!anything && !game.world) return;
+
+    const rules = BOWLS[game.kind];
 
     game.spinning = true;
     try {
@@ -2017,15 +2131,16 @@ export async function run(token, { signal, api = API } = {}) {
       game.touched = Date.now();
       await pushGame(game);
 
-      await wait(ROLL_MS);
+      await wait(rules.rolling);
       if (game.state !== 'rolling') return;
 
-      game.dice = roll();
-      game.history = [game.dice, ...(game.history ?? [])].slice(0, HISTORY);
-      // Only the world bowl is kept. A private bowl belongs to one person for as long as they
-      // have it open, and its run of throws goes when they close it, the same as the bowl does.
-      if (game.world) { scores.cau = game.history; saveScores(); }
-      payBaucua(game);
+      game.dice = rules.roll();
+      game.history = [game.dice, ...(game.history ?? [])].slice(0, rules.history);
+      // Only a world bowl is kept, and each keeps its own run. A private bowl belongs to one
+      // person for as long as they have it open, and its throws go when they close it, the same
+      // as the bowl does.
+      if (game.world) { scores[rules.cau] = game.history; saveScores(); }
+      payBowl(game);
       game.state = 'paid';
       game.touched = Date.now();
       await pushGame(game);
@@ -2038,7 +2153,7 @@ export async function run(token, { signal, api = API } = {}) {
         if (away && away.gameId !== game.id) await pushTo(away);
       }
 
-      await wait(SHOW_MS);
+      await wait(rules.showing);
       if (game.state !== 'paid') return;
 
       openBets(game);
@@ -2049,19 +2164,20 @@ export async function run(token, { signal, api = API } = {}) {
   }
 
   /// Pays the board out, one person at a time.
-  function payBaucua(game) {
+  function payBowl(game) {
     game.paid = [];
+    const rules = BOWLS[game.kind];
 
     // From what is on the board, not from who is sitting at it. Somebody who put money down and
     // then closed the widget still had money down, and the dice do not care who is watching.
     for (const userId of Object.keys(game.bets)) {
       const bets = betsOf(game, userId);
-      const on = staked(bets);
+      const on = rules.staked(bets);
       if (!on) continue;
 
       const row = rowFor(userId);
       const who = { userId, displayName: row.name || 'Ai đó' };
-      const worth = boardWorth(bets, game.dice);
+      const worth = rules.worth(bets, game.dice);
       // A loss can only be as large as what is on the board, and the board was checked against
       // the purse when each chip went down. This is the backstop for the seam between the two.
       const moved = worth < 0 ? -Math.min(-worth, row.gold) : worth;
@@ -2204,6 +2320,68 @@ export async function run(token, { signal, api = API } = {}) {
     };
   }
 
+  /**
+   * What somebody at the tài xỉu table is looking at. Their own board is added by `pushTo`.
+   *
+   * The throw is sent **worked out** — the total, whether it was bão, and which doors it paid —
+   * rather than as three numbers the page adds up. Not to save the page the arithmetic: so that
+   * the bot is the only thing in the world that decides what a throw was worth. A widget that
+   * worked out its own totals is a widget that could be edited into working out better ones.
+   *
+   * All of it goes out the moment the dice land, before anybody has lifted the bát — exactly as
+   * bầu cua sends the dice under the plate. What keeps it a secret is not the wire; it is that
+   * the page holds the whole result back until the nặn is done, the purse included.
+   */
+  function taixiuState(game) {
+    const outcome = game.dice ? txOutcome(game.dice) : null;
+
+    return {
+      phase: game.state,
+      kind: 'taixiu',
+      gameId: game.id,
+      size: game.size,
+      solo: false,
+      world: true,
+      host: game.host.userId,
+      hostName: game.host.displayName,
+
+      doors: TX_DOORS,
+      doorNames: TX_DOOR_NAMES,
+      // What each door pays on top of the stake, so the mat can say it rather than the page
+      // knowing it. One place decides the odds and it is this one.
+      pays: TX_PAYS,
+      small: TX_SMALL,
+      big: TX_BIG,
+      chips: TX_CHIPS,
+
+      dice: game.dice,
+      total: outcome ? outcome.total : null,
+      bao: outcome ? outcome.bao : false,
+      // Every door this throw paid. On a bão that is bão alone — which is the rule that catches
+      // everybody once, so the mat has to be able to show it rather than explain it.
+      won: outcome ? outcome.won : [],
+      round: game.round ?? 1,
+      history: game.history ?? [],
+
+      board: game.seats.reduce((total, one) => {
+        const bets = betsOf(game, one.userId);
+        for (const door of TX_DOORS) total[door] = (total[door] ?? 0) + (bets[door] ?? 0);
+        return total;
+      }, {}),
+
+      seats: game.seats.map((one) => ({
+        id: one.userId,
+        name: one.displayName,
+        staked: txStaked(betsOf(game, one.userId)),
+        change: (game.paid.find((p) => p.userId === one.userId) ?? {}).change ?? null,
+      })),
+
+      bettingEndsAt: game.state === 'betting' ? game.bettingEndsAt : null,
+      rollMs: TX_ROLL_MS,
+      paid: game.paid,
+    };
+  }
+
   /// What somebody at a bầu cua table is looking at. Their own board is added by `pushTo`.
   ///
   /// Everybody's stakes are in it, and that is on purpose: at a pavement table the board is the
@@ -2340,6 +2518,7 @@ export async function run(token, { signal, api = API } = {}) {
 
   /// What somebody at a table is looking at. Their own hand is added by `pushTo`.
   function tableState(game) {
+    if (game.kind === 'taixiu') return taixiuState(game);
     if (game.kind === 'baucua') return baucuaState(game);
     if (game.kind === 'phom') return phomState(game);
     const people = game.seats.length;
@@ -2476,11 +2655,11 @@ export async function run(token, { signal, api = API } = {}) {
       })()
       : null;
 
-    const mine = game && game.kind === 'baucua' && seat !== null
+    const mine = game && isDice(game) && seat !== null
       ? {
         seat,
         bets: betsOf(game, screen.userId),
-        staked: staked(betsOf(game, screen.userId)),
+        staked: onBoard(game, screen.userId),
         // What the bot has for them. The page keeps its own copy while a window is open — it
         // is the one drawing the chips — and takes this back whenever a round turns over.
         theirs: betsOf(game, screen.userId),
@@ -2547,7 +2726,7 @@ export async function run(token, { signal, api = API } = {}) {
     for (const game of [...games.values()]) {
       const idle = Date.now() - (game.touched ?? 0);
 
-      if (game.kind === 'baucua') {
+      if (isDice(game)) {
         if (game.world) {
           // Never swept — it is the one table that is always there. Started again if somebody
           // is looking at it and the loop is not running, which is the seam a lost await or a
@@ -2564,7 +2743,7 @@ export async function run(token, { signal, api = API } = {}) {
           continue;
         }
         // A board nobody has touched.
-        if (idle > LOBBY_MS) await endGame(game, 'a sòng nobody was betting at');
+        if (idle > LOBBY_MS) await endGame(game, 'a bowl nobody was betting at');
         continue;
       }
 

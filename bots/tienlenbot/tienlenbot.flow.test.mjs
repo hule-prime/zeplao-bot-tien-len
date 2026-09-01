@@ -33,11 +33,18 @@ process.env.TIENLEN_SHOW_MS = '120';
 // đóng — test đỏ vì cái đồng hồ trong test, không phải vì cái sòng. Một cái test đỏ ngẫu nhiên
 // còn tệ hơn không có test, vì lần đỏ nào cũng bị đọc thành "chạy lại phát nữa xem".
 process.env.TIENLEN_BETTING_MS = '2500';
+// Cái bát tài xỉu chạy theo đồng hồ riêng của nó, nên phải rút ngắn cả ba chặng ở đây nữa. Nặn ở
+// đó dài hơn bầu cua vì có hai chặng — mở nắp rồi lật ba con — nên khoảng hiện kết quả để rộng
+// hơn một chút, đúng theo tỷ lệ thật.
+process.env.TIENLEN_TX_ROLL_MS = '60';
+process.env.TIENLEN_TX_SHOW_MS = '160';
+process.env.TIENLEN_TX_BETTING_MS = '2500';
 process.env.TIENLEN_SCORES = LEDGER;
 
 const {
   run, chooseMove, shapeOf, nameOf, STARTING_GOLD, DAILY_GOLD, BOT_STAKE, ADS_GOLD, dayIn,
   FACES, boardWorth, staked, phomChoose, phomDiscard,
+  TX_DOORS, TX_PAYS, txBoardWorth, txStaked, txWon,
 } = await import('./tienlenbot.mjs');
 
 const nap = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -1105,6 +1112,208 @@ test('a throw with nothing on the board does not happen', async () => {
     await nap(300);
     assert.equal(app.mine('u1').phase, 'betting', 'the bowl should not have moved');
     assert.equal(app.mine('u1').dice, null);
+  });
+});
+
+// ---- tài xỉu ---------------------------------------------------------------------------------
+
+test('one tài xỉu table for the whole world, and no other kind of it', async () => {
+  // Bầu cua có hai lối vào: cái sòng chung, và một cái bát riêng để xóc một mình. Tài xỉu chỉ có
+  // một, và đó là một quyết định chứ không phải một thứ chưa viết. Ba con dưới cái bát mà không
+  // có ai khác ở bàn là một con số hiện lên mỗi nửa phút; nửa đáng chơi của trò này là hai chục
+  // người cùng đặt lên đúng cái bát ấy.
+  ledger();
+  await withBot(async (app) => {
+    for (const [id, room] of [['u1', 'c1'], ['u2', 'c2']]) {
+      app.asks(id, room);
+      await app.until(() => app.mine(id), `a screen for ${id}`);
+      await claim(app, id);
+    }
+
+    app.does('u1', { taixiu: true });
+    await app.until(() => (app.mine('u1') ?? {}).kind === 'taixiu', 'the tài xỉu table');
+    assert.equal(app.mine('u1').world, true, 'and it says which one it is');
+    assert.equal(app.mine('u1').solo, false, 'there is no bowl of your own here');
+    await app.until(() => (app.mine('u1') ?? {}).bettingEndsAt, 'a clock, with nobody else there');
+    assert.deepEqual(app.mine('u1').doors, TX_DOORS, 'and it says what the doors are');
+    assert.deepEqual(app.mine('u1').pays, TX_PAYS, 'and what each of them pays');
+
+    // Somebody in a completely different group walks in on the same table.
+    app.does('u2', { taixiu: true });
+    await app.until(() => (app.mine('u2') ?? {}).kind === 'taixiu', 'u2 at the same bát');
+    assert.equal(app.mine('u1').gameId, app.mine('u2').gameId, 'one table, not two');
+    await app.until(() => (app.mine('u1').seats ?? []).length === 2, 'both of them in the chairs');
+
+    // Nothing on anybody's list to join: the one table is not a table anybody opened.
+    assert.deepEqual((app.mine('u1').rooms ?? []), [],
+      'the world table turned up on the list of tables to join');
+
+    const purse = { u1: app.mine('u1').gold, u2: app.mine('u2').gold };
+    app.does('u1', { bets: { tai: 1000, chan: 1000 }, at: ++clocks.u1 });
+    app.does('u2', { bets: { xiu: 5000 }, at: ++clocks.u2 });
+    await app.until(() => app.mine('u1').me.staked === 2000 && app.mine('u2').me.staked === 5000,
+      'the board to fill up');
+
+    const bets = { u1: { ...app.mine('u1').me.bets }, u2: { ...app.mine('u2').me.bets } };
+    assert.equal(txStaked(bets.u1), 2000);
+
+    // Nobody presses anything. The clock throws it.
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'paid', 'the clock to throw');
+
+    const over = app.mine('u1');
+    assert.equal(over.dice.length, 3);
+    assert.ok(over.dice.every((one) => one >= 1 && one <= 6), `${over.dice} is not three dice`);
+    assert.equal(over.total, over.dice[0] + over.dice[1] + over.dice[2],
+      'the total is worked out by the bot, not left for the page to add up');
+    assert.deepEqual(over.won, txWon(over.dice), 'and so is which doors it paid');
+
+    for (const id of ['u1', 'u2']) {
+      const owed = txBoardWorth(bets[id], over.dice);
+      assert.equal(app.mine(id).gold, purse[id] + owed, `${id}'s purse`);
+    }
+
+    // And it comes round again on its own.
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'betting', 'the next window');
+    assert.equal(app.mine('u1').me.staked, 0);
+    assert.ok(app.mine('u1').bettingEndsAt, 'with a clock on it');
+  }, { c1: ['u1'], c2: ['u2'] });
+});
+
+test('bão pays the storm and takes everything else, all the way to the purse', async () => {
+  // Cái luật duy nhất của trò này mà người ta quên đúng một lần, kiểm ở chỗ nó thật sự tính
+  // tiền: không phải trong một hàm thuần mà trong cái ví, sau khi đã đi qua bot và quay lại.
+  //
+  // Xúc xắc thì không đặt hàng được, nên đây là ván nào cũng kiểm — đặt cả năm cửa, và số tiền
+  // dịch chuyển phải đúng bằng cái luật nói, dù ván ấy có là bão hay không.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+
+    app.does('u1', { taixiu: true });
+    await app.until(() => (app.mine('u1') ?? {}).kind === 'taixiu', 'the table');
+
+    const all = { tai: 1000, xiu: 1000, chan: 1000, le: 1000, bao: 1000 };
+    let storms = 0;
+
+    for (let round = 0; round < 6; round++) {
+      await app.until(() => (app.mine('u1') ?? {}).phase === 'betting', 'a window to bet in');
+      const purse = app.mine('u1').gold;
+
+      app.does('u1', { bets: { ...all }, at: ++clocks.u1 });
+      await app.until(() => app.mine('u1').me.staked === 5000, 'all five doors');
+
+      await app.until(() => (app.mine('u1') ?? {}).phase === 'paid', 'the throw');
+      const over = app.mine('u1');
+      const moved = app.mine('u1').gold - purse;
+
+      if (over.bao) {
+        storms++;
+        assert.deepEqual(over.won, ['bao'], `${over.dice} was a bão and paid something else`);
+        // Bão trả 30, bốn cửa kia mất 1.000 mỗi cửa.
+        assert.equal(moved, 1000 * TX_PAYS.bao - 4000, `bão ${over.dice}`);
+      } else {
+        // Một câu nói lớn nhỏ và một câu nói chẵn lẻ trên cùng một cái tổng: bao giờ cũng đúng
+        // hai cửa ăn và ba cửa thua.
+        assert.equal(over.won.length, 2, `${over.dice} paid ${over.won}`);
+        assert.equal(moved, -1000, `${over.dice} (tổng ${over.total})`);
+      }
+      assert.equal(moved, txBoardWorth(all, over.dice), 'the purse and the rule disagree');
+    }
+    // Không đòi phải ra bão trong sáu ván — một trên ba mươi sáu thì đó là may rủi, và một cái
+    // test đỏ ngẫu nhiên còn tệ hơn không có test.
+    if (storms) console.log(`  (bão ra ${storms} lần trong sáu ván)`);
+  });
+});
+
+test('a tài xỉu board cannot be staked on a bầu cua door, or the other way round', async () => {
+  // Cả hai cái bát nhận cùng một lệnh `bets`, và cả hai đều nhận nó từ một trang ai cũng sửa
+  // được. Cửa của bàn nào chỉ là cửa của bàn ấy: một bàn tài xỉu nhận được `cua` là một bàn đang
+  // tin vào một trang không phải trang con bot này gửi đi.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    const purse = app.mine('u1').gold;
+
+    app.does('u1', { taixiu: true });
+    await app.until(() => (app.mine('u1') ?? {}).kind === 'taixiu', 'the table');
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'betting', 'a window to bet in');
+
+    const nonsense = [
+      { cua: 1000 },                         // a door from the other bowl
+      { bau: 1000, tai: 1000 },              // one real door and one from next door
+      { tai: -5000 },                        // a stake that pays you to place it
+      { bao: 1e12 },                         // more than anybody has
+      { tai: 'nhiều' },
+      { taixiu: 1000 },                      // the name of the game is not a door
+    ];
+    for (const bad of nonsense) app.does('u1', { bets: bad, at: ++clocks.u1 });
+
+    await nap(300);
+    assert.equal(app.mine('u1').me.staked, 0,
+      `one of ${JSON.stringify(nonsense)} got onto the board`);
+
+    // And the same in reverse: a bầu cua bowl does not take tài.
+    app.does('u1', { leave: true });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'choosing', 'back at the lobby');
+    app.does('u1', { baucua: 'solo' });
+    await app.until(() => (app.mine('u1') ?? {}).kind === 'baucua', 'a bowl of their own');
+    app.does('u1', { bets: { tai: 1000 }, at: ++clocks.u1 });
+    await nap(200);
+    assert.equal(app.mine('u1').me.staked, 0, 'a bầu cua bowl took a tài xỉu door');
+    assert.equal(app.mine('u1').gold, purse, 'and nothing moved anywhere');
+  });
+});
+
+test('the tài xỉu bát cannot be hurried along by whoever is standing at it', async () => {
+  // Không có nút xóc, và không ai được xóc. Cái bàn này là của cả thế giới và chạy theo đồng hồ
+  // của nó: một cái nút giục nó đi là một người quyết thay cho tất cả những người còn lại.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+
+    app.does('u1', { taixiu: true });
+    await app.until(() => (app.mine('u1') ?? {}).kind === 'taixiu', 'the table');
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'betting', 'a window to bet in');
+    app.does('u1', { bets: { tai: 1000 }, at: ++clocks.u1 });
+    await app.until(() => app.mine('u1').me.staked === 1000, 'a chip down');
+
+    // The button a bầu cua bowl of your own has. Here it is nothing at all.
+    app.does('u1', { roll: true });
+    await nap(200);
+    assert.equal(app.mine('u1').phase, 'betting', 'somebody threw the world table');
+    assert.equal(app.mine('u1').dice, null);
+  });
+});
+
+test('money left on the tài xỉu board is still money on the board', async () => {
+  // Same as the bầu cua bowl and for the same reason: the last person can walk out with chips
+  // down, and a stake that is never settled is a stake taken.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    const purse = app.mine('u1').gold;
+
+    app.does('u1', { taixiu: true });
+    await app.until(() => (app.mine('u1') ?? {}).kind === 'taixiu', 'the table');
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'betting', 'a window to bet in');
+    app.does('u1', { bets: { bao: 1000 }, at: ++clocks.u1 });
+    await app.until(() => app.mine('u1').me.staked === 1000, 'a chip down');
+
+    app.does('u1', { leave: true });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'choosing', 'back at the lobby');
+
+    await app.until(() => app.mine('u1').gold !== purse, 'the throw to settle');
+    const moved = app.mine('u1').gold - purse;
+    assert.ok([-1000, 1000 * TX_PAYS.bao].includes(moved),
+      `settled for ${moved}, which is not what a thousand on bão is worth`);
   });
 });
 

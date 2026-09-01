@@ -12,6 +12,9 @@ import {
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, MIN_STAKE, MAX_STAKE, STAKES, BROKE, ADS_GOLD, asStake,
   FACES, FACE_NAMES, DICE, ROLL_MS, SHOW_MS, CHIPS, roll, faceWorth, boardWorth, staked, tally,
   chance, HISTORY,
+  TX_DOORS, TX_DOOR_NAMES, TX_PAYS, TX_SMALL, TX_BIG, TX_DICE, TX_HISTORY, TX_CHIPS,
+  TX_ROLL_MS, TX_SHOW_MS, TX_BETTING_MS,
+  txRoll, txTotal, isBao, txHits, txWon, doorWorth, txBoardWorth, txStaked, txOutcome,
   bombRank, isChop, worthOf, rotting, instantWin, INSTANT, PAIRS_WORTH, twoWorth,
   reckon, BLANCHE, decompose, playsAfter, unbeatable,
 } from './tienlenbot.mjs';
@@ -917,29 +920,41 @@ test('the board of past throws keeps thirty and forgets the rest', () => {
 });
 
 test('the run of throws is written down, not kept in the head', () => {
-  // The world bowl is permanent and a deploy is not. A soi cầu board that starts again empty
+  // A world bowl is permanent and a deploy is not. A soi cầu board that starts again empty
   // every time the bot restarts is a board reaching back less far than the person reading it,
   // which is worth nothing — so it goes on disk with the gold rather than in memory with the
   // tables. Pinned at three points, because it takes all three to work: read at start, seeded
   // into the bowl, written after a throw.
+  //
+  // **Two bowls, two boards.** Bầu cua's run of throws and tài xỉu's are different games at
+  // different lengths, and one poured into the other is a cầu drawn from somebody else's dice.
   const source = readFileSync(new URL('./tienlenbot.mjs', import.meta.url), 'utf8');
 
   assert.match(source, /kept\.cau = Array\.isArray\(kept\.cau\)/,
     'the ledger no longer reads a run of throws back');
-  assert.match(source, /history: scores\.cau/,
-    'the world bowl no longer starts from what was written down');
-  assert.match(source, /game\.world.*scores\.cau = game\.history.*saveScores\(\)/s,
+  assert.match(source, /kept\.cauTx = Array\.isArray\(kept\.cauTx\)/,
+    'and the tài xỉu one is not read back either');
+  assert.match(source, /worldBowl\(WORLD, 'baucua',[\s\S]{0,140}scores\.cau \?\? \[\]/,
+    'the bầu cua bowl no longer starts from what was written down');
+  assert.match(source, /worldBowl\(TX_WORLD, 'taixiu',[\s\S]{0,140}scores\.cauTx \?\? \[\]/,
+    'the tài xỉu bowl no longer starts from what was written down');
+  assert.match(source, /game\.world.*scores\[rules\.cau\] = game\.history.*saveScores\(\)/s,
     'a throw is no longer written down');
 
-  // And only the world one. A private bowl belongs to one person for as long as they have it
+  // And each bowl into its own row of the ledger, chosen by which bowl it is rather than by
+  // whichever name was nearest when the line was written.
+  assert.match(source, /baucua: \{[\s\S]*?cau: 'cau',/, "the bầu cua bowl lost its own board");
+  assert.match(source, /taixiu: \{[\s\S]*?cau: 'cauTx',/, 'the tài xỉu bowl lost its own board');
+
+  // And only a world one. A private bowl belongs to one person for as long as they have it
   // open; writing its throws into the shared board would put one person's afternoon into
   // everybody else's history.
-  const at = source.indexOf('scores.cau = game.history');
+  const at = source.indexOf('scores[rules.cau] = game.history');
   assert.ok(source.lastIndexOf('game.world', at) > at - 60,
     'the run of throws is written for bowls that are not the world one');
 });
 
-test('a watcher has no `me`, and the page never reads through it on a bầu cua push', () => {
+test('a watcher has no `me`, and the page never reads through it on a bowl push', () => {
   // The one crash that got out. Somebody watching the world bowl gets `me: null`, and the
   // shared push has no `me` at all — reading `next.me.theirs` threw, and a throw inside onState
   // stops the render, so the table froze on the round before with the last round's stakes still
@@ -958,8 +973,10 @@ test('a watcher has no `me`, and the page never reads through it on a bầu cua 
       + `...${before.slice(-60)}next.me.`);
   }
 
-  // The bầu cua half of onState, where a watcher actually turns up.
-  const from = widget.indexOf("if (next.kind === 'baucua') {\n    const mine = next.me;");
+  // The dice half of onState, where a watcher actually turns up. One block for both bowls now,
+  // which means one place to get this wrong rather than two — and the same block is what tài xỉu
+  // walks through, so the check covers a screen it was never written for.
+  const from = widget.indexOf("if (diceGame(next)) {\n    const mine = next.me;");
   assert.ok(from !== -1, 'the board-handover block moved');
   const block = widget.slice(from, widget.indexOf('\n  } else if (stack.length', from));
   for (const match of block.matchAll(/\bmine\./g)) {
@@ -967,6 +984,376 @@ test('a watcher has no `me`, and the page never reads through it on a bầu cua 
     assert.ok(/mine &&\s*$/.test(before),
       `read through mine with nothing checking it: ...${before}mine.`);
   }
+});
+
+// ---- tài xỉu ---------------------------------------------------------------------------------
+//
+// Cùng ba con xúc xắc của bầu cua và không cùng một luật nào cả. Ở kia mỗi con đứng riêng; ở đây
+// ba con chỉ có nghĩa lúc cộng lại, nên mọi thứ dưới đây là số học trên cái tổng ấy — và cái duy
+// nhất phải giữ cho đúng là **bão chặn cả bốn cửa kia**, vì đó là chỗ nhà cái sống.
+
+/// Every throw there is, all two hundred and sixteen of them. Exhaustive rather than sampled:
+/// the numbers below are the numbers, not measurements of them.
+const everyThrow = () => {
+  const all = [];
+  for (let a = 1; a <= 6; a++) {
+    for (let b = 1; b <= 6; b++) {
+      for (let c = 1; c <= 6; c++) all.push([a, b, c]);
+    }
+  }
+  return all;
+};
+
+test('three dice, one to six, and a total that is the whole game', () => {
+  assert.equal(TX_DICE, 3);
+  assert.deepEqual(TX_DOORS, ['xiu', 'tai', 'chan', 'le', 'bao']);
+  assert.ok(TX_DOORS.every((door) => TX_DOOR_NAMES[door]));
+  assert.ok(TX_DOORS.every((door) => TX_PAYS[door] >= 1));
+
+  for (let i = 0; i < 500; i++) {
+    const dice = txRoll();
+    assert.equal(dice.length, TX_DICE);
+    assert.ok(dice.every((one) => Number.isInteger(one) && one >= 1 && one <= 6));
+    assert.equal(txTotal(dice), dice[0] + dice[1] + dice[2]);
+  }
+});
+
+test('tài is eleven to seventeen, xỉu is four to ten, and bão takes both', () => {
+  // Cái luật ai chơi cũng biết, và cái luật ai cũng quên đúng một lần: tổng rơi vào khoảng của
+  // mình mà ba con giống nhau thì vẫn thua.
+  assert.deepEqual(TX_SMALL, [4, 10]);
+  assert.deepEqual(TX_BIG, [11, 17]);
+
+  assert.ok(txHits('tai', [6, 4, 1]), '11 là tài');
+  assert.ok(txHits('tai', [6, 6, 5]), '17 là tài');
+  assert.ok(txHits('xiu', [1, 1, 2]), '4 là xỉu');
+  assert.ok(txHits('xiu', [4, 3, 3]), '10 là xỉu');
+  assert.ok(!txHits('tai', [4, 3, 3]), '10 không phải tài');
+  assert.ok(!txHits('xiu', [6, 4, 1]), '11 không phải xỉu');
+
+  // Bão. Sáu cách ra, và cả sáu đều chặn.
+  for (let pips = 1; pips <= 6; pips++) {
+    const dice = [pips, pips, pips];
+    assert.ok(isBao(dice), `${pips}-${pips}-${pips} phải là bão`);
+    assert.deepEqual(txWon(dice), ['bao'],
+      `bão ${pips} vẫn trả tiền cho một cửa khác — tổng là ${txTotal(dice)}`);
+    for (const door of ['tai', 'xiu', 'chan', 'le']) {
+      assert.ok(!txHits(door, dice), `bão ${pips} vẫn ăn cửa ${door}`);
+    }
+  }
+
+  // 3-3-3 là 9, nằm gọn trong khoảng xỉu, và vẫn thua. 4-4-4 là 12, nằm gọn trong khoảng tài,
+  // và vẫn thua. Đó là hai ván duy nhất trong tất cả khiến người ta phải hỏi lại luật.
+  assert.equal(txTotal([3, 3, 3]), 9);
+  assert.ok(!txHits('xiu', [3, 3, 3]));
+  assert.equal(txTotal([4, 4, 4]), 12);
+  assert.ok(!txHits('tai', [4, 4, 4]));
+
+  // Và vì thế hai khoảng viết là 4–10 với 11–17: tổng 3 và tổng 18 chỉ có đúng một cách ra.
+  assert.equal(TX_SMALL[0], 4, 'tổng 3 chỉ ra được bằng 1-1-1');
+  assert.equal(TX_BIG[1], 17, 'tổng 18 chỉ ra được bằng 6-6-6');
+});
+
+test('chẵn lẻ đọc trên cùng cái tổng ấy, và cũng thua bão', () => {
+  assert.ok(txHits('chan', [1, 2, 3]), '6 là chẵn');
+  assert.ok(txHits('le', [1, 2, 4]), '7 là lẻ');
+  assert.ok(!txHits('chan', [1, 2, 4]));
+  assert.ok(!txHits('le', [1, 2, 3]));
+
+  // Không ván nào vừa chẵn vừa lẻ, và không ván nào không chẵn cũng không lẻ — trừ bão.
+  for (const dice of everyThrow()) {
+    const both = txHits('chan', dice) && txHits('le', dice);
+    const neither = !txHits('chan', dice) && !txHits('le', dice);
+    assert.ok(!both, `${dice} vừa chẵn vừa lẻ`);
+    assert.equal(neither, isBao(dice), `${dice} không thuộc bên nào mà cũng không phải bão`);
+  }
+});
+
+test('mỗi ván ăn đúng hai cửa, hoặc một cửa bão', () => {
+  // Một câu nói lớn nhỏ và một câu nói chẵn lẻ, cùng một cái tổng — nên ván thường bao giờ cũng
+  // trả đúng hai cửa. Bão thì trả đúng một. Cái này là hình dạng của cả cái chiếu: đặt cả năm cửa
+  // thì bao giờ cũng thắng hai và thua ba.
+  for (const dice of everyThrow()) {
+    const won = txWon(dice);
+    if (isBao(dice)) {
+      assert.deepEqual(won, ['bao'], `${dice}`);
+    } else {
+      assert.equal(won.length, 2, `${dice} trả ${won.length} cửa: ${won}`);
+      assert.ok(won.includes('tai') || won.includes('xiu'), `${dice} không có bên nào`);
+      assert.ok(won.includes('chan') || won.includes('le'), `${dice} không chẵn không lẻ`);
+    }
+  }
+});
+
+test('một cửa trúng thì về bằng đúng cái nó hứa, trượt thì mất phần đặt', () => {
+  assert.equal(doorWorth(1000, 'tai', [6, 4, 1]), 1000);
+  assert.equal(doorWorth(1000, 'tai', [1, 1, 2]), -1000);
+  assert.equal(doorWorth(1000, 'xiu', [1, 1, 2]), 1000);
+  assert.equal(doorWorth(1000, 'bao', [5, 5, 5]), 30_000);
+  assert.equal(doorWorth(1000, 'bao', [5, 5, 4]), -1000);
+  assert.equal(doorWorth(1000, 'tai', [5, 5, 5]), -1000, 'bão thì cửa tài mất tiền');
+  assert.equal(doorWorth(0, 'tai', [6, 4, 1]), 0, 'không đặt thì không ăn');
+  assert.equal(doorWorth(1000, 'rong', [6, 4, 1]), 0, 'cửa không có thì không phải là cửa');
+});
+
+test('cả bàn cược tính một lượt, và không bao giờ mất nhiều hơn đã đặt', () => {
+  assert.equal(txStaked({ tai: 1000, chan: 2000 }), 3000);
+  assert.equal(txStaked({}), 0);
+  assert.equal(txStaked(null), 0);
+  assert.equal(txBoardWorth({}, [1, 2, 3]), 0);
+  assert.equal(txBoardWorth(null, [1, 2, 3]), 0);
+
+  // Đặt tài và chẵn cùng lúc, ra 12 thì ăn cả hai; ra 11 thì ăn tài thua chẵn.
+  assert.equal(txBoardWorth({ tai: 1000, chan: 1000 }, [6, 5, 1]), 2000);
+  assert.equal(txBoardWorth({ tai: 1000, chan: 1000 }, [6, 4, 1]), 0);
+  assert.equal(txBoardWorth({ tai: 1000, xiu: 1000 }, [5, 5, 5]), -2000, 'bão ăn cả hai bên');
+
+  const bets = { tai: 1000, xiu: 500, chan: 2000, le: 700, bao: 300 };
+  const on = txStaked(bets);
+  for (const dice of everyThrow()) {
+    const worth = txBoardWorth(bets, dice);
+    assert.ok(worth >= -on, `${dice} mất nhiều hơn số đã đặt`);
+    assert.ok(worth <= on * TX_PAYS.bao, `${dice} trả nhiều hơn cửa cao nhất`);
+  }
+});
+
+test('nhà cái ăn 1/36 ở bốn cửa đều tiền, và 30/216 ở bão', () => {
+  // Tính chính xác trên đủ 216 ván chứ không phải đo. 2,78% là con số cổ điển của sic bo và là
+  // toàn bộ lý do bão tồn tại: bỏ bão đi thì tài xỉu là một đồng xu công bằng, và một đồng xu
+  // công bằng thì cái sòng không nuôi nổi số vàng phát mỗi ngày.
+  const edge = (door) => {
+    let total = 0;
+    for (const dice of everyThrow()) total += doorWorth(216, door, dice);
+    return -total / (216 * 216);
+  };
+
+  for (const door of ['tai', 'xiu', 'chan', 'le']) {
+    assert.equal(edge(door), 1 / 36, `cửa ${door} không ăn đúng 1/36`);
+  }
+  assert.equal(edge('bao'), 30 / 216, 'cửa bão');
+
+  // Và nó nhẹ hơn bầu cua, đúng như thực tế: 2,78% với 7,87%. Hai trò đứng cạnh nhau trên một
+  // cái menu và tiêu cùng một ví, nên chênh lệch ấy là một thứ có thật về hai trò chứ không phải
+  // một con số ai đó gõ vào.
+  assert.ok(edge('tai') < 17 / 216, 'tài xỉu phải nhẹ tay hơn bầu cua');
+});
+
+test('the tài xỉu dice do not come out of Math.random either', () => {
+  const real = Math.random;
+  Math.random = () => 0;
+  try {
+    const thrown = new Set();
+    for (let i = 0; i < 200; i++) thrown.add(txRoll().join(''));
+    assert.ok(thrown.size > 20,
+      `${thrown.size} different throws out of 200 — the dice are following Math.random`);
+  } finally {
+    Math.random = real;
+  }
+});
+
+test('and they cannot see the money either, because there is no way in', () => {
+  // The same guarantee as `roll`, held down the same way: a function that takes nothing cannot
+  // be told who is at the table, what is on the board, or how much of it. The easy way to make
+  // a house cheat is to add a parameter here and nobody notice.
+  assert.equal(txRoll.length, 0, 'txRoll() grew an argument');
+
+  const source = readFileSync(new URL('./rules/taixiu.mjs', import.meta.url), 'utf8');
+  const from = source.indexOf('export function txRoll()');
+  assert.ok(from !== -1, 'the throw moved');
+  const body = source.slice(from, source.indexOf('\n}', from) + 2);
+  assert.ok(!/bets|placed|staked|game|seat|gold|door/.test(body),
+    `the throw mentions something it has no business knowing:\n${body}`);
+});
+
+test('every pip comes up as often as every other', () => {
+  const N = 40_000;
+  const seen = [0, 0, 0, 0, 0, 0, 0];
+  for (let i = 0; i < N; i++) for (const pips of txRoll()) seen[pips]++;
+
+  for (let pips = 1; pips <= 6; pips++) {
+    const pct = (seen[pips] / (N * TX_DICE)) * 100;
+    assert.ok(Math.abs(pct - 100 / 6) < 0.5, `${pips} came up ${pct.toFixed(3)}% of the time`);
+  }
+});
+
+test('the throw reads out the same way the table says it', () => {
+  const plain = txOutcome([6, 4, 1]);
+  assert.equal(plain.total, 11);
+  assert.equal(plain.bao, false);
+  assert.equal(plain.side, 'tai');
+  assert.equal(plain.parity, 'le');
+  assert.deepEqual(plain.won, ['tai', 'le']);
+
+  const storm = txOutcome([2, 2, 2]);
+  assert.equal(storm.total, 6);
+  assert.equal(storm.bao, true);
+  assert.equal(storm.side, null, 'bão không thuộc bên nào');
+  assert.equal(storm.parity, null);
+  assert.deepEqual(storm.won, ['bao']);
+
+  // Và cái nó đọc ra đúng bằng cái các hàm rời rạc nói, trên đủ 216 ván.
+  for (const dice of everyThrow()) {
+    const read = txOutcome(dice);
+    assert.deepEqual(read.won, txWon(dice));
+    assert.equal(read.total, txTotal(dice));
+    assert.equal(read.bao, isBao(dice));
+  }
+});
+
+test('cầu tài xỉu dài hơn cầu bầu cua, vì nó là một con đường', () => {
+  // Ba mươi sáu ván. Bảng bầu cua đọc theo cột — một cột là một ván — nên ba mươi là đủ rộng màn
+  // hình. Bảng tài xỉu đọc theo **mạch**, và một mạch chỉ đọc được khi có đủ mạch phía sau nó.
+  assert.equal(TX_HISTORY, 36);
+  assert.ok(TX_HISTORY >= HISTORY);
+
+  let history = [];
+  for (let i = 0; i < 100; i++) {
+    const dice = txRoll();
+    history = [dice, ...history].slice(0, TX_HISTORY);
+    assert.ok(history.length <= TX_HISTORY);
+    assert.deepEqual(history[0], dice, 'newest first');
+  }
+  assert.equal(history.length, TX_HISTORY);
+});
+
+test('cái sòng chạy theo nhịp người xem chịu được', () => {
+  assert.deepEqual(TX_CHIPS, CHIPS, 'hai cái bát tiêu chung một ví thì chung một thang chip');
+  assert.ok(TX_ROLL_MS >= 1000, 'xóc phải ra xóc, không phải một con số hiện lên');
+  // Nặn tài xỉu là hai chặng — mở nắp bát, rồi lật ba con — nên nó cần nhiều chỗ hơn cái đĩa bầu
+  // cua, vốn chỉ có một chặng. Ngắn hơn thì cái nắp tự mở giữa lúc người ta đang kéo.
+  assert.ok(TX_SHOW_MS > SHOW_MS, 'nặn hai chặng cần nhiều thời gian hơn nặn một chặng');
+  assert.ok(TX_SHOW_MS > TX_ROLL_MS);
+  assert.ok(TX_BETTING_MS >= 15_000, 'cửa đặt phải đủ rộng để đặt nhiều cửa');
+});
+
+test('the page never decides which bowl it is at by naming one of them', () => {
+  // Cái lỗi này đã ra tới tay người chơi, và nó im lặng theo đúng kiểu tệ nhất.
+  //
+  // Khối bàn giao bàn cược trong `onState` hỏi "vẫn là cái bàn lúc nãy chứ?", và nó hỏi bằng
+  // `state.kind === 'baucua'`. Ở bàn tài xỉu thì câu ấy **luôn** sai, nên `turned` luôn đúng, nên
+  // **mọi** push trong lúc đang đặt đều xoá sạch chip trên trang. Bot vẫn giữ đủ — nó được báo cả
+  // bàn cược — nên nhìn ra là "bấm đặt cái là mất, mà backend vẫn ghi nhận": đúng một nửa, và là
+  // nửa khó tìm hơn.
+  //
+  // Luật rút ra và ghim ở đây: trong khối ấy, "trò xúc xắc" phải hỏi qua `diceGame`, không được
+  // gọi tên một trò. Chỗ nào thật sự cần phân biệt hai trò thì phân biệt ở chỗ khác.
+  const widget = readFileSync(new URL('./widget/tienlen.js', import.meta.url), 'utf8');
+
+  const from = widget.indexOf("if (diceGame(next)) {\n    const mine = next.me;");
+  assert.ok(from !== -1, 'the board-handover block moved');
+  const block = widget.slice(from, widget.indexOf('\n  } else if (stack.length', from));
+
+  for (const named of ["'baucua'", "'taixiu'"]) {
+    // Trong lời bình thì được — chỗ ấy đang kể lại chính cái lỗi này.
+    const code = block.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+    assert.ok(!code.includes(named),
+      `khối bàn giao bàn cược gọi thẳng tên ${named}; phải hỏi qua diceGame()`);
+  }
+
+  // Và cái bàn cược của bot được lấy làm chỗ bắt đầu mỗi lần đổi bàn hay sang ván — kể cả lúc cửa
+  // đặt đang mở. Trước đây chỗ này chỉ lấy khi ván đã đóng, nên ai quay lại giữa cửa đặt thì
+  // không thấy tiền mình đã bỏ xuống và tưởng là mất.
+  assert.match(block, /if \(turned\) \{[\s\S]{0,400}?stack = Object\.entries\(\(mine && mine\.theirs\)/,
+    'the page no longer starts from the board the bot is holding');
+});
+
+test('bàn cược của trang chỉ sống trong đúng cái ván nó được vẽ ra', () => {
+  // Ván xóc xong, cửa đặt ván sau mở ra — mà mặt chiếu vẫn còn nguyên chip của ván trước.
+  //
+  // Không chỉ vẽ sai. `myBets()` đọc từ chính cái chồng chip ấy, nên chạm thêm **một** cái là
+  // trang gửi đi nguyên bàn cược cũ kèm cú chạm mới, và bot đặt lại nó bằng tiền thật. Một lỗi
+  // vẽ biến thành một lỗi tiền vì hai bên cùng đọc một biến.
+  //
+  // Cửa đặt ván sau cũng là `phase === 'betting'` ở cùng một bàn, nên câu hỏi "vẫn cái bàn ấy
+  // chứ" là chưa đủ: phải là "vẫn cái bàn ấy **và cái ván ấy** chứ".
+  const widget = readFileSync(new URL('./widget/tienlen.js', import.meta.url), 'utf8');
+
+  const from = widget.indexOf("if (diceGame(next)) {\n    const mine = next.me;");
+  assert.ok(from !== -1, 'the board-handover block moved');
+  const block = widget.slice(from, widget.indexOf('\n  } else if (stack.length', from));
+
+  assert.match(block, /const turned = next\.phase !== 'betting'\s*\n\s*\|\| !\(state && diceGame\(state\)\s*\n?\s*&& state\.gameId === next\.gameId\s*\n?\s*&& state\.round === next\.round\)/,
+    'câu hỏi "vẫn cái bàn ấy chứ" không còn hỏi tới số ván');
+
+  // Và cái `me` mang sang từ push chung cũng phải bỏ bàn cược lại khi sang ván mới. Bot đẩy hai
+  // lần một nước — một chung không kèm `me`, một riêng có — nên nếu chỗ mang sang bê nguyên bàn
+  // cược cũ thì nó sống lại đúng ở khe giữa hai cái đẩy ấy.
+  assert.match(widget,
+    /next\.me = diceGame\(next\) && state\.round !== next\.round\s*\n\s*\? \{ \.\.\.state\.me, bets: \{\}, staked: 0, theirs: \{\} \}/,
+    'cái ghế mang sang ván mới vẫn mang theo cả bàn cược cũ');
+});
+
+test('xóc xong là ba con nằm yên, và cái bát là thứ duy nhất giấu chúng', () => {
+  // Hai bản trước đều sai ở đúng một chỗ, và sai nặng dần.
+  //
+  // Bản đầu úp lên mỗi con một cái nắp con có chữ `?`: kéo cái bát ra để gặp ba cái nắp nữa, tức
+  // là mở một thứ để lộ ra ba thứ phải mở. Bản sau bỏ nắp đi nhưng cho con chưa lật **quay
+  // tiếp** — mà mở bát ra thì xúc xắc đã nằm rồi, không có cách nào nó còn quay, nên nó đọc ra
+  // là cái bàn bị treo. Cả hai lần đều do người chơi tìm ra, và cả hai lần câu hỏi đều là "cái
+  // này để làm gì".
+  //
+  // Luật ghim ở đây: **ba con chỉ quay trong lúc còn lắc**, và thứ duy nhất giấu chúng là cái
+  // bát nằm đè lên.
+  const widget = readFileSync(new URL('./widget/taixiu.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('./widget/style.css', import.meta.url), 'utf8');
+
+  assert.ok(!widget.includes('tx-lid'), 'ba con lại có nắp riêng');
+  assert.ok(!css.includes('.tx-lid'), 'cái nắp con vẫn còn kiểu dáng trong stylesheet');
+  assert.ok(!css.includes('tx-lifted'), 'và cả hiệu ứng bay của nó');
+
+  // Hiệu ứng quay chỉ được gắn khi đang lắc. Đọc thẳng dòng dựng con xúc xắc ra mà xét.
+  const made = /const die = pipDie\(pips, ([^)]*)\);/.exec(widget);
+  assert.ok(made, 'chỗ dựng con xúc xắc đã dời đi');
+  assert.equal(made[1].trim(), "rolling ? 'tumbling' : ''",
+    `con xúc xắc được gắn hiệu ứng theo "${made[1].trim()}" — chỉ được quay lúc còn lắc`);
+
+  // Và cái đồng hồ nhảy chấm cũng thế: chỉ chạy khi có con đang lắc.
+  assert.match(widget, /if \(rolling\) spun\.push\(die\);/, 'danh sách con đang quay đã đổi cách lập');
+  assert.match(widget, /if \(!spun\.length\) return;\s*\n[\s\S]{0,220}?txTumbling = setInterval/,
+    'đồng hồ nhảy chấm không còn được canh theo danh sách ấy');
+
+  // Không còn cái đồng hồ nào bắt người ta đợi để xem kết quả.
+  for (const gone of ['txSchedule', 'txTurn', 'TX_TURN_MS', 'TX_LAST_MS']) {
+    assert.ok(!widget.includes(gone), `${gone} vẫn còn — lại có cái gì đó bắt đợi từng con`);
+  }
+
+  // Đúng một cái nắp trong cả ván, và nó là cái bát. Kéo tới đâu ba con ló ra tới đó.
+  assert.equal((widget.match(/dragOff\(/g) ?? []).length, 1,
+    'có nhiều hơn một cái nắp phải mở trong một ván tài xỉu');
+  assert.match(widget, /dragOff\(bat, \$\('tx-dice'\), [\s\S]*?, BAT_MS, txPeek\)/,
+    'cái bát không còn để lộ dần ba con trong lúc kéo');
+
+  // Cái bát tự đi phải **đủ chậm để với tay tới**, và vẫn phải kịp trong khoảng bot giữ kết quả
+  // trên màn hình. Bản đầu để 1,8 giây: mắt còn đang ở mặt chiếu xem cửa nào của mình, ngẩng lên
+  // thì cái bát đã đi rồi — và một cái nặn tự mở trước khi người ta kịp chạm thì không phải một
+  // cái nặn, nó là một hiệu ứng.
+  const bat = Number(/const BAT_MS = ([\d_]+)/.exec(widget)[1].replace(/_/g, ''));
+  const land = Number(/const TX_LAND_MS = ([\d_]+)/.exec(widget)[1].replace(/_/g, ''));
+  assert.ok(bat >= 2_500, `cái bát tự đi sau ${bat}ms — chưa kịp với tay`);
+  assert.ok(bat + land * 3 < TX_SHOW_MS,
+    `nặn hết ${bat + land * 3}ms mà bot chỉ giữ kết quả ${TX_SHOW_MS}ms`);
+});
+
+test('không hai lần xóc nào mang cùng một tên', () => {
+  // Cái lỗi này ra tới tay người chơi và nó nói dối rất khéo: nặn được đúng **một ván**, ván sau
+  // là hết nặn, ở cả hai cái bát.
+  //
+  // Cái bát được dựng ra mà không có số ván, nên suốt cửa đặt đầu tiên nó gửi `round ?? 1` — tức
+  // là 1. Rồi `openBets` đếm `0 + 1` và gửi 1 lần nữa cho ván thứ hai. Hai lần xóc liền nhau mang
+  // cùng một tên, mà cái trang thì nhớ "ván 1 tôi mở đĩa rồi" — nên ván thứ hai **không được úp
+  // đĩa lên**. Không có gì báo lỗi; nó chỉ đơn giản là thôi nặn.
+  const source = readFileSync(new URL('./tienlenbot.mjs', import.meta.url), 'utf8');
+
+  // Đếm từ một, ở cả chỗ dựng bàn riêng lẫn chỗ dựng bát thế giới.
+  assert.equal((source.match(/^      round: 1,$/gm) ?? []).length, 2,
+    'một trong hai chỗ dựng bàn không còn đặt sẵn số ván');
+  assert.match(source, /game\.round = \(game\.round \?\? 0\) \+ 1;/, 'chỗ đếm ván đã dời đi');
+
+  // Và chạy thử đúng cái vòng ấy: bốn ván liền nhau phải là bốn cái tên khác nhau.
+  let round = 1;
+  const names = [];
+  for (let i = 0; i < 4; i++) { names.push(round ?? 1); round = (round ?? 0) + 1; }
+  assert.equal(new Set(names).size, 4, `bốn ván liền nhau gọi tên nhau là ${names.join(' ')}`);
 });
 
 // ---- thang chặt, đủ bảy bậc ------------------------------------------------------------------

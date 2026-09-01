@@ -20,6 +20,20 @@ const here = dirname(fileURLToPath(import.meta.url));
 const widget = join(here, '..', 'bots', 'tienlenbot', 'widget');
 const PORT = Number(process.argv[2] ?? 8787);
 
+/**
+ * Sổ vàng, ở một chỗ cái máy này ghi được.
+ *
+ * Mặc định của bot là `/app/data/scores.json` — đường dẫn **bên trong container** cái unit file
+ * chạy. Trên máy người viết thì `/app` không tạo được, nên mọi lần ghi đều hỏng và cả cuốn sổ
+ * sống trong RAM: mỗi lần khởi động lại là mất sạch vàng, mất cả hai bảng cầu. Nhìn ra thì nó
+ * không giống một cái lỗi — nó giống "sao vào sòng mà không thấy ván trước", và người ta đi tìm
+ * ở chỗ vẽ.
+ *
+ * Đặt trước khi `import` con bot, và phải là trước: `SCORES` là một `const` ở thân module, đọc
+ * `process.env` đúng một lần lúc nạp file.
+ */
+process.env.TIENLEN_SCORES ??= join(here, '..', 'data', 'play-scores.json');
+
 const { run } = await import(join(here, '..', 'bots', 'tienlenbot', 'tienlenbot.mjs'));
 
 // ---- the stand-in ---------------------------------------------------------------------------
@@ -222,8 +236,9 @@ const HOME = `<!doctype html><meta charset="utf-8">
   .bar .dot { width:16px; height:16px; border-radius:50%; background:#e9c46a; }
   .bar .x { margin-left:auto; opacity:.5; }
   /* The height the widget asks for with z.setSize. The real frame clamps that to something
-     that always leaves its own title bar showing; here it is just the number. */
-  iframe { display:block; width:390px; height:540px; border:0; }
+     that always leaves its own title bar showing; here it is just the number — so it has to be
+     kept the same number, or this stand-in is showing a frame no phone would give. */
+  iframe { display:block; width:390px; height:570px; border:0; }
   aside { max-width:280px; color:#7f9a8c; font-size:12px; }
   code { color:#e9c46a; }
 </style>
@@ -333,5 +348,6 @@ const web = createServer(async (request, reply) => {
 });
 
 web.listen(PORT, () => {
-  console.log(`\n  tienlenbot, playable: http://localhost:${PORT}\n`);
+  console.log(`\n  tienlenbot, playable: http://localhost:${PORT}`);
+  console.log(`  sổ vàng và cầu: ${process.env.TIENLEN_SCORES}\n`);
 });

@@ -20,6 +20,14 @@
   --black: #23302a;
   --danger: #e2807a;
 
+  /* Tài xỉu. Đỏ là tài, xanh là xỉu — thứ tự màu ấy có ở mọi cái bảng cầu, và một cái sòng đảo
+     nó lại là một cái sòng người ta đọc ngược đúng một lần rồi thôi vào. Bão lấy màu vàng của
+     nhà, vì bão không thuộc bên nào: nó ăn cả hai. */
+  --tai: #e2574c;
+  --xiu: #4e9fd0;
+  --tai-soft: #ff8d84;
+  --xiu-soft: #8fcdf0;
+
   --card-w: 44px;
   --card-h: 62px;
 }
@@ -1109,7 +1117,7 @@ body {
    where anybody is standing. */
 #bowl {
   flex: 1;
-  min-height: 96px;
+  min-height: 168px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1136,7 +1144,28 @@ body {
 
 #bowl.shaking { animation: shaking 0.26s ease-in-out infinite; }
 
-#dice { display: flex; gap: 9px; }
+/* Ba con xếp tam giác: hai trên, một dưới, căn giữa.
+ *
+ * Không phải trang trí. Cái nắp là một **hình tròn**, mà hình tròn phủ một hàng ngang thì phải
+ * lớn bằng đường chéo của hàng ấy — tốn đúng cái chiều mà hình tròn không có. Xếp tam giác thì
+ * khối ba con là một hình vuông cạnh `2d + g`, và đường chéo hình vuông ngắn hơn nhiều: ở con
+ * 54px, hàng ngang cần đĩa 186, tam giác cần 164. Cùng một cái bát thì xúc xắc to hơn hẳn.
+ *
+ * Với lại ba con vừa đổ ra khỏi bát thì nằm túm lại, không nằm thành một hàng. */
+#dice,
+#tx-dice {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-items: center;
+  align-items: center;
+}
+
+/* Con thứ ba nằm dưới, vắt ngang cả hai cột — nên nó rơi đúng vào giữa khe của hai con trên. */
+#dice > :nth-child(3),
+#tx-dice > :nth-child(3) { grid-column: 1 / span 2; }
+
+#dice { gap: 9px; }
+#tx-dice { gap: 8px; }
 
 .die {
   width: 46px;
@@ -1188,7 +1217,8 @@ body {
 /* The face that came up, ringed on the die itself as well as on the board. */
 .die.hit { box-shadow: 0 0 0 2px var(--gold), 0 3px 9px rgba(0, 0, 0, 0.45); }
 
-#bowl-note {
+#bowl-note,
+#tx-note {
   font-size: 11.5px;
   font-weight: 650;
   color: var(--muted);
@@ -1197,7 +1227,8 @@ body {
   padding: 0 10px;
 }
 
-#bowl-note b { color: var(--gold); }
+#bowl-note b,
+#tx-note b { color: var(--gold); }
 
 /* Everybody at the table and what they have on, under the bowl. */
 .punters {
@@ -1224,8 +1255,10 @@ body {
 .punter.me { color: var(--ink); border-color: rgba(233, 196, 106, 0.4); }
 .punter.up { color: #7fe0a8; }
 .punter.down { color: var(--danger); }
-#bowl-note .clock { font-variant-numeric: tabular-nums; }
-#bowl-note .clock.low { color: var(--danger); }
+#bowl-note .clock,
+#tx-note .clock { font-variant-numeric: tabular-nums; }
+#bowl-note .clock.low,
+#tx-note .clock.low { color: var(--danger); }
 
 /* ---- the mat ------------------------------------------------------------------------------- */
 
@@ -1306,7 +1339,8 @@ body {
 
 /* ---- the chips ------------------------------------------------------------------------------ */
 
-#chips { flex: none; display: flex; gap: 6px; }
+#chips,
+#tx-chips { flex: none; display: flex; gap: 6px; }
 
 .chip-pick {
   flex: 1;
@@ -1336,49 +1370,85 @@ body {
  * faces lit on the mat, the line saying what was won. All of it waits. A plate that hid the dice
  * while the number above it had already changed would be a plate hiding nothing.
  */
-#plate {
+/* Một cái đĩa úp xuống, và một cái đĩa thì **tròn**.
+ *
+ * Bản đầu là hình chữ nhật phủ kín cả cái bát — đúng chức năng và sai hẳn về hình: cái người ta
+ * kéo ra ở bàn thật là một cái đĩa sứ, mà một hình chữ nhật bo góc thì không đọc ra là cái gì cả.
+ * Chú thích cũ ở ngay dưới đây đã viết "để nó đọc ra là một cái đĩa úp chứ không phải một hình
+ * chữ nhật có màu" và giải bằng một cái viền — cái viền không cứu được hình chữ nhật.
+ *
+ * Căn giữa bằng `inset: 0` cộng `margin: auto` chứ **không** bằng `transform`, vì `transform` là
+ * của cú kéo: `dragOff` ghi thẳng vào `style.transform` mỗi lần ngón tay nhích, nên một cái đĩa
+ * căn giữa bằng transform sẽ nhảy về góc trên bên trái ngay ở pixel đầu tiên.
+ *
+ * Kích thước cố định chứ không theo phần trăm, và phải **phủ hết ba con**: một hình tròn phủ được
+ * một hàng ngang rộng `w` cao `h` thì đường kính tối thiểu là `√(w² + h²)`. Ba con bầu cua rộng
+ * 156 cao 46 → 163; ba con tài xỉu rộng 182 cao 54 → 190. Cộng thêm chỗ thở. Đây là lý do cái
+ * khung xin cao thêm ba mươi pixel: hình tròn thì chiều cao đi theo chiều rộng. */
+#plate,
+#tx-bat {
   position: absolute;
   inset: 0;
+  margin: auto;
   display: grid;
   place-items: center;
-  border-radius: 18px;
+  border-radius: 50%;
   cursor: grab;
   touch-action: none;
+  /* Vệt sáng lệch lên trên bên trái, để nó phồng lên như một cái bát úp chứ không phẳng như một
+     cái đĩa giấy. */
   background:
-    radial-gradient(120% 100% at 50% 20%, #f3ece0 0%, #ddd2bd 55%, #b9ab90 100%);
-  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.65), 0 6px 18px rgba(0, 0, 0, 0.45);
+    radial-gradient(circle at 37% 28%,
+      #fdf9f0 0%, #f1e7d4 34%, #dccfb2 62%, #bdac8a 85%, #9c8b69 100%);
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -10px 20px rgba(90, 70, 40, 0.2),
+    0 10px 24px rgba(0, 0, 0, 0.5);
   transition: transform 0.14s ease-out;
 }
 
-#plate span {
-  font-size: 20px;
+/* Khung đầu. `fitLid` đo lại cho khớp đúng ba con xúc xắc ngay khi cái nắp được dựng — nhưng một
+   cái nắp mà lý do duy nhất nó có kích thước là một dòng JavaScript là một cái nắp có ngày mở ra
+   thành một chấm nhỏ. */
+#plate { width: 158px; height: 158px; }
+#tx-bat { width: 172px; height: 172px; }
+
+#plate span,
+#tx-bat span {
+  font-size: 19px;
   font-weight: 800;
-  letter-spacing: 6px;
-  text-indent: 6px;
-  color: rgba(70, 55, 30, 0.32);
+  letter-spacing: 7px;
+  text-indent: 7px;
+  color: rgba(70, 55, 30, 0.34);
 }
 
-/* A rim, so it reads as a dish upside down over a bowl rather than a coloured rectangle. */
-#plate::before {
+/* Hai vòng đồng tâm: cái ngoài là mép đĩa, cái trong là lòng. Hai cái mới ra một cái đĩa — một
+   cái thì vẫn chỉ là một hình tròn có viền. */
+#plate::before,
+#tx-bat::before {
   content: "";
   position: absolute;
-  inset: 9px;
-  border-radius: 12px;
-  border: 2px solid rgba(120, 100, 65, 0.22);
+  inset: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(120, 100, 65, 0.24);
+  box-shadow: inset 0 0 0 9px rgba(255, 255, 255, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.3);
 }
 
-#plate.held { cursor: grabbing; transition: none; }
+#plate.held,
+#tx-bat.held { cursor: grabbing; transition: none; }
 
 @keyframes lifted {
   to { transform: translate(78%, -32%) rotate(16deg); opacity: 0; }
 }
 
-#plate.off { animation: lifted 0.42s cubic-bezier(0.4, 0, 0.9, 0.4) forwards; pointer-events: none; }
+#plate.off,
+#tx-bat.off { animation: lifted 0.42s cubic-bezier(0.4, 0, 0.9, 0.4) forwards; pointer-events: none; }
 
 /* Slid off by hand. Carries on the way the finger was going rather than running the canned
    lift, which would start by crossing back over the dice it just uncovered. After .held, so it
    wins the transition back. */
-#plate.gone {
+#plate.gone,
+#tx-bat.gone {
   transition: transform 0.34s ease-out, opacity 0.34s ease-out;
   opacity: 0;
   pointer-events: none;
@@ -1386,7 +1456,8 @@ body {
 
 /* ---- soi cầu -------------------------------------------------------------------------------- */
 
-#bc-tabs {
+#bc-tabs,
+#tx-tabs {
   flex: none;
   display: flex;
   gap: 4px;
@@ -1396,7 +1467,8 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-#bc-tabs button {
+#bc-tabs button,
+#tx-tabs button {
   flex: 1;
   border: 0;
   background: none;
@@ -1409,7 +1481,8 @@ body {
   cursor: pointer;
 }
 
-#bc-tabs button.on {
+#bc-tabs button.on,
+#tx-tabs button.on {
   color: var(--rim);
   background: linear-gradient(180deg, var(--gold), var(--gold-deep));
 }
@@ -1762,12 +1835,16 @@ body {
 .squeeze.on { color: var(--gold); border-color: rgba(233, 196, 106, 0.34); }
 .squeeze input { accent-color: var(--gold); margin: 0; width: 11px; height: 11px; }
 
-/* Trong bát bầu cua thì nó nổi ở góc, chứ mặt bát không có hàng nào để xếp vào. */
-#bowl .squeeze {
+/* Trong bát thì hai cái công tắc nổi ở góc, chứ mặt bát không có hàng nào để xếp vào. Một cái
+   hàng chứ không phải hai cái cùng dán vào một toạ độ tuyệt đối — cái sau sẽ nằm đè lên cái
+   trước, và cái nằm dưới thì bấm không được. */
+.corner {
   position: absolute;
   top: 6px;
   right: 7px;
   z-index: 2;
+  display: flex;
+  gap: 4px;
 }
 
 /* Phỏm đã trình. Nhỏ, ngay dưới ghế: câu người ta hỏi lúc nhìn nó là "lá rác của mình gửi được
@@ -1906,3 +1983,433 @@ body {
   box-shadow: inset 0 0 0 2px rgba(111, 211, 154, 0.95), 0 1px 3px rgba(0, 0, 0, 0.35);
   filter: none;
 }
+
+/* ---- tài xỉu -----------------------------------------------------------------------------------
+
+   Cùng cái bát của bầu cua — cùng nền, cùng cái nắp, cùng đường chip, cùng dải tab — vì đó là
+   cùng một cái sòng nhìn từ cùng một chỗ. Khác ở **chiếu**: bầu cua có sáu ô vuông bằng nhau, mỗi
+   ô một con vật, và mắt đi tìm hình. Tài xỉu có hai cửa lớn với một hàng nhỏ dưới, vì trò này là
+   một câu hỏi lớn — lớn hay nhỏ — và mấy cách đọc khác của cùng ba con ấy. Hai cửa lớn bằng nhau
+   và to gấp đôi phần còn lại: đó là hình vẽ của chính cái luật. */
+
+#taixiu {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* Hàng người chơi, ngoài cái bát. Một dòng, cuộn ngang nếu đông — xuống dòng thì nó cao dần và
+   ăn vào chỗ của cái bát, mà cái bát là thứ người ta tới đây để nhìn. */
+#tx-punters {
+  flex: none;
+  display: flex;
+  justify-content: center;
+}
+
+#tx-punters .punters {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  max-height: none;
+  padding: 0;
+}
+
+/* Sàn thấp, và cố ý. Ép cái bát cao lên bằng `min-height` thì trên một cái khung ngắn hơn dự
+   tính, phần thừa ra không co lại được và **đè xuống hàng chip** — mà `drawTxDice` đã cắt ba con
+   theo chiều cao thật của cái bát rồi, nên bát ngắn thì xúc xắc nhỏ đi chứ không có gì vỡ. */
+/* Ba con là thứ **duy nhất** nằm trong dòng chảy của cái bát, nên chúng nằm đúng giữa nó. Cái
+   tổng, dòng chữ và hàng người chơi đều dán xuống đáy. */
+#tx-bowl {
+  flex: 1;
+  min-height: 168px;
+  /* Chừa **cả hai đầu bằng nhau**, và đó là cả cách ba con ra được giữa bát: dưới là chỗ của hàng
+     chữ, trên thì chẳng đựng gì — nhưng chừa đúng bằng ấy thì tâm ba con rơi đúng tâm cái bát.
+     Chỉ chừa ở dưới thì ba con nằm cao hơn tâm nửa khoảng chừa. Cùng con số với `TX_PAD` bên
+     `taixiu.js`, và phải cùng. */
+  padding: 40px 8px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 100% at 50% 30%, #1d7a54 0%, var(--felt-deep) 68%, #082a1d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+#tx-bowl.shaking { animation: shaking 0.26s ease-in-out infinite; }
+
+
+/* Một con xúc xắc, vẽ bằng chấm trên lưới ba nhân ba. Chấm chứ không phải số: trên bàn thật nó là
+   chấm, và ở cỡ hai mươi pixel thì đếm chấm nhanh hơn đọc số. */
+/* Cỡ đi theo `--die`, do `txDieSize` đặt từ chiều cao thật của cái bát. Con số ở đây chỉ là khung
+   đầu — nhưng phải là một khung đầu đứng được, phòng khi dòng JavaScript ấy không chạy. */
+.tx-die {
+  position: relative;
+  width: var(--die, 50px);
+  height: var(--die, 50px);
+  padding: calc(var(--die, 50px) / 7);
+  border-radius: 11px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  place-items: center;
+  background: linear-gradient(160deg, #fffdf7, #e8e0cf);
+  border: 1px solid #cfc6b2;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.42), inset 0 -2px 0 rgba(0, 0, 0, 0.08);
+}
+
+.tx-pip {
+  width: calc(var(--die, 50px) / 6);
+  height: calc(var(--die, 50px) / 6);
+  border-radius: 50%;
+  background: var(--black);
+  display: block;
+}
+
+/* Nhất và tứ chấm đỏ, như mọi con xúc xắc từng được sơn. */
+.tx-pip.red { background: var(--red); }
+
+.tx-die.tumbling { animation: tumbling 0.42s linear infinite; }
+.tx-die.landing { animation: landing 0.5s cubic-bezier(0.22, 1.2, 0.36, 1); }
+
+/* Ván trước, để nguyên trong bát và mờ đi. Cái bàn thật cũng để đó cho tới lúc xóc lại, và một
+   cái bát trống trơn suốt hai mươi lăm giây đọc ra là màn hình chưa tải xong. */
+/* Ván trước, để nguyên trong bát. Mờ đủ để không ai nhầm là ván này, rõ đủ để đọc được — 0,34
+   trên nền lục sẫm là một vết xám mà người ta đọc ra là "không có gì". */
+.tx-die.past {
+  opacity: 0.5;
+  transform: scale(0.86);
+  box-shadow: none;
+}
+
+/* Con chưa dừng thì cứ để nó quay: cùng hiệu ứng với lúc còn trong bát, chỉ khác là hai con kia
+   đã nằm rồi. Chạm được, nên nói ra bằng con trỏ. */
+.tx-die.nudge { cursor: pointer; }
+
+
+/* ---- cái tổng ------------------------------------------------------------------------------- */
+
+/* Mọi chữ nghĩa của cái bát, gom vào một khối dán xuống đáy.
+ *
+ * Nằm trong dòng chảy thì mỗi hàng cộng chiều cao của nó vào khối giữa, và ba con bị đẩy lên trên
+ * đúng bằng một nửa tổng số ấy — người thử nói thẳng "sao nằm sát phía trên thế". Tệ hơn: cái đĩa
+ * thì căn giữa **cái bát**, nên nó lệch khỏi ba con ba chục pixel và hở nguyên mép trên. Dán cả
+ * khối xuống đáy thì ba con nằm giữa, cái đĩa căn theo ba con, và cả ba thứ về một tâm. */
+/* Một hàng, không phải một cột. Cái tổng và dòng nói được mất là hai nửa của cùng một câu —
+   "11 Tài · +2.000 vàng" — và mỗi hàng thừa trong bát là chỗ ba con mất đi. */
+#tx-below {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 5px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px 8px;
+  padding: 0 8px;
+}
+
+#tx-sum {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.tx-total {
+  font-size: 30px;
+  font-weight: 850;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.tx-more { font-size: 19px; font-weight: 800; color: var(--muted); }
+
+.tx-side {
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+}
+
+.tx-side.tai { background: var(--tai); color: #2a0d0b; }
+.tx-side.xiu { background: var(--xiu); color: #06202e; }
+.tx-side.bao { background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: #2a1e05; }
+
+.tx-parity { font-size: 11px; font-weight: 700; color: var(--muted); }
+
+/* Ván trước, dán ở **góc** bát chứ không nằm dưới ba con.
+ *
+ * Ba con mờ đứng trong bát mà không có dòng này thì hoặc người ta không thấy chúng, hoặc thấy rồi
+ * tưởng là ván đang chạy — mà cái thứ hai còn tệ hơn. Nhưng để nó thành một hàng dưới ba con thì
+ * cả khối bị đẩy lên sát mép trên, đúng vào hai mươi lăm giây người ta nhìn cái bát nhiều nhất.
+ * Dán ở góc thì nó không chiếm dòng nào cả. */
+.tx-past {
+  position: absolute;
+  top: 7px;
+  left: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tx-past-note { font-size: 10px; font-weight: 650; color: var(--muted); }
+
+.tx-past-sum {
+  font-size: 13px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.tx-side.small {
+  padding: 1px 7px;
+  font-size: 9.5px;
+  letter-spacing: 0.2px;
+  opacity: 0.68;
+}
+
+/* Còn một con úp: sáu khả năng của nó, nhuộm theo cửa nó sẽ ra. Cả cái thú của nặn tài xỉu nằm ở
+   đây — hai con ngửa rồi thì không còn là may rủi nữa, nó là sáu dòng và mình biết cần dòng nào. */
+.tx-need { display: flex; gap: 4px; align-items: center; }
+
+.tx-die.mini {
+  --die: 23px;
+  width: 23px;
+  height: 23px;
+  padding: 3.5px;
+  border-radius: 6px;
+  box-shadow: none;
+  border-color: transparent;
+}
+
+.tx-die.mini .tx-pip { width: 4px; height: 4px; }
+
+.tx-die.mini.tai { background: linear-gradient(160deg, #ffb3ac, #e2574c); }
+.tx-die.mini.xiu { background: linear-gradient(160deg, #b6dcf2, #4e9fd0); }
+.tx-die.mini.bao { background: linear-gradient(180deg, var(--gold), var(--gold-deep)); }
+
+/* Khả năng nào trả tiền cho mình. Vòng vàng chứ không đổi nền: nền đang nói cửa nào ra, và một ô
+   nói hai chuyện bằng cùng một cách thì không nói được chuyện nào. */
+.tx-die.mini.paid { box-shadow: 0 0 0 2px var(--ink); }
+
+/* ---- chiếu -------------------------------------------------------------------------------------
+
+   Hai cửa lớn trên, ba cửa nhỏ dưới. Xỉu đứng trước tài, theo thứ tự của những con số. */
+
+#tx-board { flex: none; display: flex; flex-direction: column; gap: 5px; }
+
+.tx-row { display: grid; gap: 5px; }
+.tx-row.big { grid-template-columns: repeat(2, 1fr); }
+.tx-row.small { grid-template-columns: repeat(3, 1fr); }
+
+.tx-door {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 5px 5px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025));
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+/* Tên và luật trên **một dòng**. Ba dòng một cửa thì hàng cửa cao hơn cả cái bát — mà cái bát là
+   chỗ trò này thật sự diễn ra — và trên một cái khung ngắn nó tràn xuống đè lên hàng chip. */
+.tx-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 5px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.tx-door b { font-size: 13px; font-weight: 850; letter-spacing: 0.3px; line-height: 1.1; }
+.tx-row.big .tx-door { padding: 8px 5px 7px; }
+.tx-row.big .tx-door b { font-size: 19px; }
+
+.tx-door em {
+  font-style: normal;
+  font-size: 9.5px;
+  line-height: 1.1;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tx-row.big .tx-door em { font-size: 10.5px; }
+
+/* Cửa nào màu ấy, như ô sơn trên chiếu thật. Đủ nhạt để năm ô cạnh nhau vẫn là một cái chiếu chứ
+   không phải một bảng màu. */
+.tx-door[data-door="tai"] {
+  background: linear-gradient(160deg, rgba(226, 87, 76, 0.2), rgba(226, 87, 76, 0.05));
+  border-color: rgba(226, 87, 76, 0.3);
+}
+
+.tx-door[data-door="xiu"] {
+  background: linear-gradient(160deg, rgba(78, 159, 208, 0.2), rgba(78, 159, 208, 0.05));
+  border-color: rgba(78, 159, 208, 0.3);
+}
+
+.tx-door[data-door="bao"] {
+  background: linear-gradient(160deg, rgba(233, 196, 106, 0.17), rgba(233, 196, 106, 0.04));
+  border-color: rgba(233, 196, 106, 0.28);
+}
+
+.tx-door[data-door="tai"] b { color: var(--tai-soft); }
+.tx-door[data-door="xiu"] b { color: var(--xiu-soft); }
+.tx-door[data-door="bao"] b { color: var(--gold); }
+
+.tx-on {
+  font-size: 10.5px;
+  line-height: 1.15;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  min-height: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tx-mine { color: var(--gold); text-decoration: none; }
+
+.tx-door:disabled { cursor: default; }
+.tx-door:disabled b { opacity: 0.7; }
+
+/* Cửa mình đang có tiền. Vòng chứ không tô: cái đang phải đọc là con số bên dưới. */
+.tx-door.has { border-color: rgba(233, 196, 106, 0.62); }
+
+/* Cửa vừa ra. Nháy một cái rồi thôi — nó là chuyện vừa xảy ra, không phải một trạng thái. */
+.tx-door.won {
+  border-color: var(--gold);
+  animation: struckTile 0.65s ease-out;
+}
+
+#tx-rule {
+  flex: none;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted);
+  text-align: center;
+  padding: 0 6px;
+}
+
+/* ---- soi cầu ------------------------------------------------------------------------------------
+
+   Một con đường, mỗi cột một mạch: cùng bên thì rơi xuống dưới, đổi bên thì sang cột mới. Không
+   phải cái lưới sáu hàng của bầu cua, và cố tình — bầu cua có sáu mặt độc lập nên cái đáng nhìn là
+   "mặt nào ra mấy lần"; tài xỉu chỉ có hai bên, nên cái đáng nhìn là mạch. */
+
+#tx-cau {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.tx-tally { display: flex; gap: 5px; }
+
+.tx-count {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 750;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.tx-count.tai { color: var(--tai-soft); }
+.tx-count.xiu { color: var(--xiu-soft); }
+.tx-count.bao { color: var(--gold); }
+
+.tx-road {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 3px;
+  min-height: 78px;
+}
+
+.tx-col { display: flex; flex-direction: column; gap: 3px; }
+
+.tx-bead {
+  flex: none;
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-bead.tai { background: var(--tai); color: #2a0d0b; }
+.tx-bead.xiu { background: var(--xiu); color: #06202e; }
+.tx-bead.bao { background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: #2a1e05; }
+
+/* Mạch đang chạy, để mắt bắt đầu ở đúng chỗ. */
+.tx-bead.now { box-shadow: 0 0 0 2px rgba(242, 248, 244, 0.85); }
+
+/* ---- luật ---------------------------------------------------------------------------------------
+
+   Một bảng trả tiền và hai câu về bão. Ở trong bàn chứ không phải ở màn vào, vì đây là thứ người ta
+   hỏi lúc đang cầm tiền chứ không phải lúc đang chọn trò. */
+
+#tx-help {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.tx-help-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tx-help-name { flex: none; width: 40px; font-size: 12.5px; font-weight: 800; }
+.tx-help-name.tai { color: var(--tai-soft); }
+.tx-help-name.xiu { color: var(--xiu-soft); }
+.tx-help-name.bao { color: var(--gold); }
+
+.tx-help-what { flex: 1; font-size: 11px; color: var(--muted); }
+
+.tx-help-pay {
+  flex: none;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-bao-note { color: var(--gold); font-weight: 800; }
