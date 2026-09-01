@@ -495,6 +495,7 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | Ngưỡng thời gian đo bằng lần chạy tệ nhất | Một lần đo lẻ bị bộ dọn rác chen ngang thì nói về cái máy chứ không nói về thuật toán. Đổi sang **trung vị**, và để lần tệ nhất một khoảng rộng |
 | Hiệu ứng lá rơi gắn ở lần vẽ đầu tiên | Mỗi nước là **hai** push — một chung, một riêng có bài mình — nên `render` chạy hai lần cách nhau vài mili giây, và lần thứ hai dựng lại lá không còn lớp hiệu ứng. Nhìn ra là chẳng có hiệu ứng nào cả |
 | Phỏm lấy bài và đánh bài trong cùng một nhịp | Tay dài thêm rồi ngắn lại trong cùng một khung hình; không ai thấy nó lấy con gì |
+| Danh sách về đích lọc bỏ máy | Máy là đồ đạc **lúc chia tiền**, không phải lúc xếp thứ tự. Lọc chúng ra thì ở bàn một người với ba máy, danh sách còn đúng một cái tên — và cái tên ấy thành "người về nhất" dù vừa về bét. Về ba, bấm "ván nữa", lại được đánh đầu, ván nào cũng thế. Sai ở **cả hai trò**, cùng một dòng |
 
 Và một luật rút ra từ carobot, có test canh:
 

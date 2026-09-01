@@ -545,11 +545,35 @@ test('and the hand says who won so the next one knows who deals', () => {
   assert.equal(game.wonLast.length, 3, 'ba người thì ba tên, theo thứ tự');
   assert.equal(game.wonLast[0], `u${game.finished[0]}`, 'người đầu danh sách là người về nhất');
 
-  // Máy không bao giờ có tên trong đó — máy không cầm cái.
-  const bots = tableOf(3, { bots: [1] });
+  // Máy **có** tên trong đó.
+  //
+  // Máy là đồ đạc lúc chia tiền, không phải lúc xếp thứ tự. Lọc chúng ra là ở bàn một người ba
+  // máy, danh sách còn đúng một cái tên và cái tên ấy thành "người về nhất" dù vừa về bét — bấm
+  // "ván nữa" là lại được cầm cái, ván nào cũng thế. Đúng cái người chơi báo về.
+  const bots = tableOf(4, { bots: [1, 2, 3] });
   bots.stock = [];
   bots.turn = 0;
   bots.step = 'take';
   phomDraw(bots, 0);
-  assert.ok(!bots.wonLast.some((id) => id.startsWith('machine:')), 'máy lọt vào danh sách cầm cái');
+  assert.equal(bots.wonLast.length, 4, 'bốn ghế thì bốn tên, máy hay người cũng vậy');
+  assert.equal(bots.wonLast[0], `u${bots.finished[0]}`.replace('u', bots.seats[bots.finished[0]].bot ? 'machine:' : 'u'),
+    'tên đầu danh sách phải là ghế về nhất, dù đó là máy');
+});
+
+test('a table of one person and three machines does not hand the same person the cái every hand', () => {
+  // Người chơi về ba mà bấm "ván nữa" vẫn được đánh đầu — vì danh sách về đích đã lọc bỏ máy,
+  // nên chỉ còn mỗi họ. Ghim bằng một ván mà người chơi **không** về nhất.
+  const game = tableOf(4, { bots: [1, 2, 3] });
+  game.stock = [];
+  game.turn = 0;
+  game.step = 'take';
+  phomDraw(game, 0);
+  assert.equal(game.state, 'over');
+
+  // Nếu ghế 0 (người thật) không về nhất thì họ không được cầm cái ván sau.
+  const nhat = game.finished[0];
+  const cai = game.wonLast
+    .map((id) => game.seats.findIndex((one) => one.userId === id))
+    .find((seat) => seat >= 0);
+  assert.equal(cai, nhat, 'cái phải về tay ghế về nhất, không phải ghế của người chơi');
 });

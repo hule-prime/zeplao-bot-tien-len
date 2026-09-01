@@ -1306,3 +1306,38 @@ test('a phỏm rematch is opened by whoever won, not by whoever opened the table
       'và người ấy là người cầm mười lá');
   }, { c1: ['u1'], c2: ['u2'] });
 });
+
+test('losing to the machines does not hand you the lead again', async () => {
+  // Đúng ca người chơi báo về: đấu với máy, về ba, bấm "ván nữa" — và vẫn được đánh đầu. Danh
+  // sách về đích đã lọc bỏ máy, nên ở bàn một người ba máy nó chỉ còn đúng một cái tên, và cái
+  // tên ấy thành "người về nhất" dù vừa về bét.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+
+    app.does('u1', { solo: 4 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a table of machines');
+    await playOut(app, ['u1']);
+
+    const over = app.mine('u1');
+    assert.equal(over.phase, 'over');
+    assert.equal(over.ranking.length, 4);
+    const won = over.ranking[0].id;
+
+    app.does('u1', { rematch: true });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'dealt again');
+
+    const again = app.mine('u1');
+    assert.equal(again.opensWith, null, 'ván sau không bắt 3 bích');
+    assert.equal(again.seats[again.turn].id, won,
+      'ghế về nhất ván trước phải là ghế đi đầu, kể cả khi đó là máy');
+
+    // Và khi người chơi *không* về nhất thì họ không được đi đầu.
+    if (won !== 'u1') {
+      assert.notEqual(again.seats[again.turn].id, 'u1',
+        'về sau máy mà vẫn được đánh đầu');
+    }
+  }, { c1: ['u1'] });
+});

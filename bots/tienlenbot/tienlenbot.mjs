@@ -277,8 +277,14 @@ export function finish(game) {
   // is asked for there is nothing left to ask. Kept as the whole order rather than just the
   // winner, because the winner is exactly the person most likely to take their money and go:
   // the next hand then starts from whoever came second and is still sitting there.
+  // **Máy cũng tính.**
+  //
+  // Ở đây máy không phải đồ đạc. Chúng là đồ đạc lúc chia tiền — không thu, không trả — nhưng
+  // lúc xếp thứ tự thì chúng ngồi ở bàn như mọi người. Lọc chúng ra khỏi danh sách này là ở bàn
+  // một người với ba máy, danh sách chỉ còn đúng một cái tên, và cái tên ấy là "người về nhất"
+  // dù họ vừa về bét. Người chơi bấm "ván nữa" và lại được đi đầu, ván nào cũng thế.
   game.wonLast = game.finished
-    .filter((seat) => game.seats[seat] && !game.seats[seat].bot)
+    .filter((seat) => game.seats[seat])
     .map((seat) => game.seats[seat].userId);
 
   if (game.kind !== 'baucua' && !game.blanche) reckon(game);
@@ -518,8 +524,14 @@ export function phomEnd(game) {
   // Ai làm cái ván sau. Đọc ở đây, lúc `finished` còn nói — `dealPhom` xoá nó đi, và tới lúc
   // có người bấm "ván nữa" thì không còn gì để hỏi. Giữ nguyên thứ tự chứ không chỉ giữ người
   // đầu, vì người về nhất chính là người dễ cầm tiền đi về nhất.
+  // **Máy cũng tính.**
+  //
+  // Ở đây máy không phải đồ đạc. Chúng là đồ đạc lúc chia tiền — không thu, không trả — nhưng
+  // lúc xếp thứ tự thì chúng ngồi ở bàn như mọi người. Lọc chúng ra khỏi danh sách này là ở bàn
+  // một người với ba máy, danh sách chỉ còn đúng một cái tên, và cái tên ấy là "người về nhất"
+  // dù họ vừa về bét. Người chơi bấm "ván nữa" và lại được đi đầu, ván nào cũng thế.
   game.wonLast = game.finished
-    .filter((seat) => game.seats[seat] && !game.seats[seat].bot)
+    .filter((seat) => game.seats[seat])
     .map((seat) => game.seats[seat].userId);
 
   game.state = 'over';
