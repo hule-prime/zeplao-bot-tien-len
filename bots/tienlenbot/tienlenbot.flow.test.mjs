@@ -192,7 +192,33 @@ function standIn(rooms = { c1: ['u1', 'u2'] }) {
       if (what()) return;
       await nap(10);
     }
-    assert.fail(`gave up waiting: ${why}`);
+
+    // Hết giờ thì nói ra đang thấy gì.
+    //
+    // "gave up waiting: the table to deal itself" một mình nó không nói được gì cả, và một dòng
+    // như thế mỗi vài lần chạy thì lần nào cũng bị đọc thành "chắc lại chập chờn" — đó là cách
+    // một lỗi thật sống sót qua hai chục lần chạy. Nên nó kể ra: ai đang ở đâu, đã nhận bao
+    // nhiêu push, và cái push cuối cùng nói gì.
+    // `app.opened` là Proxy nên `Object.keys` trả về rỗng — lấy danh sách người từ chính các
+    // phòng đã dựng.
+    const people = [...new Set(Object.values(app.rooms ?? {}).flat())];
+    const seen = people.map((id) => {
+      const mine = app.mine(id) ?? {};
+      const to = app.pushes.filter((one) => one.to === id).length;
+      return `${id}: pha=${mine.phase ?? '(chưa có state)'} bàn=${mine.gameId ?? '-'}`
+        + ` ghế=${(mine.seats ?? []).length} lượt=${mine.turn ?? '-'}`
+        + ` phiên=${app.opened[id]} còn sống=${(app.sessions.get(app.opened[id]) ?? {}).live}`
+        + ` push riêng=${to}`;
+    });
+    const last = app.pushes.slice(-5).map((one) =>
+      `${one.sessionId}${one.to ? `→${one.to}` : ' (chung)'} pha=${one.state.phase}`
+      + ` ghế=${(one.state.seats ?? []).length}`);
+    assert.fail(`gave up waiting: ${why}\n  ${seen.join('\n  ')}\n`
+      + `  phiên: ${[...app.sessions.values()].map((one) =>
+        `${one.id}@${one.conversationId}${one.live ? '' : ' (đã đóng)'}`).join(' ')}\n`
+      + `  update đã gửi: ${app.updates.length}\n`
+      + `  push cuối:\n    ${last.join('\n    ')}\n`
+      + `  tổng push: ${app.pushes.length} · bị từ chối: ${app.refused.length}`);
   };
 
   return app;
