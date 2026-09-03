@@ -263,7 +263,7 @@ const HOME = `<!doctype html><meta charset="utf-8">
   <p><b>Bàn thế giới:</b> khung trái <code>Mở bàn</code>, rồi khung phải mở tab
      <code>Bàn</code> — bàn của nhóm A hiện ở nhóm B. Bấm <code>Vào</code>. Bàn 2 người tự chia
      bài; 3–4 người thì <code>Thêm máy</code> hoặc <code>Bắt đầu</code>.</p>
-  <p><b>Vàng:</b> mỗi ngày +10.000 khi mở widget. Hết vàng thì hiện nút xem quảng cáo.</p>
+  <p><b>Vàng:</b> vào lần đầu được 50.000, mỗi ngày bấm nhận thêm 30.000. Hết vàng thì hiện nút xem quảng cáo.</p>
   <p>Mỗi khung chỉ nhận bài của chính nó — mở tab Network mà xem.</p>
 </aside>
 `;

@@ -112,8 +112,8 @@ pieces move up the screen" is how a board is read. Which colour you draw is a co
 game swaps. Leaving a game in progress is resigning, and the button says so. A move takes sixty
 seconds; run out and the machine plays one for you rather than the table stopping dead.
 
-Every hand is played for gold. Turning up is worth 10.000 a day, a table against the machines
-pays 2.000 for coming first and takes 2.000 off whoever comes last, and a table between people
+Every hand is played for gold. Turning up is worth 30.000 a day, a table against the machines
+pays 10.000 for coming first and takes 10.000 off whoever comes last, and a table between people
 is played for whatever the room was opened at. The board is the world's, counted in gold.
 
 Written against the widget half of the bot platform: the rules and the deck live in the bot,
@@ -185,13 +185,13 @@ A few things that are the way they are on purpose:
 
 | | |
 | --- | --- |
-| Starting purse | **20.000**, once, the first time somebody opens it. Enough to sit down at anything on the list and lose a couple of hands without being sent to an advertisement |
-| Turning up | **+10.000** a day, **taken by pressing for it** rather than credited on the way in. The day turns over at midnight in Vietnam, not in UTC |
-| A table against the machines | Fixed **4.000** a stake, whatever the table was opened at. Nhất +4.000, nhì +2.000, ba −2.000, bét −4.000 |
+| Starting purse | **50.000**, once, the first time somebody opens it. Enough to sit down at anything on the list and lose a couple of hands without being sent to an advertisement. Given once and marked, so raising it tops nobody up — only the next person through the door gets the new number |
+| Turning up | **+30.000** a day, **taken by pressing for it** rather than credited on the way in. The day turns over at midnight in Vietnam, not in UTC |
+| A table against the machines | Fixed **10.000** a stake, whatever the table was opened at. Nhất +10.000, nhì +5.000, ba −5.000, bét −10.000. A board against the machine is the same number: win it, lose it, or draw and keep it |
 | A table between people | Whatever the room was opened at — **1.000** to 1.000.000, and never more than the opener has. Three presets for the common answers, and a field for anything else |
-| More gold | A ten second advertisement, worth **4.000**, behind the `+` beside the purse at any balance. The daily cap is a thousand, which is a guard against a counting bug rather than a ration — ten seconds a time is the ration |
+| More gold | A ten second advertisement, worth **10.000**, behind the `+` beside the purse at any balance. The daily cap is a thousand, which is a guard against a counting bug rather than a ration — ten seconds a time is the ration |
 | The board | Gold, the world's, everybody |
-| A board between two people | Winner takes one stake off the loser; a draw costs nobody anything. Against the machine it is the fixed **4.000**, played against the house |
+| A board between two people | Winner takes one stake off the loser; a draw costs nobody anything. Against the machine it is the fixed **10.000**, played against the house |
 | What the two bowls keep | Bầu cua **7,87%** — 17/216, the number every pavement table plays. Tài xỉu **2,78%** on tài, xỉu, chẵn and lẻ, and **13,89%** on bão. Worked out exactly over all 216 throws rather than measured, and pinned by a test |
 
 **One person is one purse.** The ledger is keyed by the person and by nothing else — not the

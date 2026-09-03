@@ -14,10 +14,14 @@ import { PLACES, placeName } from './rules/tienlen.mjs';
 /// Enough to sit down at anything on the list and lose a couple of hands without being sent to
 /// an advertisement — a first table that has to be paid for before it can be played is a game
 /// nobody gets to the middle of.
-export const STARTING_GOLD = 20_000;
+///
+/// **Given once and marked.** Raising it does not top anybody up: `rowFor` hands it over the
+/// first time somebody is seen and writes `started` down, so everybody already playing keeps
+/// what they have. Only the next person through the door gets the new number.
+export const STARTING_GOLD = 50_000;
 
 /// What turning up is worth, once a day.
-export const DAILY_GOLD = 10_000;
+export const DAILY_GOLD = 30_000;
 
 /// What a table against the machines is played for.
 ///
@@ -25,8 +29,11 @@ export const DAILY_GOLD = 10_000;
 /// fill with machines is a table that prints gold — the machines do not mind what they lose.
 ///
 /// The ladder scales with it on its own: `payouts` is a share of one stake, so nhất takes this
-/// and nhì takes half of it whatever this number is.
-export const BOT_STAKE = 4_000;
+/// and nhì takes half of it whatever this number is. So does a board game, where the winner
+/// takes exactly one of these off the loser, and so does what an advertisement pays — that one
+/// is `ADS_GOLD`, and it is defined as this number rather than as a number of its own, because
+/// an advertisement exists to buy one hand and an advertisement that buys less has not worked.
+export const BOT_STAKE = 10_000;
 
 /// The three a table can be opened at with one tap. Anything between the floor and the ceiling
 /// can be typed instead — these are the common answers, not the only ones.

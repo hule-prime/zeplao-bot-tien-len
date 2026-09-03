@@ -50,17 +50,23 @@ sẽ cho người ta thấy một tay bài và không có cái bàn nào.
 
 | | |
 | --- | --- |
-| Vốn ban đầu | **20.000**, một lần, lần đầu mở widget. Đủ để ngồi bất kỳ bàn nào trên danh sách và thua vài ván mà chưa phải đi xem quảng cáo |
-| Quà mỗi ngày | **+10.000**, và phải **bấm nhận**. Ngày sang lúc nửa đêm giờ Việt Nam, không phải giờ UTC |
-| Bàn với máy | Cược cố định **4.000**, bất kể bàn mở ở mức nào. Nhất +4.000, nhì +2.000, ba −2.000, bét −4.000 |
+| Vốn ban đầu | **50.000**, một lần, lần đầu mở widget. Đủ để ngồi bất kỳ bàn nào trên danh sách và thua vài ván mà chưa phải đi xem quảng cáo. **Cho một lần rồi đánh dấu**, nên nâng nó lên không cộng thêm cho ai đang chơi — chỉ người vào sau mới nhận con số mới |
+| Quà mỗi ngày | **+30.000**, và phải **bấm nhận**. Ngày sang lúc nửa đêm giờ Việt Nam, không phải giờ UTC |
+| Bàn với máy | Cược cố định **10.000**, bất kể bàn mở ở mức nào. Nhất +10.000, nhì +5.000, ba −5.000, bét −10.000. Một ván cờ với máy cũng đúng con số ấy: thắng ăn, thua mất, hoà thì giữ nguyên |
 | Bàn giữa người | Cược của phòng — **tự đặt**, từ 1.000 tới 1.000.000 và không quá số tiền người mở đang có. Ba mức có sẵn chỉ là câu trả lời thường gặp |
-| Kiếm thêm | Quảng cáo 10 giây, **4.000** — đúng một ván với máy — tối đa 1.000 lần/ngày (con số đó chặn lỗi đếm chứ không phải để hạn chế — mười giây một lần đã là hạn chế rồi). Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** |
+| Kiếm thêm | Quảng cáo 10 giây, **10.000** — đúng một ván với máy — tối đa 1.000 lần/ngày (con số đó chặn lỗi đếm chứ không phải để hạn chế — mười giây một lần đã là hạn chế rồi). Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** |
 | Bảng xếp hạng | Vàng, của cả thế giới |
 
 **Quảng cáo trả đúng một ván với máy**, không phải trùng hợp: nó tồn tại để đưa người hết tiền
 quay lại bàn, mà một quảng cáo xem xong vẫn không đủ ngồi thứ rẻ nhất trên màn hình là một quảng
-cáo không làm được việc của nó. Nâng cược máy lên 4.000 thì cái này phải theo — và số lượt trong
-ngày giảm xuống một nửa để một ngày xem vẫn đáng đúng bốn mươi nghìn như cũ.
+cáo không làm được việc của nó. Nên `ADS_GOLD` **được định nghĩa bằng `BOT_STAKE`**, không phải
+bằng một con số riêng: nâng cược máy lên là nó tự theo, và không có cách nào để hai con số ấy rời
+nhau ra mà không ai để ý.
+
+Ba con số ấy vừa nâng: vốn ban đầu 20.000 → **50.000**, quà mỗi ngày 10.000 → **30.000**, cược
+với máy 4.000 → **10.000**. Cái cuối kéo theo quảng cáo và kéo theo cả ngưỡng "hết vàng"
+(`BROKE`), vì cả hai đều định nghĩa bằng nó. Vốn ban đầu thì **không** hồi tố: `rowFor` phát nó
+đúng một lần rồi ghi `started` xuống sổ, nên ai đang chơi vẫn giữ số của mình.
 
 **Tổng bằng không.** `payouts` cho nhất ăn một cược của bét, và ở bàn đủ bốn thì nhì ăn nửa cược
 của ba; giữa bàn lẻ thì hoà. Vàng chuyển giữa những người ngồi đó và không sinh ra từ đâu — đây là

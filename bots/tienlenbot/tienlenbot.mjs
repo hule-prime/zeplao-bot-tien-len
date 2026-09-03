@@ -2578,8 +2578,12 @@ export async function run(token, { signal, api = API } = {}) {
       phase: 'choosing',
       gameId: null,
       gold: row.gold,
-      // The day's gold, waiting to be taken.
+      // The day's gold, waiting to be taken — nought once it has been.
       daily: dailyReady(screen.userId) ? DAILY_GOLD : 0,
+      // And what it is worth whether or not it is waiting, because the page has a line about
+      // tomorrow. It used to keep its own copy of that number; a second copy of a number is a
+      // number that goes stale the first time the first one changes, and nothing says so.
+      dailyGold: DAILY_GOLD,
       // The advertisement, if one is running. As a moment rather than a duration, so a phone
       // that was asleep comes back to the right number of seconds.
       adsEndsAt: screen.adsAt ? screen.adsAt + ADS_MS : null,

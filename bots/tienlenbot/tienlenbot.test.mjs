@@ -413,7 +413,7 @@ test('gold moves between the people at a table and none is made', () => {
   }
 });
 
-test('the numbers asked for: nhất takes two thousand off a table of machines', () => {
+test('the numbers asked for: nhất takes a whole stake off a table of machines', () => {
   const seats = [
     { userId: 'u1', displayName: 'Thọ', bot: false },
     { userId: 'm1', displayName: 'Tư Ròm', bot: true },
@@ -431,7 +431,12 @@ test('the numbers asked for: nhất takes two thousand off a table of machines',
   assert.equal(at(1).change, BOT_STAKE / 2, 'nhì takes half of one');
   assert.equal(at(2).change, -BOT_STAKE / 2, 'ba pays it');
   assert.equal(at(3).change, -BOT_STAKE, 'bét pays a whole one');
-  assert.equal(BOT_STAKE, 4000, 'and the number itself');
+  assert.equal(BOT_STAKE, 10_000, 'and the number itself');
+  // Và mấy con số định nghĩa **bằng** nó phải đi theo. Quảng cáo mua đúng một ván với máy, và
+  // ngưỡng "hết vàng" là chỗ không còn bàn nào ngồi được — cả hai đều là `BOT_STAKE` viết lại,
+  // nên nâng cược máy mà chúng không theo là hai con số vừa rời nhau ra mà không ai nói gì.
+  assert.equal(ADS_GOLD, BOT_STAKE, 'quảng cáo phải mua đúng một ván với máy');
+  assert.equal(BROKE, BOT_STAKE, 'ngưỡng hết vàng phải là chỗ không ngồi được bàn nào');
 });
 
 test('two people and two machines is a table of two, and the machines are furniture', () => {
@@ -501,8 +506,8 @@ test('a table can be opened at anything between the floor and the ceiling', () =
   // Not a number is not a stake, however large it looks.
   assert.equal(asStake(Infinity), MIN_STAKE);
   assert.equal(asStake(NaN), MIN_STAKE);
-  assert.equal(STARTING_GOLD, 20_000);
-  assert.equal(DAILY_GOLD, 10_000);
+  assert.equal(STARTING_GOLD, 50_000);
+  assert.equal(DAILY_GOLD, 30_000);
   assert.ok(STARTING_GOLD >= STAKES[STAKES.length - 2],
     'a first purse should open more than the cheapest table on the list');
   assert.ok(STARTING_GOLD > BOT_STAKE * 4,

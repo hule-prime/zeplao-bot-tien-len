@@ -1337,8 +1337,7 @@ function drawFinished(box) {
 /// Which question is being asked. Nothing at all on the first screen, which is two ways in.
 let step = null;
 
-/// What tomorrow is worth, for the one line that mentions it before the state has said so.
-const DAILY = 10000;
+
 
 /// The answer to the one question that is asked before another one is. Everything else is a tap
 /// that does the thing, so nothing else has to be remembered between screens.
@@ -1660,8 +1659,8 @@ function drawMenu() {
     body.append(pick('Xem quảng cáo', `10 giây · +${gold(state.adsGold)} vàng`,
       (state.adsLeft ?? 0) > 0, () => z.send({ ads: 'start' })));
     body.append(stepNote((state.adsLeft ?? 0) > 0
-      ? `Còn ${state.adsLeft} lượt hôm nay. Mai đăng nhập nhận ${gold(DAILY)} vàng nữa.`
-      : `Hết lượt hôm nay. Mai đăng nhập nhận ${gold(DAILY)} vàng.`));
+      ? `Còn ${state.adsLeft} lượt hôm nay. Mai đăng nhập nhận ${gold(state.dailyGold)} vàng nữa.`
+      : `Hết lượt hôm nay. Mai đăng nhập nhận ${gold(state.dailyGold)} vàng.`));
     return;
   }
 
