@@ -1458,6 +1458,99 @@ test('không hai file nào của trang khai trùng một cái tên ở tầng ng
   assert.deepEqual(clash, [], `trùng tên là cả trang không nạp được:\n  ${clash.join('\n  ')}`);
 });
 
+test('nước máy vừa đi phải đọc ra được, nhất là ở bàn cờ tướng', () => {
+  // Báo về: "ux cờ tướng như lol, đéo biết máy đi nước nào".
+  //
+  // Đúng, và nó là một chỗ tôi bê nguyên cách làm của bàn cờ vua sang mà không nhìn lại. Ở cờ vua
+  // thì hai cái ô tô sáng đọc được — ô có nền, viền nằm trên nền. Ở cờ tướng thì **không có ô
+  // vuông nào**: quân đứng trên giao điểm của một mặt gỗ kẻ lưới, nên một cái viền vuông mờ ở đó
+  // là một vệt không ai thấy, và ba mươi hai cái đồng tròn na ná nhau thì mắt không so nổi với
+  // trí nhớ sau mỗi lượt.
+  //
+  // Ba thứ chữa nó, và cả ba đều bị ghim ở đây.
+  const board = readFileSync(new URL('./widget/board.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('./widget/style.css', import.meta.url), 'utf8');
+  const bot = readFileSync(new URL('./tienlenbot.mjs', import.meta.url), 'utf8');
+
+  // Một: bot nói ra **quân nào** vừa đi và ăn được gì. Nó biết sẵn; nói ra thì rẻ.
+  assert.match(bot, /game\.last = \{[\s\S]{0,220}?piece: mover,[\s\S]{0,120}?eaten:/,
+    'bot không còn nói quân nào vừa đi');
+  assert.match(board, /function lastWords\(\)/, 'trang không còn đọc nước ấy ra thành chữ');
+
+  // Hai: hai cái ô là **hai dấu khác nhau** — đi từ đâu, tới đâu — chứ không phải cùng một viền.
+  assert.match(board, /at === last\.from \? ' from' : ''/, 'ô đi khỏi không còn dấu riêng');
+  assert.match(board, /at === last\.to \? ' to' : ''/, 'ô tới không còn dấu riêng');
+  for (const mark of ['.sq.from::after', '.sq.to::after']) {
+    assert.ok(css.includes(mark), `${mark} không còn được vẽ`);
+  }
+  // Vẽ bằng `::after`, không bằng `box-shadow` của ô: ở cờ tướng con quân là một cái đĩa to gần
+  // bằng ô, nên nó đè lên mất cái viền.
+  assert.ok(!/\.sq\.last\b/.test(css), 'dấu cũ vẫn còn — hai ô lại dùng chung một viền');
+
+  // Ba: bàn cờ tướng phải có **cung** và **sông**. Không phải trang trí — cung là chỗ tướng và sĩ
+  // không ra khỏi được, sông là chỗ tốt qua rồi thì đi ngang được và tượng thì không qua. Ba luật,
+  // vẽ thành hình. Không vẽ thì đó là ba luật người chơi phải nhớ thay vì nhìn.
+  assert.match(board, /function drawXiangqiBoard\(/, 'cung và sông không còn được vẽ');
+  assert.ok(css.includes('.palace'), 'cung không còn kiểu dáng');
+  assert.ok(css.includes('.river'), 'sông không còn kiểu dáng');
+});
+
+test('nước đi của chính mình hiện ngay, không đợi bot', () => {
+  // Báo về: "đánh cờ nó không ăn ngay, lag lắm".
+  //
+  // Đúng, và đó là cùng cái luật đã áp cho chip bầu cua từ lâu rồi mà tôi quên áp cho bàn cờ:
+  // **vẽ ngay khi chạm, gửi sau**. Round-trip nhanh nhất cũng một phần mười giây, và một quân cờ
+  // đứng im trong ngần ấy sau khi mình đã chạm vào ô đích thì đọc ra là cái bàn không nghe thấy
+  // mình — người ta chạm lại lần nữa, và nước thứ hai mới là nước bị mất.
+  //
+  // Nước của **đối phương** thì đợi mạng là đúng: nó tới từ đằng kia thật.
+  const widget = readFileSync(new URL('./widget/board.js', import.meta.url), 'utf8');
+
+  const at = widget.indexOf('function playMove(move) {');
+  assert.notEqual(at, -1, 'chỗ đi một nước đã dời đi');
+  const body = widget.slice(at, widget.indexOf('\n}', at));
+
+  // Vẽ trước, gửi sau — theo đúng thứ tự chữ trong hàm.
+  const draws = body.indexOf('board[move.from] = 0;');
+  const sends = body.indexOf('z.send(');
+  assert.ok(draws >= 0 && sends >= 0, 'hàm ấy phải vừa vẽ vừa gửi');
+  assert.ok(draws < sends, 'nó đang gửi trước khi vẽ — tức là vẫn đợi bot mới hiện');
+
+  // Và khoá bàn lại ngay. Không khoá thì trong một phần mười giây ấy người ta đi thêm được một
+  // nước từ một thế cờ đã cũ, bot từ chối, và cái bị mất là nước **đầu tiên**.
+  assert.match(body, /state\.me\.moves = \[\];/, 'đi xong mà không khoá bàn lại');
+
+  // Trang **không** tự suy ra hệ quả của nước đi: nó diễn lại đúng cái bot mô tả.
+  assert.match(body, /move\.rook !== undefined/, 'con xe khi nhập thành không được diễn lại');
+  assert.match(body, /move\.ep !== undefined/, 'con tốt bị bắt qua đường không được diễn lại');
+  assert.ok(!/[^.\w]KING|castle|passant/i.test(body),
+    'trang đang tự nghĩ ra luật cờ thay vì đọc lại cái bot nói');
+});
+
+test('bot mô tả trọn vẹn nước đi, kể cả chỗ bàn cờ đổi mà nước đi không nhắc tới', () => {
+  // Có đúng hai chỗ như thế trong cờ vua, và cả hai đều là chỗ một ô đổi mà tên nước đi không hề
+  // nói: nhập thành thì con xe cũng đi, bắt tốt qua đường thì con tốt bị ăn **không đứng ở ô
+  // mình vừa tới**. Bot nói ra cả hai, nên trang vẽ lại được mà không phải biết luật.
+  const back = chess.fromFen('r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1');
+  const short = chess.moves(back).find((one) => one.from === 60 && one.to === 62);
+  assert.deepEqual(chess.extrasOf(back, short).rook, { from: 63, to: 61 }, 'nhập thành gần');
+  const long = chess.moves(back).find((one) => one.from === 60 && one.to === 58);
+  assert.deepEqual(chess.extrasOf(back, long).rook, { from: 56, to: 59 }, 'nhập thành xa');
+
+  const passing = chess.fromFen('8/8/8/3pP3/8/8/8/4K2k w - d6 0 1');
+  const take = chess.moves(passing).find((one) => one.from === 28 && one.to === 19);
+  assert.equal(chess.extrasOf(passing, take).ep, 27, 'ô con tốt bị bắt qua đường');
+
+  // Nước thường thì không kèm gì, và một nước ăn quân bình thường cũng thế — quân bị ăn nằm
+  // đúng ô mình vừa tới, nên không có gì phải nói thêm.
+  const plain = chess.moves(back).find((one) => one.from === 60 && one.to === 61);
+  assert.deepEqual(chess.extrasOf(back, plain), {});
+
+  // Cờ tướng không có nước nào như thế, và hàm ấy **vẫn có mặt** — để bên gọi không phải hỏi
+  // đang chơi trò nào.
+  assert.deepEqual(xiangqi.extrasOf(xiangqi.start(), xiangqi.moves(xiangqi.start())[0]), {});
+});
+
 test('bàn cờ đo ra cỡ, chứ không nhờ CSS tự lo', () => {
   // Bản đầu để CSS lo: `aspect-ratio` cộng `max-width: 100%` cộng `max-height: 100%`. Nghe thì
   // đúng là "vừa khung mà giữ nguyên tỉ lệ". Nó không phải — không đặt chiều nào thì cái hộp lấy

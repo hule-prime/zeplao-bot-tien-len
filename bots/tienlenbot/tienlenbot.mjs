@@ -2058,8 +2058,21 @@ export async function run(token, { signal, api = API } = {}) {
     const eaten = game.pos.board[move.to];
     if (eaten) game.taken[seat].push(eaten);
 
+    // Quân nào vừa đi, và ăn được gì. Không phải trang trí: ở bàn cờ tướng thì ba mươi hai quân
+    // trông na ná nhau trên một mặt gỗ không có ô, nên "máy vừa đi nước nào" là một câu **không
+    // trả lời được bằng mắt** nếu chỉ tô hai cái ô. Bot biết sẵn; nói ra thì rẻ.
+    const mover = game.pos.board[move.from];
+
     game.pos = rules.apply(game.pos, move);
-    game.last = { from: move.from, to: move.to };
+    game.last = {
+      from: move.from,
+      to: move.to,
+      piece: mover,
+      eaten: eaten || 0,
+      promo: move.promo ?? 0,
+      // Ghế nào vừa đi. Trang cần nó để nói "máy vừa đi" chứ không phải "ai đó vừa đi".
+      seat,
+    };
     game.touched = Date.now();
 
     const over = rules.status(game.pos);
@@ -3012,9 +3025,15 @@ export async function run(token, { signal, api = API } = {}) {
       ? {
         seat,
         side: game.sides[seat],
+        // Mỗi nước kèm **hệ quả** của nó — con xe khi nhập thành, con tốt bị bắt qua đường. Trang
+        // dùng chúng để vẽ nước đi của chính mình ngay lúc chạm, không đợi bot trả lời; nó không
+        // suy ra gì cả, nó diễn lại đúng cái vừa được nói.
         moves: seatToPlay(game) === seat && game.state === 'playing'
           ? BOARDS[game.kind].moves(game.pos).map((one) => ({
-            from: one.from, to: one.to, promo: one.promo ?? 0,
+            from: one.from,
+            to: one.to,
+            promo: one.promo ?? 0,
+            ...BOARDS[game.kind].extrasOf(game.pos, one),
           }))
           : [],
       }

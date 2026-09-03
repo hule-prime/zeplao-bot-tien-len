@@ -567,6 +567,37 @@ function order(pos, list) {
 export const MATE = 100_000;
 
 /**
+ * Những gì một nước đi làm **ngoài** việc dời quân từ ô này sang ô kia.
+ *
+ * Có đúng hai thứ, và cả hai đều là chỗ bàn cờ đổi ở một ô mà nước đi không hề nhắc tới: nhập
+ * thành thì con xe cũng đi, và bắt tốt qua đường thì con tốt bị ăn **không đứng ở ô mình vừa
+ * tới**.
+ *
+ * Cái này tồn tại để cái trang vẽ được nước đi của chính mình **ngay lập tức**, trước khi bot kịp
+ * trả lời. Trang không được tự biết luật cờ — đó là luật của cả thiết kế — nên nó không được tự
+ * suy ra hai thứ trên. Nhưng đọc lại đúng cái bot vừa nói thì không phải là biết luật: bot mô tả
+ * trọn vẹn nước đi, trang diễn lại. Chỗ quyết định vẫn nằm đúng một nơi.
+ */
+export function extrasOf(pos, move) {
+  const piece = pos.board[move.from];
+  const kind = typeOf(piece);
+  const extras = {};
+
+  if (kind === KING && Math.abs((move.from % 8) - (move.to % 8)) === 2) {
+    const back = pos.turn === WHITE ? 56 : 0;
+    extras.rook = move.to === back + 6
+      ? { from: back + 7, to: back + 5 }
+      : { from: back, to: back + 3 };
+  }
+
+  if (kind === PAWN && move.to === pos.ep && pos.board[move.to] === 0) {
+    extras.ep = move.to + (pos.turn === WHITE ? 8 : -8);
+  }
+
+  return extras;
+}
+
+/**
  * Bộ luật, gói lại đúng cái hình dạng cái máy nghĩ cần.
  *
  * `dead` là chỗ hai trò cờ khác nhau thật, nên nó nằm ở đây chứ không ở trong cái máy: hết nước

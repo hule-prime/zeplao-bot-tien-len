@@ -2584,14 +2584,42 @@ body {
 
 .grid.xiangqi .sq { background: none; }
 
-/* Con sông: hai hàng giữa, để trống và sáng hơn. Nó là thứ chia đôi bàn cờ, và tốt qua nó thì đổi
-   cách đi — nên nó phải nhìn thấy được, không phải nhớ. */
-.grid.xiangqi .sq:nth-child(n + 37):nth-child(-n + 45) {
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.02));
+/* Lớp phủ nằm trên mặt gỗ, dưới quân cờ — nên lưới cần một gốc toạ độ. */
+.grid { position: relative; }
+
+/* Cung: hình vuông hai ô với hai đường chéo. Tướng và sĩ không ra khỏi đây bao giờ, và không vẽ
+   ra thì đó là một luật người chơi phải nhớ thay vì nhìn. */
+.palace {
+  position: absolute;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom right,
+      transparent calc(50% - 0.6px), rgba(60, 35, 12, 0.5) calc(50% - 0.6px),
+      rgba(60, 35, 12, 0.5) calc(50% + 0.6px), transparent calc(50% + 0.6px)),
+    linear-gradient(to bottom left,
+      transparent calc(50% - 0.6px), rgba(60, 35, 12, 0.5) calc(50% - 0.6px),
+      rgba(60, 35, 12, 0.5) calc(50% + 0.6px), transparent calc(50% + 0.6px));
 }
 
-.grid.xiangqi .sq:nth-child(n + 46):nth-child(-n + 54) {
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.02));
+/* Sông: dải giữa bàn, và hai chữ ai cũng thấy trên bàn thật. Tốt qua đây rồi thì đi ngang được,
+   tượng thì không qua — hai luật, vẽ thành một khoảng trống. */
+.river {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.02));
+}
+
+.river u {
+  text-decoration: none;
+  font-size: calc(var(--cell) * 0.42);
+  font-weight: 700;
+  letter-spacing: calc(var(--cell) * 0.12);
+  color: rgba(90, 60, 25, 0.5);
 }
 
 /* Quân cờ. Cùng một ô chứa cho cả hai trò: cờ vua bỏ hình vào, cờ tướng bỏ chữ vào. */
@@ -2656,8 +2684,53 @@ body {
 }
 
 .sq.picked { box-shadow: inset 0 0 0 3px var(--gold); }
-.sq.last { box-shadow: inset 0 0 0 2px rgba(233, 196, 106, 0.5); }
-.sq.picked.last { box-shadow: inset 0 0 0 3px var(--gold); }
+
+/* Nước vừa đi: **đi từ đâu** và **tới đâu**, hai dấu khác nhau.
+ *
+ * Bản đầu tô cả hai ô bằng cùng một cái viền mờ. Ở bàn cờ vua thì đọc được — ô có nền, viền nằm
+ * trên nền. Ở bàn cờ tướng thì **không có ô vuông nào**: quân đứng trên giao điểm của một mặt gỗ
+ * kẻ lưới, nên một cái viền vuông mờ ở đó là một vệt không ai thấy. Người thử nói thẳng: "đéo
+ * biết máy đi nước nào".
+ *
+ * Nên: chỗ đi khỏi là một **chấm rỗng**, chỗ tới là một **vòng dày quanh quân**, cả hai đều có
+ * quầng tối phía sau để nổi trên nền gỗ sáng. Và cả hai đều vẽ bằng `::after` — `box-shadow`
+ * trên ô thì bị chính con quân đè lên ở bàn cờ tướng, vì con quân là một cái đĩa to gần bằng ô. */
+.sq.from::after,
+.sq.to::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.sq.from::after {
+  inset: 34%;
+  border-radius: 50%;
+  background: rgba(233, 196, 106, 0.9);
+  box-shadow: 0 0 0 2px rgba(40, 25, 0, 0.55);
+}
+
+.sq.to::after {
+  inset: 4%;
+  border-radius: 22%;
+  border: 3px solid var(--gold);
+  box-shadow: 0 0 0 1px rgba(40, 25, 0, 0.6), inset 0 0 0 1px rgba(40, 25, 0, 0.45);
+}
+
+/* Ở bàn cờ tướng thì vòng ấy tròn, vì con quân tròn. */
+.grid.xiangqi .sq.to::after { border-radius: 50%; inset: 2%; }
+
+/* Nháy một nhịp lúc nó vừa tới, để mắt bị kéo về đúng chỗ. Chỉ một nhịp: một cái vòng nhấp nháy
+   mãi thì sau ba nước là thứ người ta thôi nhìn. */
+@keyframes just-moved {
+  0% { transform: scale(1.28); opacity: 0; }
+  60% { transform: scale(0.96); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.sq.to::after { animation: just-moved 0.34s cubic-bezier(0.2, 0.8, 0.35, 1); }
+
+.sq.picked.from::after,
+.sq.picked.to::after { opacity: 0.55; }
 
 /* Tướng đang bị chiếu. Đỏ, và nhấp nháy một nhịp: nó là một chuyện vừa xảy ra và phải nhìn thấy
    trước khi nghĩ tới nước đi. */
@@ -2684,6 +2757,17 @@ body {
 #board-bar .clock { margin-left: auto; font-variant-numeric: tabular-nums; }
 #board-bar .clock.low { color: var(--danger); font-weight: 700; }
 .in-check { color: var(--danger); font-weight: 700; }
+
+/* Nước vừa đi, nói ra bằng chữ. Ở bàn cờ tướng đây là **cách duy nhất** đọc được nhanh máy vừa
+   làm gì: ba mươi hai cái đồng tròn na ná nhau thì mắt không so nổi với trí nhớ sau mỗi lượt. */
+.last-move {
+  color: var(--gold);
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
 
 /* Chọn quân phong, và bảng kết quả. Cả hai **nổi trên bàn cờ**, không đẩy nó đi chỗ khác — cùng
    một luật với dòng nhắn, và ở đây còn rõ hơn: bàn cờ vừa dịch đi vài chục pixel là ngón tay

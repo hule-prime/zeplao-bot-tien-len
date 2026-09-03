@@ -490,6 +490,10 @@ function order(pos, list) {
     .map((one) => one.move);
 }
 
+/// Cờ tướng không có nước nào đổi bàn cờ ở một ô mà nó không nhắc tới — không nhập thành, không
+/// bắt qua đường. Nên nó rỗng, và nó **có mặt** để bên gọi không phải hỏi đang chơi trò nào.
+export const extrasOf = () => ({});
+
 export const MATE = 100_000;
 
 export const RULES = {

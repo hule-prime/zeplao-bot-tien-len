@@ -42,6 +42,8 @@ let pickedAt = '';
 /// Nước đang chờ chọn quân phong. Chỉ cờ vua có.
 let promoting = null;
 
+/// Ván nào, nước nào. Đổi một trong hai là mọi lựa chọn cũ hết nghĩa — quân ấy có khi không còn
+/// ở đó nữa. Cũng đổi khi **chính mình** vừa đi, vì `playMove` sửa `last` và `turn` ngay tại chỗ.
 const boardKey = () => (state ? `${state.gameId}:${(state.last || {}).to ?? 'x'}:${state.turn}` : '');
 
 /// Loại và màu, tách ra từ đúng con số bot gửi.
@@ -205,7 +207,8 @@ function drawGrid() {
     square.className = 'sq'
       + ((((at / files) | 0) + (at % files)) % 2 ? ' odd' : '')
       + (at === chosen ? ' picked' : '')
-      + (at === last.from || at === last.to ? ' last' : '')
+      + (at === last.from ? ' from' : '')
+      + (at === last.to ? ' to' : '')
       + (at === state.check ? ' check' : '');
     square.dataset.at = String(at);
 
@@ -232,6 +235,101 @@ function drawGrid() {
 
     grid.append(square);
   }
+
+  if (state.kind === 'xiangqi') drawXiangqiBoard(grid, files, ranks);
+}
+
+/**
+ * Hai cái cung và con sông.
+ *
+ * Không phải trang trí. **Cung** là chỗ tướng và sĩ không ra khỏi được — một luật, vẽ thành hình,
+ * và không vẽ thì người chơi phải nhớ nó. **Sông** là chỗ tốt qua rồi thì đi ngang được và tượng
+ * thì không qua — hai luật nữa. Một bàn cờ tướng thiếu hai thứ này là một cái lưới, và người ta
+ * nhận ra bàn cờ tướng bằng đúng chúng.
+ *
+ * Vẽ bằng một lớp phủ đặt theo `--cell` chứ không phải bằng viền của từng ô: quân đứng trên
+ * **giao điểm**, nên cung nằm giữa các ô chứ không trùng ô nào, và mọi cách vẽ bằng ô đều lệch
+ * đi nửa ô.
+ */
+function drawXiangqiBoard(grid, files, ranks) {
+  const cell = parseFloat(grid.style.getPropertyValue('--cell')) || 40;
+  const half = cell / 2;
+
+  // Cung: hình vuông hai ô, từ giao điểm cột 3 tới cột 5. Đen ở hàng 0–2, Đỏ ở hàng 7–9.
+  for (const top of [0, 7]) {
+    const palace = document.createElement('i');
+    palace.className = 'palace';
+    palace.style.left = `${3 * cell + half}px`;
+    palace.style.top = `${top * cell + half}px`;
+    palace.style.width = `${2 * cell}px`;
+    palace.style.height = `${2 * cell}px`;
+    grid.append(palace);
+  }
+
+  // Sông: dải giữa hàng 4 và hàng 5, và hai chữ ai cũng thấy trên bàn thật.
+  const river = document.createElement('i');
+  river.className = 'river';
+  river.style.top = `${4 * cell + half}px`;
+  river.style.height = `${cell}px`;
+  for (const word of ['楚河', '漢界']) {
+    const said = document.createElement('u');
+    said.textContent = word;
+    river.append(said);
+  }
+  grid.append(river);
+  void ranks;
+}
+
+/**
+ * Đi một nước: **vẽ ngay, gửi sau**.
+ *
+ * Cùng cái luật của chip bầu cua, và ở đây còn rõ hơn. Round-trip nhanh nhất cũng một phần mười
+ * giây, và một quân cờ đứng im trong ngần ấy sau khi mình đã chạm vào ô đích thì đọc ra là cái
+ * bàn không nghe thấy mình — người ta chạm lại lần nữa. Nước đi của **chính mình** phải hiện tức
+ * khắc; nước của đối phương thì đợi mạng là đúng, vì nó tới từ đằng kia thật.
+ *
+ * Trang không suy ra gì cả: nó diễn lại đúng cái bot vừa mô tả. Nước đi mang theo cả hệ quả của
+ * nó — con xe khi nhập thành, ô con tốt bị bắt qua đường — nên nhập thành cũng ra đúng nhập
+ * thành ngay lúc chạm, chứ không phải một con vua nhảy hai ô rồi một con xe đuổi theo sau một
+ * nhịp.
+ *
+ * Và sau khi đi thì **khoá bàn lại**: lượt chuyển sang bên kia, danh sách nước rỗng. Không phải
+ * để làm đẹp — nếu không thì trong một phần mười giây ấy người ta đi thêm được một nước nữa từ
+ * một bàn cờ đã cũ, mà bot sẽ từ chối, và cái bị mất là nước đầu tiên chứ không phải nước thừa.
+ */
+function playMove(move) {
+  const board = state.board;
+  const mine = state.me.seat;
+
+  const eaten = board[move.to];
+  if (eaten) (state.seats[mine].taken = state.seats[mine].taken || []).push(eaten);
+
+  board[move.to] = move.promo ? (move.promo | state.me.side) : board[move.from];
+  board[move.from] = 0;
+
+  // Hai hệ quả bot vừa nói ra. Trang không biết vì sao chúng có, và không cần biết.
+  if (move.rook !== undefined) {
+    board[move.rook.to] = board[move.rook.from];
+    board[move.rook.from] = 0;
+  }
+  if (move.ep !== undefined) {
+    const passed = board[move.ep];
+    if (passed) (state.seats[mine].taken = state.seats[mine].taken || []).push(passed);
+    board[move.ep] = 0;
+  }
+
+  state.last = { from: move.from, to: move.to };
+  state.turn = 1 - mine;
+  state.me.moves = [];
+  // Ô chiếu cũ là chuyện của thế cờ cũ. Bot sẽ nói ô mới ở lần đẩy tới; tới lúc ấy thì không ô
+  // nào sáng, và thà không nói gì còn hơn nói về một thế cờ không còn nữa.
+  state.check = null;
+
+  chosen = null;
+  promoting = null;
+  say('');
+  z.send({ move: { from: move.from, to: move.to, promo: move.promo || 0 } });
+  drawBoardGame();
 }
 
 /**
@@ -245,9 +343,7 @@ function tapSquare(at, isTarget) {
     const ways = movesFrom(chosen).filter((one) => one.to === at);
     // Nhiều nước cùng đi từ đây tới đó thì đó là phong quân — và phải hỏi, chứ không chọn hộ.
     if (ways.length > 1) { promoting = { from: chosen, to: at, ways }; render(); return; }
-    chosen = null;
-    z.send({ move: { from: ways[0].from, to: ways[0].to, promo: ways[0].promo || 0 } });
-    drawBoardGame();
+    playMove(ways[0]);
     return;
   }
 
@@ -286,15 +382,37 @@ function drawPromo() {
     const name = document.createElement('em');
     name.textContent = CHESS_NAME[one.promo];
     pick.append(man, name);
-    pick.onclick = () => {
-      promoting = null;
-      chosen = null;
-      z.send({ move: { from: one.from, to: one.to, promo: one.promo } });
-      render();
-    };
+    pick.onclick = () => playMove(one);
     row.append(pick);
   }
   box.append(row);
+}
+
+/// Tên quân, theo trò đang chơi.
+const nameOfPiece = (piece) =>
+  (state.kind === 'chess' ? CHESS_NAME : XIANGQI_NAME)[kindOfPiece(piece)] || '';
+
+/**
+ * Nước vừa đi, nói ra bằng chữ.
+ *
+ * Ở bàn cờ tướng thì ba mươi hai quân là ba mươi hai cái đồng tròn na ná nhau trên một mặt gỗ
+ * **không có ô vuông nào** — nên hai cái ô tô sáng, thứ đọc được ngay ở bàn cờ vua, gần như vô
+ * hình ở đây. "Máy vừa đi nước nào" trở thành một câu không trả lời được bằng mắt, và người ta
+ * phải so cả bàn cờ với trí nhớ sau mỗi lượt.
+ *
+ * Một dòng chữ giải quyết xong, và nó rẻ: bot đã biết sẵn quân nào đi và ăn được gì.
+ */
+function lastWords() {
+  const last = state.last;
+  if (!last || last.piece === undefined) return '';
+
+  const mine = state.me && last.seat === state.me.seat;
+  const who = mine ? 'Bạn' : (state.seats[last.seat] || {}).name || 'Đối thủ';
+  const moved = nameOfPiece(last.piece);
+  const ate = last.eaten ? nameOfPiece(last.eaten) : '';
+
+  if (last.promo) return `${who} phong ${nameOfPiece(last.promo)}`;
+  return ate ? `${who} đi ${moved}, ăn ${ate}` : `${who} đi ${moved}`;
 }
 
 /// Dòng dưới bàn: tới lượt ai, còn bao lâu, và ván này đang là gì.
@@ -309,6 +427,15 @@ function drawBoardBar() {
   const mine = state.me && state.turn === state.me.seat;
   who.textContent = mine ? 'Tới lượt bạn' : `Lượt ${state.turnName}`;
   bar.append(who);
+
+  // Nước vừa đi, ngay cạnh. Đây là câu người ta hỏi trước mọi câu khác khi tới lượt mình.
+  const said = lastWords();
+  if (said) {
+    const move = document.createElement('span');
+    move.className = 'last-move';
+    move.textContent = `· ${said}`;
+    bar.append(move);
+  }
 
   if (state.check !== null && state.check !== undefined) {
     const check = document.createElement('span');
