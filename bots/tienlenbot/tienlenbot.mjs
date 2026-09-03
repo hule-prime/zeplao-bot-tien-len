@@ -53,6 +53,16 @@ export * from './rules/tienlen.mjs';
 export * from './rules/phom.mjs';
 export * from './rules/baucua.mjs';
 export * from './rules/taixiu.mjs';
+
+// Hai bàn cờ **không** tái xuất bằng `export *`, và đó không phải chuyện gu.
+//
+// Cờ vua và cờ tướng đặt tên trùng nhau ở gần như mọi thứ: `moves`, `apply`, `status`, `start`,
+// `KING`, `BLACK`… Hai `export *` cùng mang một cái tên thì ESM **lặng lẽ bỏ cả hai** — không
+// lỗi, không cảnh báo, chỉ là một cái tên biến mất khỏi module. Nên chúng đi ra dưới dạng hai
+// cái tên riêng, và mọi chỗ dùng phải nói rõ đang nói về bàn cờ nào.
+export * as chess from './rules/chess.mjs';
+export * as xiangqi from './rules/xiangqi.mjs';
+export { BOARD_TURN_MS, BOARD_THINK_MS } from './rules/search.mjs';
 export * from './economy.mjs';
 
 import {
@@ -77,6 +87,9 @@ import {
   TX_ROLL_MS, TX_SHOW_MS, TX_BETTING_MS, TX_HISTORY, TX_CHIPS,
   txRoll, txBoardWorth, txStaked, txOutcome,
 } from './rules/taixiu.mjs';
+import * as chess from './rules/chess.mjs';
+import * as xiangqi from './rules/xiangqi.mjs';
+import { BOARD_TURN_MS, BOARD_THINK_MS } from './rules/search.mjs';
 import {
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, STAKES, MIN_STAKE, MAX_STAKE, asStake,
   ADS_MS, ADS_GOLD, ADS_PER_DAY, BROKE, payouts, dayIn, gold, settlement,
@@ -125,18 +138,37 @@ const BOWLS = {
 /// used to name bầu cua — which is how a second dice game turns into a second copy of the bot.
 const isDice = (game) => !!game && !!BOWLS[game.kind];
 
+// ---- two boards, one set of machinery -------------------------------------------------------
+//
+// Cờ vua và cờ tướng là cùng một cái bàn với hai bộ quân: hai người, đi luân phiên, một thế cờ
+// đi từ nước này sang nước kia, và ván dừng khi bên tới lượt không còn nước nào. Khác nhau ở
+// đúng những gì một bộ luật nói — quân đi thế nào, hết nước đi thì thua hay hoà — nên đó là
+// những gì bảng này giữ, và mọi thứ bên dưới hỏi nó thay vì hỏi đây là trò nào.
+//
+// Cùng lý do với `BOWLS`, và cùng bài học: thiếu một chỗ thì chỗ ấy không nổ ra ở đâu cả.
+const BOARDS = { chess, xiangqi };
+
+/// Whether this table is one of the two boards.
+const isBoard = (game) => !!game && !!BOARDS[game.kind];
+
+/// Tên trò, bằng tiếng người ta gọi. Một chỗ, vì nó đi vào lời chào, lời mời trong phòng, và
+/// danh sách bàn — ba chỗ mà lệch nhau thì đọc ra là ba trò khác nhau.
+export const GAME_NAMES = {
+  tienlen: 'tiến lên', phom: 'phỏm', baucua: 'bầu cua', taixiu: 'tài xỉu',
+  chess: 'cờ vua', xiangqi: 'cờ tướng',
+};
+
 // ---- what the room is told ----------------------------------------------------------------
 
 export const SAY = {
   greeting: (handle) => `Chào cả nhà. Gõ @${handle} để mở bàn: tiến lên miền nam, đánh phỏm, `
-    + 'bầu cua tôm cá, hoặc tài xỉu.',
+    + 'bầu cua tôm cá, tài xỉu, cờ vua hoặc cờ tướng.',
   // Which game, by name. A room can hold a table of each at once, and a line that only said
   // "mở bàn" would have somebody sitting down at phỏm expecting thirteen cards.
   opened: (who, size, stake, kind = 'tienlen') =>
-    `${who} mở bàn ${kind === 'phom' ? 'phỏm' : 'tiến lên'} ${size} người `
-    + `· cược ${gold(stake)} vàng.`,
+    `${who} mở bàn ${GAME_NAMES[kind] ?? kind} ${size} người · cược ${gold(stake)} vàng.`,
   started: (names, kind = 'tienlen') =>
-    `Bàn ${kind === 'phom' ? 'phỏm' : 'tiến lên'} đã bắt đầu: ${names.join(', ')}.`,
+    `Bàn ${GAME_NAMES[kind] ?? kind} đã bắt đầu: ${names.join(', ')}.`,
   noGame: 'Bàn này không còn nữa.',
   full: 'Bàn này đã đủ người — bạn vào xem nhé.',
   startedAlready: 'Bàn này đã vào ván rồi — bạn vào xem nhé.',
@@ -152,6 +184,8 @@ export const SAY = {
   tooPoor: (stake) => `Cần ${gold(stake)} vàng mới ngồi được bàn này.`,
   pinned: 'Lá này nằm trong phỏm đã ăn — không đánh đi được.',
   notNow: 'Nước này không đi được lúc này.',
+  notYourTurn: 'Chưa tới lượt bạn.',
+  resigned: (who) => `${who} xin thua.`,
 };
 
 /// The one button the room ever sees unprompted.
@@ -649,7 +683,7 @@ export async function run(token, { signal, api = API } = {}) {
   await call('setCommands', {
     commands: [{
       command: 'tienlen',
-      description: 'Mở bàn: tiến lên, phỏm, bầu cua hay tài xỉu',
+      description: 'Mở bàn: tiến lên, phỏm, bầu cua, tài xỉu, cờ vua, cờ tướng',
     }],
   });
 
@@ -1441,6 +1475,42 @@ export async function run(token, { signal, api = API } = {}) {
         return;
       }
 
+      // Một bàn cờ. Luôn hai người, nên câu "bàn mấy người" không tồn tại — cả cái luồng chọn
+      // rút xuống còn: trò nào, đấu với máy hay mở bàn, và cược bao nhiêu.
+      for (const kind of ['chess', 'xiangqi']) {
+        const asked = action[kind];
+        if (asked === undefined) continue;
+
+        if (asked === 'solo') {
+          if (goldOf(who.userId) < BOT_STAKE) {
+            return pushTo(screen, { says: SAY.tooPoor(BOT_STAKE) });
+          }
+          const table = newGame(screen, 2, BOT_STAKE, kind);
+          table.solo = true;
+          screen.gameId = table.id;
+          fillMachines(table);
+          await startGame(table);
+          await pushLobbies();
+          return;
+        }
+
+        const stake = asStake(action.stake);
+        if (goldOf(who.userId) < stake) return pushTo(screen, { says: SAY.tooPoor(stake) });
+
+        const table = newGame(screen, 2, stake, kind);
+        table.state = 'lobby';
+        screen.gameId = table.id;
+
+        const invitation = await send(
+          table.conversationId, SAY.opened(who.displayName, 2, stake, kind), JOIN(table.id),
+          null, [who.userId]);
+        table.invitationId = invitation?.id ?? null;
+
+        await pushTo(screen);
+        await pushLobbies();
+        return;
+      }
+
       // A table for either card game. Which one it is rides on the action, and everything after
       // that — the seats, the stake, the room's one line, the world list — is the same for both.
       const cards = action.phom !== undefined || action.phomSolo !== undefined ? 'phom' : 'tienlen';
@@ -1575,13 +1645,32 @@ export async function run(token, { signal, api = API } = {}) {
       }
 
       game.seats = game.seats.filter((one) => !one.away);
-      if (game.seats.length < 2) {
+      if (game.seats.length < 2 && !game.solo) {
         // One person and nobody to play. Ended rather than quietly filled with machines: they
         // asked for the table they had just played, and one tap opens a new one.
         await endGame(game, 'a rematch with nobody left to play');
         return;
       }
       await startGame(game);
+      return;
+    }
+
+    if (isBoard(game)) {
+      if (seat === null || game.state !== 'playing') return;
+      if (!action.move) return;
+
+      // Từ chối thì **nói ra**. Im lặng bỏ qua một nước là cái bàn đứng im mà không ai hiểu vì
+      // sao — trang đang mở có thể là bản cũ, hoặc vừa lỡ nhịp, và lúc ấy thứ duy nhất người ta
+      // thấy là một quân cờ không chịu nhúc nhích.
+      if (!applyBoardMove(game, seat, action.move)) {
+        await pushTo(screen, {
+          says: seatToPlay(game) === seat ? SAY.notNow : SAY.notYourTurn,
+        });
+        return;
+      }
+
+      await pushGame(game);
+      await boardBotTurn(game);
       return;
     }
 
@@ -1709,6 +1798,20 @@ export async function run(token, { signal, api = API } = {}) {
       return;
     }
 
+    // Rời một bàn cờ đang chạy là **xin thua**, và nó được ghi ra như thế.
+    //
+    // Cùng một luật với việc bỏ ván bài khi còn bài trên tay, và vì cùng một lý do: nếu không thì
+    // cách chắc chắn nhất để không bao giờ mất vàng là đứng dậy mỗi khi thế cờ xấu đi, và một cái
+    // bàn mà chuyện ấy làm được là một cái bàn thi xem ai bỏ nhanh hơn.
+    if (isBoard(game) && game.state === 'playing') {
+      game.left.add(seat);
+      finishBoard(game, { over: 'resign', winner: game.sides[1 - seat] });
+      screen.gameId = null;
+      await pushGame(game);
+      await pushTo(screen);
+      return;
+    }
+
     if (game.state === 'playing') {
       // Walking out with cards still in hand. That is coming last and being charged for it,
       // because otherwise the way never to lose gold is to leave whenever the cards are bad,
@@ -1782,6 +1885,17 @@ export async function run(token, { signal, api = API } = {}) {
     game.size = game.seats.length;
     // Everybody at the table is at it again. `away` is about the last hand.
     for (const one of game.seats) one.away = false;
+
+    if (isBoard(game)) {
+      dealBoard(game);
+      if (game.invitationId) {
+        await edit(game.invitationId,
+          SAY.started(game.seats.map((one) => one.displayName), game.kind), WATCH(game.id), []);
+      }
+      await pushGame(game);
+      await boardBotTurn(game);
+      return;
+    }
 
     if (game.kind === 'phom') {
       game.paidTo = new Map();
@@ -1882,6 +1996,171 @@ export async function run(token, { signal, api = API } = {}) {
 
     await pushGame(game);
     await maybeBotTurn(game);
+  }
+
+  // ---- the two boards -----------------------------------------------------------------------
+
+  /**
+   * Chia quân và bày bàn.
+   *
+   * **Bên nào đi trước là rút thăm.** Ở cờ, đi trước là một lợi thế đo được — nên để nó cho
+   * người mở bàn thì mọi bàn mở ra đều nghiêng về một phía, và cái nghiêng ấy đi thẳng vào sổ
+   * vàng. Rút thăm bằng `randomInt`, cùng nguồn ngẫu nhiên với bộ bài và ba con xúc xắc. Ván sau
+   * thì **đổi bên**, như mọi bàn cờ thật.
+   */
+  function dealBoard(game) {
+    const rules = BOARDS[game.kind];
+    game.pos = rules.start();
+    game.last = null;
+    game.over = null;
+    game.taken = [[], []];
+    game.sides = game.sides ? [game.sides[1], game.sides[0]] : (randomInt(2) ? [0, 8] : [8, 0]);
+
+    game.state = 'playing';
+    game.touched = Date.now();
+    game.paidTo = new Map();
+    game.paid = [];
+    game.counted = false;
+    game.left = new Set();
+    game.ready = new Set();
+    game.finished = [];
+  }
+
+  /// Ghế nào đang tới lượt. Không giữ riêng — nó **là** lượt của thế cờ, và một bản sao thứ hai
+  /// của cùng một sự thật là một bản sao có ngày lệch.
+  function seatToPlay(game) {
+    if (!game.pos || !game.sides) return null;
+    const seat = game.sides.indexOf(game.pos.turn);
+    return seat === -1 ? null : seat;
+  }
+
+  /**
+   * Đi một nước, nếu đó là một nước đi được.
+   *
+   * Kiểm bằng cách **sinh cả danh sách rồi tìm**, chứ không kiểm từng điều kiện. Chậm hơn một
+   * chút và đúng chắc chắn: mọi luật — cản chân mã, mắt tượng, tướng đối mặt, nhập thành đi qua
+   * ô bị chiếu — đã nằm trong `moves()` và có perft canh. Viết một phép kiểm thứ hai ở đây là
+   * viết luật cờ lần thứ hai, mà lần thứ hai bao giờ cũng thiếu một luật.
+   */
+  function applyBoardMove(game, seat, asked) {
+    if (game.state !== 'playing' || seatToPlay(game) !== seat) return false;
+    const rules = BOARDS[game.kind];
+
+    const from = Number(asked?.from);
+    const to = Number(asked?.to);
+    const promo = Number(asked?.promo) || 0;
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return false;
+
+    const move = rules.moves(game.pos)
+      .find((one) => one.from === from && one.to === to && (one.promo ?? 0) === promo);
+    if (!move) return false;
+
+    const eaten = game.pos.board[move.to];
+    if (eaten) game.taken[seat].push(eaten);
+
+    game.pos = rules.apply(game.pos, move);
+    game.last = { from: move.from, to: move.to };
+    game.touched = Date.now();
+
+    const over = rules.status(game.pos);
+    if (over) finishBoard(game, over);
+    return true;
+  }
+
+  /// Ván cờ dừng lại, và ai thắng.
+  function finishBoard(game, over) {
+    game.over = over;
+    game.state = 'over';
+    game.wonLast = over.winner === null || over.winner === undefined
+      ? []
+      : [game.seats[game.sides.indexOf(over.winner)]?.userId].filter(Boolean);
+    settleBoard(game);
+  }
+
+  /**
+   * Tiền của một ván cờ.
+   *
+   * Hai người, một cược: thắng ăn đúng một phần cược của người thua, hoà thì không ai mất gì.
+   * Không có thang bậc nào để chia — đó là cả chỗ khác nhau giữa một bàn cờ và một bàn bốn
+   * người, và là lý do nó không dùng `settlement`.
+   *
+   * Đấu với máy thì chơi với nhà cái ở mức cố định, y như một bàn tiến lên một người: máy là đồ
+   * đạc, nó không thu và không trả.
+   */
+  function settleBoard(game) {
+    const stake = game.solo ? BOT_STAKE : game.stake;
+    const won = game.over ? game.over.winner : undefined;
+    const owed = [];
+
+    for (let seat = 0; seat < game.seats.length; seat++) {
+      const one = game.seats[seat];
+      if (one.bot) continue;
+      const side = game.sides[seat];
+      const change = won === null || won === undefined ? 0 : (won === side ? stake : -stake);
+      owed.push({ userId: one.userId, displayName: one.displayName, change, seat });
+    }
+
+    for (const paying of owed) {
+      // Trả theo hiệu số, như mọi bàn khác: một ván có thể được kết thúc hai lần — bí, rồi người
+      // thua bấm rời bàn — và lần thứ hai không được trả thêm một lần nữa.
+      const already = game.paidTo.get(paying.userId) ?? 0;
+      let moving = paying.change - already;
+      if (moving) {
+        const row = rowFor(paying.userId, paying.displayName);
+        if (moving < 0) moving = -Math.min(-moving, row.gold);
+        row.gold += moving;
+        game.paidTo.set(paying.userId, already + moving);
+        paying.change = already + moving;
+        saveScores();
+      } else {
+        paying.change = already;
+      }
+    }
+
+    if (!game.counted) {
+      game.counted = true;
+      for (const paying of owed) {
+        const row = rowFor(paying.userId, paying.displayName);
+        row.games++;
+        if (paying.change > 0) row.first++;
+        if (paying.change < 0) row.last++;
+      }
+      saveScores();
+    }
+
+    game.paid = owed;
+  }
+
+  /**
+   * Máy đi một nước, rồi nước nữa nếu tới lượt nó lần nữa.
+   *
+   * Chậm lại một nhịp trước khi đi. Máy nghĩ xong trong vài chục mili giây, mà một quân tự nhảy
+   * đúng lúc tay mình vừa rời ra thì không đọc ra là có ai đang chơi — nó đọc ra là cái bàn tự
+   * sửa mình.
+   *
+   * Có khoá, vì nó `await` và vòng cập nhật không dừng lại trong lúc ấy. Hai cái cùng chạy là
+   * hai con máy cùng đi một bên.
+   */
+  async function boardBotTurn(game) {
+    if (game.thinking) return;
+    game.thinking = true;
+    try {
+      for (;;) {
+        if (game.state !== 'playing') return;
+        const seat = seatToPlay(game);
+        if (seat === null || !game.seats[seat]?.bot) return;
+
+        await wait(BOARD_THINK_MS);
+        if (game.state !== 'playing' || seatToPlay(game) !== seat) return;
+
+        const move = BOARDS[game.kind].choose(game.pos);
+        if (!move) return;
+        applyBoardMove(game, seat, move);
+        await pushGame(game);
+      }
+    } finally {
+      game.thinking = false;
+    }
   }
 
   // ---- the two bowls ------------------------------------------------------------------------
@@ -2382,6 +2661,69 @@ export async function run(token, { signal, api = API } = {}) {
     };
   }
 
+  /**
+   * Một bàn cờ, như cả hai người ngồi ở nó nhìn thấy.
+   *
+   * Cả thế cờ đi ra — không có gì bí mật ở một bàn cờ, hai người nhìn cùng một bàn. Đó là chỗ nó
+   * khác hẳn ba trò kia, và nó làm mọi thứ đơn giản hơn: không có push riêng nào mang bí mật, chỉ
+   * có **danh sách nước đi hợp lệ** gửi riêng cho người tới lượt.
+   *
+   * Danh sách ấy do bot sinh, không phải trang. Không phải để giấu — mà vì luật cờ đã viết một
+   * lần rồi, có perft canh, và một bản thứ hai trong trang là một bản sẽ lệch: nó sẽ quên cản
+   * chân mã, hoặc quên rằng nhập thành không đi qua ô bị chiếu. Trang chỉ vẽ chấm ở đúng những ô
+   * bot nói là đi được.
+   */
+  function boardState(game) {
+    const rules = BOARDS[game.kind];
+    const paid = game.paid ?? [];
+    const owed = new Map(paid.map((one) => [one.userId, one.change]));
+    const turn = seatToPlay(game);
+
+    return {
+      phase: game.state,
+      kind: game.kind,
+      gameId: game.id,
+      size: 2,
+      stake: game.stake,
+      solo: !!game.solo,
+      host: game.host.userId,
+      hostName: game.host.displayName,
+
+      // Bàn cờ, một mảng số. Trang đọc loại và màu ra từ chính con số ấy, cùng phép tách bit với
+      // bot — nên không có bảng tra nào phải giữ cho khớp ở hai nơi.
+      board: game.pos ? Array.from(game.pos.board) : null,
+      turn,
+      turnName: turn === null ? '' : game.seats[turn].displayName,
+      // Nước vừa đi, để trang tô hai ô ấy. Không có nó thì ở một bàn cờ đầy quân, "đối phương vừa
+      // đi gì" là một câu phải so bằng trí nhớ.
+      last: game.last ?? null,
+      // Ô của tướng đang bị chiếu. Bot nói ra chứ không để trang tự tìm, vì tìm được nó là đã
+      // viết lại nửa bộ luật.
+      check: game.pos && rules.inCheck(game.pos)
+        ? rules.kingAt(game.pos.board, game.pos.turn) : null,
+
+      seats: game.seats.map((one, seat) => ({
+        seat,
+        id: one.userId,
+        name: one.displayName,
+        bot: !!one.bot,
+        // Cầm bên nào. Cùng một con số với bit màu trong quân cờ, nên trang so thẳng được.
+        side: game.sides ? game.sides[seat] : null,
+        gone: game.left.has(seat),
+        // Quân đã ăn được, để xếp thành hàng cạnh tên. Ở cờ thì đây là cách đọc "ai đang hơn"
+        // nhanh nhất, và nó thay cho một bảng điểm mà cái khung này không có chỗ để đặt.
+        taken: game.taken ? game.taken[seat] : [],
+        won: owed.has(one.userId) ? owed.get(one.userId) : null,
+      })),
+
+      over: game.over ?? null,
+      turnEndsAt: game.state === 'playing' ? game.touched + BOARD_TURN_MS : null,
+      turnMs: BOARD_TURN_MS,
+      paid,
+      rematchAsked: [...game.ready],
+    };
+  }
+
   /// What somebody at a bầu cua table is looking at. Their own board is added by `pushTo`.
   ///
   /// Everybody's stakes are in it, and that is on purpose: at a pavement table the board is the
@@ -2518,6 +2860,7 @@ export async function run(token, { signal, api = API } = {}) {
 
   /// What somebody at a table is looking at. Their own hand is added by `pushTo`.
   function tableState(game) {
+    if (isBoard(game)) return boardState(game);
     if (game.kind === 'taixiu') return taixiuState(game);
     if (game.kind === 'baucua') return baucuaState(game);
     if (game.kind === 'phom') return phomState(game);
@@ -2655,6 +2998,24 @@ export async function run(token, { signal, api = API } = {}) {
       })()
       : null;
 
+    /**
+     * Ở một bàn cờ, cái gửi riêng không phải bí mật — nó là **danh sách nước đi hợp lệ**.
+     *
+     * Chỉ gửi cho người đang tới lượt: người kia không cần, và bốn mươi nước đi mỗi lần đẩy cho
+     * người không dùng tới là bốn mươi nước đi mỗi lần đẩy để không làm gì.
+     */
+    const board = game && isBoard(game) && seat !== null && game.pos
+      ? {
+        seat,
+        side: game.sides[seat],
+        moves: seatToPlay(game) === seat && game.state === 'playing'
+          ? BOARDS[game.kind].moves(game.pos).map((one) => ({
+            from: one.from, to: one.to, promo: one.promo ?? 0,
+          }))
+          : [],
+      }
+      : null;
+
     const mine = game && isDice(game) && seat !== null
       ? {
         seat,
@@ -2671,7 +3032,7 @@ export async function run(token, { signal, api = API } = {}) {
       to: screen.userId,
       state: {
         ...shared,
-        me: phom ?? mine ?? (seat === null ? null : {
+        me: phom ?? board ?? mine ?? (seat === null ? null : {
           seat,
           hand: game.hands ? game.hands[seat] : [],
           // Whether anything in this hand answers what is on the table. Worked out here rather
@@ -2744,6 +3105,36 @@ export async function run(token, { signal, api = API } = {}) {
         }
         // A board nobody has touched.
         if (idle > LOBBY_MS) await endGame(game, 'a bowl nobody was betting at');
+        continue;
+      }
+
+      // Một bàn cờ hết giờ. Máy đi hộ một nước — cùng lối với phỏm, và vì cùng lý do: một cái
+      // bàn đứng im không phân biệt được với một người đang nghĩ, mà bên kia thì đang đợi. Không
+      // xử thua: ở đây hết giờ là một nhịp lỡ, không phải một ván bỏ.
+      if (isBoard(game)) {
+        if (game.state === 'over' && idle > REMATCH_MS) {
+          await endGame(game, 'a finished board nobody sat back down at');
+          continue;
+        }
+        if (game.state === 'lobby' && idle > LOBBY_MS) {
+          await endGame(game, 'a board nobody sat at');
+          continue;
+        }
+        if (game.state !== 'playing') continue;
+
+        const waiting = seatToPlay(game);
+        if (waiting === null) continue;
+        if (game.seats[waiting].bot) {
+          if (idle > BOARD_THINK_MS * 4) await boardBotTurn(game);
+          continue;
+        }
+        if (idle <= BOARD_TURN_MS) continue;
+
+        game.touched = Date.now();
+        const move = BOARDS[game.kind].choose(game.pos, 2);
+        if (move) applyBoardMove(game, waiting, move);
+        await pushGame(game);
+        await boardBotTurn(game);
         continue;
       }
 

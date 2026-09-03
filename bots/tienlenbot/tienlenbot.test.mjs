@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 import {
   RANKS, SUITS, TWO, TURN_MS, REMATCH_MS, LOBBY_MS,
@@ -12,6 +12,7 @@ import {
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, MIN_STAKE, MAX_STAKE, STAKES, BROKE, ADS_GOLD, asStake,
   FACES, FACE_NAMES, DICE, ROLL_MS, SHOW_MS, CHIPS, roll, faceWorth, boardWorth, staked, tally,
   chance, HISTORY,
+  chess, xiangqi, BOARD_TURN_MS, BOARD_THINK_MS,
   TX_DOORS, TX_DOOR_NAMES, TX_PAYS, TX_SMALL, TX_BIG, TX_DICE, TX_HISTORY, TX_CHIPS,
   TX_ROLL_MS, TX_SHOW_MS, TX_BETTING_MS,
   txRoll, txTotal, isBao, txHits, txWon, doorWorth, txBoardWorth, txStaked, txOutcome,
@@ -1410,6 +1411,316 @@ test('không hai lần xóc nào mang cùng một tên', () => {
   const names = [];
   for (let i = 0; i < 4; i++) { names.push(round ?? 1); round = (round ?? 0) + 1; }
   assert.equal(new Set(names).size, 4, `bốn ván liền nhau gọi tên nhau là ${names.join(' ')}`);
+});
+
+// ---- hai luật của cái trang, đắt tiền cả hai --------------------------------------------------
+
+/// Mọi file kịch bản trong bundle, theo đúng thứ tự trang nạp chúng.
+function widgetScripts() {
+  const dir = new URL('./widget/', import.meta.url);
+  const html = readFileSync(new URL('index.html', dir), 'utf8');
+  return [...html.matchAll(/<script src="([\w.-]+)"><\/script>/g)]
+    .map((one) => one[1])
+    .filter((name) => name !== 'zeplao.js')
+    .map((name) => [name, readFileSync(new URL(name, dir), 'utf8')]);
+}
+
+test('không hai file nào của trang khai trùng một cái tên ở tầng ngoài cùng', () => {
+  // Mấy file này đều là **script thường**, không phải module. Nên `let` hay `function` ở tầng
+  // ngoài cùng của file nào cũng nằm chung đúng một phạm vi — và hai cái trùng tên không phải là
+  // một cái ghi đè cái kia, nó là `SyntaxError` ngay lúc nạp, tức là **cả trang không chạy một
+  // dòng nào**. Không phải một màn hỏng: một cái khung trắng.
+  //
+  // Bắt được lần đầu khi `board.js` khai một `let picked` cho ô cờ đang chọn, mà `tienlen.js` đã
+  // có một `picked` cho mấy lá bài đang nhấc lên. Sáu file thì mắt không canh nổi.
+  const owner = new Map();
+  const clash = [];
+  for (const [name, src] of widgetScripts()) {
+    const names = new Set();
+    for (const one of src.matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) names.add(one[1]);
+    for (const one of src.matchAll(/^function\s+([A-Za-z_$][\w$]*)/gm)) names.add(one[1]);
+    for (const found of names) {
+      if (owner.has(found)) clash.push(`${found}: ${owner.get(found)} và ${name}`);
+      else owner.set(found, name);
+    }
+  }
+  assert.deepEqual(clash, [], `trùng tên là cả trang không nạp được:\n  ${clash.join('\n  ')}`);
+});
+
+test('bàn cờ đo ra cỡ, chứ không nhờ CSS tự lo', () => {
+  // Bản đầu để CSS lo: `aspect-ratio` cộng `max-width: 100%` cộng `max-height: 100%`. Nghe thì
+  // đúng là "vừa khung mà giữ nguyên tỉ lệ". Nó không phải — không đặt chiều nào thì cái hộp lấy
+  // cỡ **nội dung**, mà nội dung là mấy ô rỗng, nên cả bàn cờ co lại còn bằng một con tem. Đặt
+  // một chiều bằng `100%` thì chiều ấy cứng, `max-*` bóp chiều kia, và tỉ lệ vỡ. Không có cách
+  // viết nào của ba thuộc tính ấy ra được cái mình muốn.
+  //
+  // Cái mình muốn là một phép chia: **ô vuông lớn nhất mà cả bàn còn lọt khung**.
+  const widget = readFileSync(new URL('./widget/board.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('./widget/style.css', import.meta.url), 'utf8');
+
+  assert.match(widget, /function sizeGrid\(grid, files, ranks\)/, 'phép đo đã dời đi');
+  const rule = css.slice(css.indexOf('\n.grid {'), css.indexOf('}', css.indexOf('\n.grid {')));
+  assert.ok(!rule.includes('aspect-ratio'),
+    'bàn cờ lại nhờ `aspect-ratio` lo cỡ — nó sẽ co về cỡ nội dung');
+  assert.match(rule, /--cell/, 'cỡ ô không còn là một biến đo được');
+
+  // Và chạy lại đúng phép chia ấy trên mọi khung nền tảng có thể đưa ra: ô phải là số nguyên, cả
+  // bàn phải lọt, và không được nhỏ tới mức không chạm nổi bằng ngón tay.
+  const sizeGrid = (w, h, files, ranks) =>
+    Math.max(12, Math.floor(Math.min(w / files, h / ranks)));
+
+  for (const [wide, tall] of [[374, 300], [374, 372], [374, 420], [320, 300], [300, 260]]) {
+    for (const [files, ranks] of [[8, 8], [9, 10]]) {
+      const cell = sizeGrid(wide, tall, files, ranks);
+      assert.ok(cell * files <= wide, `bàn ${files}×${ranks} tràn ngang ở khung ${wide}×${tall}`);
+      assert.ok(cell * ranks <= tall, `bàn ${files}×${ranks} tràn dọc ở khung ${wide}×${tall}`);
+      assert.ok(cell >= 26, `ô chỉ còn ${cell}px ở khung ${wide}×${tall} — ngón tay không chạm nổi`);
+      assert.equal(cell, Math.floor(cell), 'ô lẻ phần mười pixel thì đường kẻ răng cưa');
+    }
+  }
+});
+
+test('không hai phần tử nào của trang mang cùng một id', () => {
+  // Ra tới tay người chơi: "cờ vua vào còn không hiển thị gì".
+  //
+  // Màn cờ mang `id="board"`, mà chiếu bầu cua cũng đã mang `id="board"` từ trước.
+  // `getElementById` trả về **cái đầu tiên**, nên `render()` bật tắt nhầm phần tử: nó gỡ `hidden`
+  // khỏi cái chiếu bầu cua (đang nằm trong một màn khác, cũng đang ẩn) còn màn cờ thì cứ ẩn
+  // nguyên. Vào cờ vua ra một khung trắng.
+  //
+  // Và nó hỏng cả hai đầu: hai luật CSS cùng tên `#board` đè lên nhau, nên cái chiếu bầu cua
+  // nhận luôn kiểu dáng của màn cờ — sáu ô đặt cửa xếp thành một cột.
+  //
+  // Bộ smoke chạy trên một DOM giả **không bắt được**: nó dựng phần tử theo `Map` nên id trùng
+  // gộp lại làm một, đúng cái chỗ trình duyệt không gộp. Một cái lỗi mà chính đồ nghề của mình
+  // mù trước nó thì phải có luật viết ra.
+  const html = readFileSync(new URL('./widget/index.html', import.meta.url), 'utf8');
+
+  const seen = new Map();
+  for (const found of html.matchAll(/id="([\w-]+)"/g)) {
+    seen.set(found[1], (seen.get(found[1]) ?? 0) + 1);
+  }
+  const twice = [...seen].filter(([, many]) => many > 1);
+  assert.deepEqual(twice, [],
+    `id trùng thì getElementById chỉ thấy cái đầu: ${twice.map(([id]) => id).join(', ')}`);
+
+  // Và mọi id trang gọi tới phải có thật ở đâu đó. `$('boardgame')` gõ nhầm một chữ thì không
+  // nổ ra ngay — nó trả về `null`, rồi `.hidden = false` mới ném, ở một chỗ khác hẳn, và cái
+  // vết ném ấy chỉ vào chỗ đọc chứ không chỉ vào chỗ gõ sai.
+  //
+  // "Ở đâu đó" gồm cả id do chính JavaScript gắn vào (`el.id = '…'`) — màn quảng cáo dựng nút
+  // của nó rồi đọc lại bằng id, và đó là một cách dùng hợp lệ.
+  const scripts = widgetScripts().map(([, src]) => src).join('\n');
+  const made = new Set([...scripts.matchAll(/\.id = '([\w-]+)'/g)].map((one) => one[1]));
+  const missing = [...new Set([...scripts.matchAll(/\$\('([\w-]+)'\)/g)].map((one) => one[1]))]
+    .filter((id) => !seen.has(id) && !made.has(id));
+  assert.deepEqual(missing, [], `trang gọi tới id không tồn tại: ${missing.join(', ')}`);
+});
+
+test('thứ chỉ hiện đôi lúc thì không được nằm trong dòng chảy', () => {
+  // Luật này mua bằng một cái lỗi ra tới tay người chơi, và nó đáng được viết ra một lần cho
+  // xong: **`#says` từng là một hàng thật**. `min-height: 0` lúc rỗng, 26px lúc có chữ, có cả
+  // transition cho mượt. Nghe thì gọn.
+  //
+  // Nhưng cột của một trò xúc xắc chỉ có một hàng co được, nên hai mươi sáu pixel ấy đẩy cả cột
+  // qua ngưỡng và hàng chip tiền rơi đè lên nút "Hoàn tác". Tệ hơn cả việc vỡ là **nó tự lành**:
+  // lời nhắn hết hạn, hàng xẹp lại, bàn về như cũ. Một cái lỗi lúc bị lúc không, mà lúc không
+  // thì không ai đi tìm.
+  //
+  // Xô cả trang đi vài chục pixel để nói một câu rồi kéo về cũng là hai lần chuyển động ở đúng
+  // lúc ngón tay đang nhắm vào một cái nút — nên kể cả không vỡ thì nó vẫn sai.
+  const css = readFileSync(new URL('./widget/style.css', import.meta.url), 'utf8');
+
+  const floating = ['#says', '#promo', '#board-over', '#tx-below', '#tx-bat', '#plate', '#peek'];
+  for (const one of floating) {
+    // Khớp đúng dấu mở khối, không phải chỉ cái tên: `#tx-below .punters` đứng trước `#tx-below`
+    // trong file, và tìm theo tên thôi thì đọc nhầm luật rồi báo sai chỗ.
+    const at = [`\n${one} {`, `\n${one},`]
+      .map((opener) => css.indexOf(opener))
+      .filter((where) => where >= 0)
+      .sort((x, y) => x - y)[0];
+    assert.ok(at !== undefined, `${one} đã dời đi khỏi stylesheet`);
+    const rule = css.slice(at, css.indexOf('}', at));
+    assert.match(rule, /position: absolute/,
+      `${one} chỉ hiện đôi lúc mà lại nằm trong dòng chảy — nó sẽ xô cả trang mỗi lần hiện ra`);
+  }
+
+  // Và nó phải **tự đi**. Một lời từ chối còn nằm đó sau khi người ta đã sửa xong là một lời nói
+  // về một chuyện không còn nữa.
+  const widget = readFileSync(new URL('./widget/tienlen.js', import.meta.url), 'utf8');
+  assert.match(widget, /const SAYS_MS = [\d_]+;/, 'lời nhắn không còn tự hết hạn');
+  assert.match(widget, /saying = setTimeout\(/, 'không còn cái hẹn giờ dọn lời nhắn đi');
+});
+
+// ---- cờ vua và cờ tướng --------------------------------------------------------------------
+//
+// Luật cờ kiểm bằng **perft**, và không có cách nào khác đáng tin bằng.
+//
+// Perft là: từ một thế cờ, đếm hết số lá ở độ sâu n. Con số ấy là một con số **đã biết** — cả
+// thế giới đếm ra cùng một số cho cùng một thế — nên nó bắt được mọi luật thiếu, và bắt được cả
+// những luật thiếu mà không ai nghĩ tới. Một cái test viết tay chỉ hỏi được những gì người viết
+// nhớ ra để hỏi: quên luật "nhập thành không đi qua ô bị chiếu" thì cũng quên luôn cái test về
+// nó. Perft thì không quên gì cả, vì nó không hỏi luật nào — nó đếm.
+//
+// Bốn thế dưới đây là bốn thế chuẩn ai viết engine cờ vua cũng chạy, chọn đúng để chạm vào
+// những góc khuất: nhập thành hai bên, bắt tốt qua đường mở đường chiếu, phong quân bằng nước
+// ăn, và một thế rối để không quân nào không được hỏi tới.
+
+const PERFT = [
+  ['mở đầu', 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', [20, 400, 8902]],
+  ['kiwipete', 'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1', [48, 2039]],
+  ['tốt và ep', '8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1', [14, 191, 2812]],
+  ['phong quân', 'n1n5/PPPk4/8/8/8/8/4Kppp/5N1N b - - 0 1', [24, 496, 9483]],
+];
+
+const perft = (rules, pos, depth) => (depth === 0 ? 1
+  : rules.moves(pos).reduce((n, move) => n + perft(rules, rules.apply(pos, move, true), depth - 1), 0));
+
+test('cờ vua: perft khớp ở bốn thế chuẩn', () => {
+  for (const [name, fen, want] of PERFT) {
+    want.forEach((leaves, i) => {
+      assert.equal(perft(chess, chess.fromFen(fen), i + 1), leaves, `${name} ở độ sâu ${i + 1}`);
+    });
+  }
+});
+
+test('cờ tướng: perft khớp ở thế khai cuộc', () => {
+  // Bốn mươi bốn nước ở nước đầu, và con số ấy đã gói sẵn cả cản chân mã, mắt tượng, pháo chưa
+  // có ngòi thì không ăn được, và tướng không ra khỏi cung.
+  for (const [depth, leaves] of [[1, 44], [2, 1920], [3, 79666]]) {
+    assert.equal(perft(xiangqi, xiangqi.start(), depth), leaves, `độ sâu ${depth}`);
+  }
+});
+
+test('cờ tướng: mấy luật không có ở cờ vua', () => {
+  const at = xiangqi.squareAt;
+  // Tướng lệch cột, để cái thế dựng ra không tự dính luật đối mặt — mà chính cái bẫy ấy là bằng
+  // chứng luật đối mặt đang chạy.
+  const bare = (turn = xiangqi.RED) => {
+    const board = new Int8Array(90);
+    board[at(9, 3)] = xiangqi.KING | xiangqi.RED;
+    board[at(0, 5)] = xiangqi.KING | xiangqi.BLACK;
+    return { board, turn, half: 0, full: 1, seen: [] };
+  };
+  const from = (pos, square) => xiangqi.moves(pos).filter((one) => one.from === square);
+
+  // Tướng đối mặt: quân duy nhất chắn giữa hai tướng thì không được rời khỏi cột ấy.
+  const facing = bare();
+  facing.board[at(9, 3)] = 0;
+  facing.board[at(9, 4)] = xiangqi.KING | xiangqi.RED;
+  facing.board[at(0, 5)] = 0;
+  facing.board[at(0, 4)] = xiangqi.KING | xiangqi.BLACK;
+  facing.board[at(5, 4)] = xiangqi.CHARIOT | xiangqi.RED;
+  assert.equal(from(facing, at(5, 4)).filter((one) => xiangqi.colOf(one.to) !== 4).length, 0,
+    'quân chắn giữa hai tướng rời khỏi cột được — hai tướng sẽ nhìn thẳng nhau');
+  assert.ok(from(facing, at(5, 4)).length > 0, 'mà đi dọc cột ấy thì vẫn được');
+
+  // Pháo: đi như xe, ăn thì phải có đúng một ngòi.
+  const gun = bare();
+  gun.board[at(5, 0)] = xiangqi.CANNON | xiangqi.RED;
+  gun.board[at(3, 0)] = xiangqi.SOLDIER | xiangqi.RED;
+  gun.board[at(1, 0)] = xiangqi.CHARIOT | xiangqi.BLACK;
+  const shots = from(gun, at(5, 0)).map((one) => one.to);
+  assert.ok(shots.includes(at(1, 0)), 'pháo có ngòi mà không ăn được quân sau ngòi');
+  assert.ok(!shots.includes(at(3, 0)), 'pháo ăn mất chính cái ngòi của nó');
+  gun.board[at(3, 0)] = 0;
+  assert.ok(!from(gun, at(5, 0)).some((one) => one.to === at(1, 0)),
+    'pháo không ngòi mà vẫn ăn được');
+
+  // Tốt: chưa sang sông thì chỉ đi thẳng; sang rồi thì đi ngang được, và không bao giờ lùi.
+  const before = bare();
+  before.board[at(6, 2)] = xiangqi.SOLDIER | xiangqi.RED;
+  assert.equal(from(before, at(6, 2)).length, 1, 'tốt chưa sang sông phải chỉ có một nước');
+  const after = bare();
+  after.board[at(4, 2)] = xiangqi.SOLDIER | xiangqi.RED;
+  const wide = from(after, at(4, 2)).map((one) => one.to);
+  assert.equal(wide.length, 3, 'tốt sang sông phải đi được ba hướng');
+  assert.ok(!wide.includes(at(5, 2)), 'và không bao giờ lùi');
+
+  // Mã cản chân, tượng cản mắt — hai luật không có bản tương đương nào ở cờ vua.
+  const horse = bare();
+  horse.board[at(5, 4)] = xiangqi.HORSE | xiangqi.RED;
+  assert.equal(from(horse, at(5, 4)).length, 8, 'mã giữa bàn phải có tám nước');
+  horse.board[at(4, 4)] = xiangqi.SOLDIER | xiangqi.RED;
+  assert.equal(from(horse, at(5, 4)).length, 6, 'một quân cản chân phải chặn đúng hai nước');
+
+  const elephant = bare();
+  elephant.board[at(7, 2)] = xiangqi.ELEPHANT | xiangqi.RED;
+  assert.equal(from(elephant, at(7, 2)).length, 4);
+  elephant.board[at(6, 1)] = xiangqi.SOLDIER | xiangqi.RED;
+  assert.equal(from(elephant, at(7, 2)).length, 3, 'mắt tượng bị lấp phải chặn đúng một nước');
+  const river = bare();
+  river.board[at(5, 2)] = xiangqi.ELEPHANT | xiangqi.RED;
+  assert.equal(from(river, at(5, 2)).filter((one) => xiangqi.rowOf(one.to) < 5).length, 0,
+    'tượng sang được sông');
+});
+
+test('hết nước đi: cờ vua thì hoà, cờ tướng thì thua', () => {
+  // Chỗ khác nhau lớn nhất giữa hai trò, và là chỗ ai chuyển từ bên này sang bên kia cũng quên.
+  const stale = chess.fromFen('7k/5Q2/6K1/8/8/8/8/8 b - - 0 1');
+  assert.deepEqual(chess.moves(stale), [], 'thế này phải hết nước đi');
+  assert.equal(chess.status(stale).over, 'stalemate');
+  assert.equal(chess.status(stale).winner, null, 'cờ vua: hết nước mà không bị chiếu là hoà');
+
+  const at = xiangqi.squareAt;
+  const board = new Int8Array(90);
+  board[at(0, 4)] = xiangqi.KING | xiangqi.BLACK;
+  board[at(1, 3)] = xiangqi.CHARIOT | xiangqi.RED;
+  board[at(1, 5)] = xiangqi.CHARIOT | xiangqi.RED;
+  board[at(9, 4)] = xiangqi.KING | xiangqi.RED;
+  const dead = { board, turn: xiangqi.BLACK, half: 0, full: 1, seen: [] };
+  assert.deepEqual(xiangqi.moves(dead), [], 'thế này phải hết nước đi');
+  assert.equal(xiangqi.status(dead).winner, xiangqi.RED, 'cờ tướng: hết nước đi là thua');
+});
+
+test('cái máy thấy đường bí một nước, và đánh xong được một ván', () => {
+  const mate = chess.fromFen('6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1');
+  assert.equal(chess.nameOfMove(chess.choose(mate, 3)), 'a1a8', 'xe xuống hàng cuối là bí');
+
+  // Và một ván trọn vẹn phải **kết thúc**. Một con máy đi loanh quanh mãi không phải là một con
+  // máy yếu — nó là một cái bàn không bao giờ trả tiền cho ai.
+  for (const rules of [chess, xiangqi]) {
+    let pos = rules.start();
+    let moves = 0;
+    while (!rules.status(pos) && moves < 300) {
+      const move = rules.choose(pos, 2);
+      assert.ok(move, 'còn nước đi mà máy không chọn được nước nào');
+      pos = rules.apply(pos, move);
+      moves++;
+    }
+    assert.ok(rules.status(pos), `một ván chạy quá ${moves} nước mà chưa xong`);
+  }
+});
+
+test('một lượt máy nghĩ không được giữ con bot lại quá lâu', () => {
+  // Con bot chạy một luồng và phục vụ nhiều bàn. Một lượt nghĩ nửa giây là **mọi bàn khác đứng
+  // im** trong ngần ấy — bàn tiến lên không nhận được lá bài, cái bát tài xỉu trễ mất nhịp xóc.
+  // Nên trần là số nút chứ không phải đồng hồ, và đây là chỗ đo lại xem trần ấy còn đúng không.
+  for (const [name, rules] of [['cờ vua', chess], ['cờ tướng', xiangqi]]) {
+    let pos = rules.start();
+    const spent = [];
+    for (let i = 0; i < 12 && !rules.status(pos); i++) {
+      const began = Date.now();
+      const move = rules.choose(pos);
+      spent.push(Date.now() - began);
+      pos = rules.apply(pos, move);
+    }
+    spent.sort((a, b) => a - b);
+    // Trung vị, không phải lần tệ nhất: một lần đo lẻ bị bộ dọn rác chen ngang thì nói về cái
+    // máy chứ không nói về thuật toán. Lần tệ nhất để một khoảng rộng.
+    assert.ok(spent[spent.length >> 1] < 150,
+      `${name}: một lượt nghĩ trung vị ${spent[spent.length >> 1]}ms`);
+    assert.ok(spent[spent.length - 1] < 700, `${name}: lần tệ nhất ${spent[spent.length - 1]}ms`);
+  }
+});
+
+test('một bàn cờ chạy trên đồng hồ dài hơn một ván bài', () => {
+  // Ở tiến lên người ta đọc mười ba lá rồi đánh; ở đây người ta **nghĩ**.
+  assert.ok(BOARD_TURN_MS >= 30_000, `một nước cờ chỉ được ${BOARD_TURN_MS}ms để nghĩ`);
+  assert.ok(BOARD_TURN_MS > TURN_MS, 'một nước cờ phải rộng hơn một lượt bài');
+  // Và máy thì giả vờ chậm: nó tính xong trong mấy chục mili giây, mà một quân tự nhảy đúng lúc
+  // tay mình vừa rời ra thì không đọc ra là có ai đang chơi.
+  assert.ok(BOARD_THINK_MS >= 300, 'máy đi nhanh quá thì không đọc ra là có ai đang chơi');
 });
 
 // ---- thang chặt, đủ bảy bậc ------------------------------------------------------------------

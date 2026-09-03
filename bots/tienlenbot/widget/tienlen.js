@@ -828,6 +828,19 @@ function drawButtons() {
     return;
   }
 
+  // Một bàn cờ đang chạy. Một nút, và nó nói đúng cái nó làm: rời một bàn cờ giữa ván **là xin
+  // thua**, nên gọi nó là "thoát" rồi lặng lẽ trừ tiền là nói dối ngay trên mặt nút.
+  if (isBoardGame(state) && state.phase === 'playing') {
+    button('Xin thua', 'quiet', (el) => { el.disabled = true; z.send({ leave: true }); });
+    if (!state.me) return;
+    const note = document.createElement('div');
+    note.className = 'waiting-note';
+    note.textContent = state.turn === state.me.seat
+      ? 'Chạm quân rồi chạm ô' : `Đang đợi ${state.turnName}`;
+    $('buttons').append(note);
+    return;
+  }
+
   if (state.phase === 'lobby') {
     const host = state.host === z.viewer.id;
     const seated = state.seats.length;
@@ -951,7 +964,10 @@ function drawPhomButtons() {
 /// Out of cards, with the table still going. Their place is taken and their gold is paid — what
 /// is left is somebody else's game.
 function finishedHere() {
-  return !!state && state.phase === 'playing' && !!state.me && state.me.hand.length === 0;
+  // `me.hand` chỉ có ở hai trò bài. Một bàn cờ cũng có `me`, mà trong đó là danh sách nước đi —
+  // đọc `.hand.length` ở đấy là ném ngay, và một cú ném trong `render` là **cả trang đứng lại**.
+  return !!state && state.phase === 'playing' && !!state.me
+    && Array.isArray(state.me.hand) && state.me.hand.length === 0;
 }
 
 function pileShape() {
@@ -1480,6 +1496,16 @@ function drawMenu() {
       '', purse >= cheapest,
       (el) => { el.disabled = true; z.send({ taixiu: true }); }));
 
+    body.append(bigCard('♞', 'Cờ vua',
+      purse < cheapest ? `Cần ${gold(cheapest)} vàng` : 'Hai người · đấu máy hoặc mời',
+      '', purse >= cheapest,
+      () => { step = 'chess'; render(); }));
+
+    body.append(bigCard('車', 'Cờ tướng',
+      purse < cheapest ? `Cần ${gold(cheapest)} vàng` : 'Hai người · đấu máy hoặc mời',
+      '', purse >= cheapest,
+      () => { step = 'xiangqi'; render(); }));
+
     // Said here, on the screen somebody is actually looking at.
     //
     // Both ways in are dark when there is nothing to play with, and a dark card with no line
@@ -1542,6 +1568,50 @@ function drawMenu() {
     }
     body.append(stepNote('Ù ăn gấp đôi của từng người. Móm — hết ván không có phỏm nào — '
       + 'thua gấp đôi.'));
+    return;
+  }
+
+  // Hai bàn cờ hỏi cùng một câu, nên chúng dùng chung một màn. Luôn hai người, nên câu "bàn mấy
+  // người" không tồn tại — cả luồng chọn còn đúng hai bước.
+  if (step === 'chess' || step === 'xiangqi') {
+    const cờ = step === 'chess' ? 'Cờ vua' : 'Cờ tướng';
+    const noBot = purse < state.botStake;
+    const noTable = purse < cheapest;
+
+    body.append(stepHead(cờ, 'Chơi kiểu nào?', null));
+    body.append(pick('Đấu với máy',
+      noBot ? `cần ${gold(state.botStake)} vàng` : `cược ${gold(state.botStake)}`,
+      !noBot, () => z.send({ [step]: 'solo' })));
+    body.append(pick('Mời người chơi',
+      noTable ? `cần ${gold(cheapest)} vàng` : 'mời cả thế giới',
+      !noTable, () => { gameWanted = step; step = 'boardStake'; render(); }));
+
+    body.append(stepNote(noBot
+      ? `Bạn có ${gold(purse)} vàng. Bấm dấu + cạnh số vàng ở trên để xem quảng cáo nhận `
+        + `${gold(state.adsGold)} vàng.`
+      : step === 'chess'
+        ? 'Đủ luật: nhập thành, bắt tốt qua đường, phong quân. Thắng ăn trọn phần cược, hoà thì '
+          + 'không ai mất gì. Bên nào cầm quân trắng là rút thăm.'
+        : 'Đủ luật: cản chân mã, mắt tượng, pháo phải có ngòi, tướng không đối mặt. Hết nước đi '
+          + 'là thua. Thắng ăn trọn phần cược, hoà thì không ai mất gì.'));
+    return;
+  }
+
+  if (step === 'boardStake') {
+    const floor = state.minStake || 1000;
+    const roof = state.maxStake || purse;
+    const cờ = gameWanted === 'chess' ? 'Cờ vua' : 'Cờ tướng';
+
+    body.append(stepHead('Cược bao nhiêu?', `${cờ} · hai người`, gameWanted));
+    for (const one of bets) {
+      body.append(pick(`${gold(one)} vàng`,
+        purse < one ? 'thiếu vàng' : `thắng ăn ${gold(one)}`,
+        purse >= one, () => z.send({ [gameWanted]: 'open', stake: one })));
+    }
+    body.append(customStake(floor, roof));
+    body.append(stepNote(roof < floor
+      ? `Cần ít nhất ${gold(floor)} vàng mới mở được bàn.`
+      : `Tự nhập từ ${gold(floor)} đến ${gold(roof)} vàng. Bạn có ${gold(purse)}.`));
     return;
   }
 
@@ -1689,9 +1759,11 @@ function cornerChips() {
 }
 
 /// Opening a table, for whichever of the two games the menu walked in from.
-const openTable = (stake) => (gameWanted === 'phom'
-  ? { phom: seatsWanted, stake }
-  : { open: seatsWanted, stake });
+const openTable = (stake) => (gameWanted === 'chess' || gameWanted === 'xiangqi'
+  ? { [gameWanted]: 'open', stake }
+  : gameWanted === 'phom'
+    ? { phom: seatsWanted, stake }
+    : { open: seatsWanted, stake });
 
 /// A stake somebody types, with the one button that opens it.
 ///
@@ -1838,14 +1910,15 @@ function drawBrowse() {
     // apart is somebody sitting down to the wrong one.
     // Ba trò, ba dấu. Ngồi vào một bàn tiến lên trong khi định chơi phỏm là chuyện xảy ra
     // đúng một lần rồi người ta thôi bấm vào danh sách này.
-    const mark = { baucua: '⚄ ', phom: '🀄 ' }[room.kind] ?? '♠ ';
+    const mark = { baucua: '⚄ ', taixiu: '⚅ ', phom: '🀄 ', chess: '♞ ', xiangqi: '車 ' }[room.kind] ?? '♠ ';
     names.textContent = mark + room.names.join(', ');
     // The stake before the seats. It is the first thing worth knowing about a table and the
     // only one that can refuse you.
     const bet = document.createElement('span');
     bet.className = 'row-seats';
+    const said = { phom: 'phỏm', chess: 'cờ vua', xiangqi: 'cờ tướng' }[room.kind];
     bet.textContent = room.kind === 'baucua' ? 'bầu cua'
-      : room.kind === 'phom' ? `phỏm · ${gold(room.stake)}` : gold(room.stake);
+      : said ? `${said} · ${gold(room.stake)}` : gold(room.stake);
     const many = document.createElement('span');
     many.className = 'score';
     many.textContent = `${room.names.length}/${room.size}`;
@@ -2009,7 +2082,40 @@ function drawBar() {
   bar.append(clock);
 }
 
-function say(text) { $('says').textContent = text || ''; }
+/**
+ * Cái duy nhất trang này nói ra thành lời — và nó **nổi lên rồi tự đi**, không chiếm chỗ.
+ *
+ * Nó từng là một hàng thật trong cột: `min-height: 0` lúc rỗng, 26px lúc có chữ. Nghe thì gọn.
+ * Nhưng cột của một trò xúc xắc chỉ có đúng một hàng co được, nên hai mươi sáu pixel ấy đẩy cả
+ * cột qua ngưỡng và hàng chip tiền rơi đè lên nút ở đáy trang. Tệ hơn cả việc vỡ: nó **tự lành**
+ * — lời nhắn hết hạn, hàng xẹp lại, bàn về như cũ — nên nó là một cái lỗi lúc bị lúc không, và
+ * lúc không thì không ai đi tìm.
+ *
+ * Luật rút ra, và nó không riêng gì chỗ này: **một thứ chỉ hiện đôi lúc thì không được nằm
+ * trong dòng chảy.** Xô cả trang đi vài chục pixel để nói một câu rồi kéo về là làm hai lần
+ * chuyển động ở đúng lúc người ta đang nhắm vào một cái nút. Nên nó nổi lên trên, ngay trên hàng
+ * nút, không nhận ngón tay, và tự đi sau vài giây.
+ */
+const SAYS_MS = 3_600;
+let saying = null;
+
+function say(text) {
+  const box = $('says');
+  clearTimeout(saying);
+  saying = null;
+
+  box.textContent = text || '';
+  box.classList.toggle('up', !!text);
+  if (!text) return;
+
+  // Tự đi. Một lời từ chối còn nằm đó sau khi người ta đã sửa xong là một lời nói về một chuyện
+  // không còn nữa.
+  saying = setTimeout(() => {
+    saying = null;
+    box.textContent = '';
+    box.classList.remove('up');
+  }, SAYS_MS);
+}
 
 // ---- putting it all on the screen ------------------------------------------------------------------
 
@@ -2841,13 +2947,15 @@ function render() {
   // games do not lay out alike.
   const dice = !!(state && state.kind === 'baucua');
   const sicbo = !!(state && state.kind === 'taixiu');
+  const chessy = isBoardGame(state);
 
   $('ads').hidden = !watching;
   $('menu').hidden = watching || !deciding || screen !== 'play';
   $('browse').hidden = watching || !deciding || screen === 'play';
   $('baucua').hidden = watching || deciding || !dice;
   $('taixiu').hidden = watching || deciding || !sicbo;
-  $('table').hidden = watching || deciding || dice || sicbo;
+  $('boardgame').hidden = watching || deciding || !chessy;
+  $('table').hidden = watching || deciding || dice || sicbo || chessy;
   $('buttons').hidden = watching;
 
   if (watching) {
@@ -2866,6 +2974,14 @@ function render() {
     txIdle();
     if (screen === 'play') drawMenu(); else drawBrowse();
     drawButtons();
+    return;
+  }
+
+  if (chessy) {
+    txIdle();
+    drawBoardGame();
+    drawButtons();
+    if (state.phase === 'playing') { boardTick(); ticking = setInterval(boardTick, 250); }
     return;
   }
 

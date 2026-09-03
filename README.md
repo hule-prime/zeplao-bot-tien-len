@@ -1,7 +1,8 @@
 # tienlenbot
 
-A bot for [Cúc Cu](https://kuku.vn) with four games in it: **tiến lên miền nam**, **đánh
-phỏm**, **bầu cua tôm cá** and **tài xỉu**, played in a group chat for one purse of gold.
+A bot for [Cúc Cu](https://kuku.vn) with six games in it: **tiến lên miền nam**, **đánh phỏm**,
+**bầu cua tôm cá**, **tài xỉu**, **cờ vua** and **cờ tướng**, played in a group chat for one
+purse of gold.
 
 Live as **`@tienlenbot`** on `kuku.vn`, running as its own service beside `@carobot`. It is not
 published yet, so only its owner can add it to a conversation — see
@@ -92,6 +93,25 @@ one side and breaking to a new column when it turns over. That is the board ever
 in the country hangs, and it is the right one, because the thing worth reading in a two-sided
 game is the streak.
 
+**Cờ vua và cờ tướng**
+
+Two seats, a stake, and either a machine to play or a table on the world list for somebody to
+take the other chair. Full rules on both boards — castling, en passant and promotion on one;
+the horse's blocked leg, the elephant's eye, the cannon's screen and the two generals that may
+not face each other on the other. The rules are held down by **perft**: from a fixed position,
+count every leaf at a given depth and check it against the number the whole world agrees on.
+Four standard chess positions, and 44 / 1920 / 79666 for xiangqi's opening. A hand-written test
+only asks what its author remembered to ask; perft does not ask about any rule, it counts.
+
+The bot sends the **list of legal moves** to whoever is on the move, and the page draws a dot on
+each of those squares — nothing else. Not to hide anything, but because the rules are written
+once and a second copy in the page is a copy that will one day forget the horse's leg.
+
+You sit on your own side, whichever colour you drew — the board flips for black, because "my
+pieces move up the screen" is how a board is read. Which colour you draw is a coin, and the next
+game swaps. Leaving a game in progress is resigning, and the button says so. A move takes sixty
+seconds; run out and the machine plays one for you rather than the table stopping dead.
+
 Every hand is played for gold. Turning up is worth 10.000 a day, a table against the machines
 pays 2.000 for coming first and takes 2.000 off whoever comes last, and a table between people
 is played for whatever the room was opened at. The board is the world's, counted in gold.
@@ -171,6 +191,7 @@ A few things that are the way they are on purpose:
 | A table between people | Whatever the room was opened at — **1.000** to 1.000.000, and never more than the opener has. Three presets for the common answers, and a field for anything else |
 | More gold | A ten second advertisement, worth **4.000**, behind the `+` beside the purse at any balance. The daily cap is a thousand, which is a guard against a counting bug rather than a ration — ten seconds a time is the ration |
 | The board | Gold, the world's, everybody |
+| A board between two people | Winner takes one stake off the loser; a draw costs nobody anything. Against the machine it is the fixed **4.000**, played against the house |
 | What the two bowls keep | Bầu cua **7,87%** — 17/216, the number every pavement table plays. Tài xỉu **2,78%** on tài, xỉu, chẵn and lẻ, and **13,89%** on bão. Worked out exactly over all 216 throws rather than measured, and pinned by a test |
 
 **One person is one purse.** The ledger is keyed by the person and by nothing else — not the
@@ -222,8 +243,11 @@ because a widget is a file anybody can edit.
 | `bots/tienlenbot/rules/phom.mjs` | Phỏm: melds, the best way to cut a hand up, eating, sending, and its own machine |
 | `bots/tienlenbot/rules/baucua.mjs` | Six faces, three dice, and what a stake on one is worth |
 | `bots/tienlenbot/rules/taixiu.mjs` | Three dice, one total, five doors, and what bão does to four of them |
+| `bots/tienlenbot/rules/chess.mjs` | Cờ vua: every rule, and a FEN reader so the hard positions can be tested |
+| `bots/tienlenbot/rules/xiangqi.mjs` | Cờ tướng: the palace, the river, the horse's leg, and two generals that may not meet |
+| `bots/tienlenbot/rules/search.mjs` | The machine that thinks, for both boards — it knows nothing about pieces |
 | `bots/tienlenbot/economy.mjs` | Gold: what a day is worth, what a table costs, and how a hand is paid |
-| `bots/tienlenbot/widget/` | The page in the frame — `index.html`, `style.css`, `tienlen.js`, `taixiu.js`, `faces.js`, `sound.js` |
+| `bots/tienlenbot/widget/` | The page in the frame — `index.html`, `style.css`, `tienlen.js`, `taixiu.js`, `board.js`, `faces.js`, `pieces.js`, `sound.js` |
 | `bots/tienlenbot/tienlenbot.test.mjs` | Tiến lên, the dice and the money — a few thousand dealt hands, and both bowls over all 216 throws |
 | `bots/tienlenbot/phom.test.mjs` | Phỏm, the same way |
 | `bots/tienlenbot/tienlenbot.flow.test.mjs` | The bot, end to end against a stand-in for the app |

@@ -705,6 +705,145 @@ lúc nó cần được đọc.
 
 ---
 
+## 12. Cờ vua và cờ tướng
+
+Hai trò này **ngược với hai cái bát**. Bầu cua và tài xỉu tách ra làm hai màn vì chúng đặt cược
+vào hai thứ khác nhau — một cái vào con vật, một cái vào con số — nên chẳng có gì để chung ngoài
+cái khung. Hai bàn cờ thì ngược hẳn: khác nhau ở **mọi quân và mọi luật**, mà giống nhau ở **toàn
+bộ cách ngồi**. Hai người, đi luân phiên, một lưới ô, chạm quân rồi chạm ô.
+
+Nên chỗ chung nằm ở đúng những gì giống nhau, và chỗ riêng nằm gọn trong một bộ luật:
+
+| Chung | Riêng |
+| --- | --- |
+| `search.mjs` — cái máy nghĩ, không biết gì về quân cờ | `moves`, `apply`, `status`, `evaluate` |
+| `BOARDS` trong bot — bày quân, kiểm nước, đồng hồ, chia tiền | `dead`: hết nước đi thì thua hay hoà |
+| `board.js` — một màn, một lưới, một cách chạm | Ba con số: mấy cột, tỉ lệ khung, và vẽ quân thế nào |
+
+### Luật kiểm bằng perft, không kiểm bằng test viết tay
+
+Đây là quyết định đáng nói nhất của cả hai trò.
+
+Perft là: từ một thế cờ, đếm hết số lá ở độ sâu *n*. Con số ấy **đã biết** — cả thế giới đếm ra
+cùng một số cho cùng một thế — nên nó bắt được mọi luật thiếu, kể cả những luật thiếu mà người
+viết không nghĩ tới. Một cái test viết tay chỉ hỏi được những gì người viết nhớ ra để hỏi: quên
+luật "nhập thành không được đi qua ô đang bị chiếu" thì cũng quên luôn cái test về nó.
+
+Cờ vua chạy bốn thế chuẩn, chọn đúng để chạm vào các góc khuất: nhập thành hai bên, bắt tốt qua
+đường mở ra một đường chiếu ngang, phong quân bằng nước ăn, và một thế rối để không quân nào
+không được hỏi tới. Cờ tướng chạy thế khai cuộc tới độ sâu ba — **44 / 1920 / 79666** — và ba con
+số ấy đã gói sẵn cản chân mã, mắt tượng, pháo chưa có ngòi thì không ăn được, và tướng không ra
+khỏi cung.
+
+Nó bắt được thật. Trong lúc viết, mấy thế tôi dựng tay để thử luật đều ra "không có nước nào đi
+được", và tôi tưởng code sai. Code đúng: tôi đặt hai tướng cùng một cột nên chúng **đối mặt**, mà
+đối mặt thì mọi nước đều không hợp lệ. Cái test viết tay nói dối; perft thì không.
+
+### Chỗ hai trò khác nhau, và ai cũng quên đúng chỗ ấy
+
+**Hết nước đi: cờ vua thì hoà, cờ tướng thì thua.** Không phải một chi tiết phụ — nó đổi cả cách
+đánh tàn cuộc, và nó đổi cả cái máy nghĩ. Nên nó nằm trong bộ luật (`dead`) chứ không nằm trong
+`search.mjs`: cái máy không được biết mình đang chơi trò nào.
+
+Còn **luật cấm chiếu mãi** của cờ tướng thì ở đây rút gọn thành "lặp ba lần là hoà". Luật thật
+phân biệt ai gây ra thế lặp — chiếu mãi thì bên chiếu thua, đuổi mãi thì bên đuổi thua — và nó là
+một tập luật dài mà các giải còn ghi khác nhau. Rút gọn thì mất phần phạt bên chiếu mãi: ván ấy
+thành hoà thay vì thành thua cho họ. Ghi ra vì đó là một chỗ **cố ý** khác luật thi đấu, không
+phải một chỗ chưa làm.
+
+### Cái máy: trần là số nút, không phải đồng hồ
+
+Con bot chạy **một luồng** và phục vụ mọi bàn cùng lúc. Một lượt nghĩ nửa giây là bàn tiến lên
+bên cạnh không nhận được lá bài và cái bát tài xỉu trễ mất nhịp xóc. Nên cái máy đếm nút và dừng
+ở một con số định trước — và như thế thì cùng một thế cờ bao giờ cũng ra cùng một nước, dù chạy
+trên máy nào, tức là **kiểm được**.
+
+Trần của hai trò khác nhau gấp ba, và không phải vì cờ tướng dễ hơn: sinh nước đi ở đó đắt hơn
+nhiều, vì mỗi nước phải thử rồi hỏi *hai* câu — tướng có bị chiếu không, và hai tướng có nhìn
+nhau không — trên một bàn chín mươi ô. Có một cái test đo lại trung vị một lượt nghĩ sau mỗi lần
+sửa, vì đó là con số duy nhất nói được "cái máy này còn ở được trong con bot này không".
+
+Một chỗ đáng nói: `moves()` của cờ tướng **đi rồi lùi ngay trên bàn đang có**, không chép ra bàn
+mới. Viết kiểu ấy ở chỗ khác là một cái bẫy; ở đây nó là chỗ duy nhất đáng đổi sự thẳng thớm lấy
+tốc độ — bốn mươi lần cấp phát một mảng cho mỗi nút là chỗ tốn nhất của cả trò — và nó an toàn vì
+hai dòng lùi nằm ngay dưới hai dòng đi, không `await` và không nhánh nào ở giữa. Perft canh.
+
+### Trang không biết luật cờ, và đó là cả thiết kế
+
+Bot gửi sang **danh sách nước đi hợp lệ** của người đang tới lượt. Không phải để giấu — ở một bàn
+cờ chẳng có gì bí mật, hai người nhìn cùng một bàn — mà vì luật cờ đã viết một lần rồi, có perft
+canh, và một bản thứ hai trong trang là một bản sẽ lệch: nó sẽ quên cản chân mã, hoặc quên rằng
+nhập thành không đi qua ô bị chiếu. Trang chỉ vẽ chấm ở đúng những ô bot nói là đi được.
+
+Bot cũng nói luôn **ô nào đang bị chiếu** và **nước vừa đi là từ đâu tới đâu**, vì tìm ra hai thứ
+ấy là đã viết lại nửa bộ luật.
+
+### Mấy chỗ của giao diện
+
+- **Ai cũng ngồi ở phía mình.** Bàn cờ lật cho người cầm quân đen. Không phải chiều chuộng: ở cờ,
+  "quân của tôi tiến lên trên" là cách cả bàn cờ được đọc — hướng tốt đi, hướng đường chéo mở ra,
+  phía nào là hậu phương. Bắt người cầm quân đen đọc ngược là bắt họ dịch từng nước trong đầu.
+- **Bên nào cầm quân trắng là rút thăm**, và ván sau đổi bên. Đi trước là một lợi thế đo được;
+  để nó cho người mở bàn thì mọi bàn đều nghiêng về một phía, và cái nghiêng ấy đi thẳng vào sổ
+  vàng.
+- **Chạm rồi chạm, không kéo thả.** Trên một khung rộng ba trăm chín mươi pixel thì kéo một quân
+  bằng ngón tay là ngón tay che mất chỗ định thả.
+- **Chấm ở ô đi được, vòng ở ô ăn được.** Hai dấu khác nhau vì đó là hai nước khác nhau, và "ô
+  này có quân địch" là nửa quyết định.
+- **Phong quân thì hỏi**, không tự phong hậu. Phong xe hay phong mã là nước cứu ván trong đúng
+  những thế mà phong hậu thành hoà hoặc thành thua — hiếm, nhưng đó là cả cái thú của nó.
+- **Hàng quân đã ăn thay cho bảng điểm.** Cái khung này không có chỗ đặt một bảng điểm, mà ở cờ
+  thì "ai đang hơn" đọc bằng mắt từ đúng hàng ấy nhanh hơn đọc từ một con số.
+- **Quân cờ vua vẽ bằng SVG.** ♔♕♖♗♘♙ *có* trong Unicode, nhưng mỗi hệ máy vẽ một kiểu, và trên
+  nhiều máy Android thì ♟ rơi vào bảng emoji và ra một quân tốt màu tím. Quân cờ tướng thì là chữ
+  Hán trên đồng tròn — đó là bàn cờ tướng thật, và người chơi nhận ra quân bằng đúng những chữ
+  ấy.
+- **Rời bàn giữa ván là xin thua**, và cái nút ghi đúng như thế. Gọi nó là "thoát" rồi lặng lẽ
+  trừ tiền là nói dối ngay trên mặt nút.
+- **Hết giờ thì máy đi hộ một nước**, không xử thua. Cùng lối với phỏm và vì cùng lý do: một cái
+  bàn đứng im không phân biệt được với một người đang nghĩ, mà bên kia thì đang đợi.
+
+---
+
+## 13. Hai luật của cái trang, mua bằng lỗi
+
+Cả hai đều rút ra từ lỗi thật, cả hai đều có test canh, và cả hai đều không riêng gì chỗ chúng
+được tìm ra.
+
+### Thứ chỉ hiện đôi lúc thì không được nằm trong dòng chảy
+
+`#says` — một dòng để nói ra lời từ chối — từng là **một hàng thật** trong cột: `min-height: 0`
+lúc rỗng, 26px lúc có chữ, có cả transition cho mượt. Nghe thì gọn.
+
+Nhưng cột của một trò xúc xắc chỉ có **một** hàng co được, là cái bát. Hai mươi sáu pixel ấy đẩy
+cả cột qua ngưỡng, và hàng chip tiền — cái sát đáy nhất — rơi đè lên nút "Hoàn tác".
+
+Tệ hơn cả việc vỡ là **nó tự lành**: lời nhắn hết hạn, hàng xẹp lại, bàn về như cũ. Một cái lỗi
+lúc bị lúc không, mà lúc không thì không ai đi tìm. Người chơi báo về đúng bằng câu ấy — "lúc bị
+lúc không".
+
+Và kể cả khi không vỡ thì nó vẫn sai: xô cả trang đi vài chục pixel để nói một câu rồi kéo về là
+**hai lần chuyển động ở đúng lúc ngón tay đang nhắm vào một cái nút**.
+
+Nên: nổi lên trên, ngay trên hàng nút, `pointer-events: none`, và **tự đi sau ba giây sáu**. Một
+lời từ chối còn nằm đó sau khi người ta đã sửa xong là một lời nói về một chuyện không còn nữa.
+
+Cùng luật ấy áp cho mọi thứ chỉ hiện đôi lúc, và có test đi kiểm từng cái: `#promo` (chọn quân
+phong), `#board-over` (bảng kết quả ván cờ), `#tx-below`, `#tx-bat`, `#plate`, `#peek`. Tất cả
+đều `position: absolute`.
+
+### Không hai file nào của trang được khai trùng một cái tên
+
+Mấy file kịch bản của widget đều là **script thường**, không phải module. Nên `let` hay `function`
+ở tầng ngoài cùng của file nào cũng nằm chung đúng một phạm vi — và hai cái trùng tên không phải
+là một cái ghi đè cái kia. Nó là `SyntaxError` ngay lúc nạp, tức là **cả trang không chạy một
+dòng nào**: không phải một màn hỏng, mà một cái khung trắng.
+
+Bắt được lần đầu khi `board.js` khai một `let picked` cho ô cờ đang chọn, mà `tienlen.js` đã có
+một `picked` cho mấy lá bài đang nhấc lên. Sáu file thì mắt không canh nổi, nên có test canh.
+
+---
+
 ## Những chỗ từng sai
 
 Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nào báo lỗi.
@@ -758,6 +897,11 @@ Phần đáng đọc nhất. Tất cả đều **im lặng** — không cái nà
 | Cái đĩa căn giữa cái bát, không phải giữa ba con | Dưới ba con còn cái tổng và dòng chữ, nên cả khối bị đẩy lên chừng ba chục pixel. Cái đĩa vừa đúng cỡ để phủ ba con nhưng nằm lệch xuống ba chục pixel thì **hở nguyên mép trên**: kết quả ló ra trước khi có ai kéo. Đo đúng kích thước mà đặt sai chỗ vẫn là hở |
 | Bàn cược của trang không gắn với số ván | Cửa đặt ván sau cũng là `phase === 'betting'` ở cùng một bàn, nên câu hỏi "vẫn cái bàn ấy chứ" trả lời đúng và **chip của ván trước ở nguyên đó**. Không dừng ở chỗ vẽ: `myBets()` đọc từ chính cái chồng chip ấy, nên chạm thêm một cái là gửi đi cả bàn cược cũ kèm cú chạm mới, và bot đặt lại nó **bằng tiền thật**. Một lỗi vẽ hoá lỗi tiền vì hai bên cùng đọc một biến. Cả `me` mang sang từ push chung cũng phải bỏ bàn cược lại — bot đẩy hai lần một nước, và cái cũ sống lại đúng ở khe giữa hai cái đẩy ấy |
 | Nâng `min-height` của cái bát cho vừa cái đĩa tròn | Cột của một trò xúc xắc chỉ có **một** hàng co được, là cái bát. Nâng sàn của nó lên là lấy mất đúng cái tính co ấy: thiếu chỗ thì nó không nhường, cả cột tràn khỏi `#screen`, và thứ nằm ngay dưới `#screen` là hàng nút — hàng chip tiền rơi đè lên "Hoàn tác". Đúng một dòng `#says` là đủ đẩy nó qua ngưỡng, nên **lúc bị lúc không**, mà lúc không thì không ai đi tìm. Cỡ xúc xắc phải là hệ quả của chiều cao cái bát mới làm cho việc co lại vô hại |
+| `#says` là một hàng thật trong cột | 26px lúc có chữ, 0 lúc rỗng. Cột chỉ có một hàng co được, nên hai mươi sáu pixel ấy đẩy nó qua ngưỡng và hàng chip tiền đè lên nút "Hoàn tác". Và **nó tự lành** khi lời nhắn hết hạn — nên lúc bị lúc không, mà lúc không thì không ai đi tìm |
+| `board.js` khai `let picked`, mà `tienlen.js` đã có một cái | Script thường thì tầng ngoài cùng của mọi file chung một phạm vi. Không phải ghi đè: `SyntaxError` lúc nạp, tức là **cả trang trắng**. Sáu file thì mắt không canh nổi |
+| Dựng thế cờ tướng bằng tay để thử luật | Đặt hai tướng cùng một cột, nên chúng **đối mặt**, nên mọi nước đều không hợp lệ — và tôi đọc ra là code sai. Cái test viết tay nói dối; perft thì không, vì nó không hỏi luật nào cả, nó đếm |
+| Nhánh bàn cờ rơi vào `drawPile` thay vì `drawButtons` | Hai hàm cùng có `if (state.phase === 'lobby')`, và cái mỏ neo tôi dùng để chèn khớp cái đứng trước. Chạy vẫn chạy — chỉ là mấy cái nút mọc ra giữa bàn |
+| Màn cờ và chiếu bầu cua cùng `id="board"` | `getElementById` trả về **cái đầu tiên**, nên `render()` bật tắt nhầm phần tử: vào cờ vua ra một khung trắng. Hỏng cả hai đầu — hai luật CSS cùng tên đè nhau nên sáu ô đặt cửa bầu cua xếp thành một cột. Và bộ smoke **mù trước nó**: nó dựng DOM giả bằng `Map` nên id trùng gộp lại làm một, đúng cái chỗ trình duyệt không gộp |
 | Nước đi bị từ chối trong im lặng | Bàn đứng im, không ai hiểu vì sao. Một cái test ngồi chờ hai lăm giây rồi mới đỏ, và máy đo ở chỗ chờ là thứ chỉ ra được |
 
 Và một luật rút ra từ carobot, có test canh:

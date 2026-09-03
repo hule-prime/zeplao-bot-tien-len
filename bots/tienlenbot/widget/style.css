@@ -959,23 +959,37 @@ body {
 /* One line, under everything, for whatever the table has just refused or announced. A widget
    cannot open a dialog — `alert` and `confirm` are blocked by the sandbox and hand back at
    once — so this is the only place anything can be said. */
+/* Nổi lên trên, ngay trên hàng nút, rồi tự đi.
+ *
+ * Nó từng là một hàng thật trong cột — `min-height` 0 lúc rỗng, 26px lúc có chữ — và hai mươi sáu
+ * pixel ấy đủ đẩy cả cột qua ngưỡng: hàng chip tiền rơi đè lên nút "Hoàn tác". Tệ hơn cả việc vỡ
+ * là nó **tự lành**, nên nó là một cái lỗi lúc bị lúc không.
+ *
+ * Luật, và không riêng gì chỗ này: **một thứ chỉ hiện đôi lúc thì không được nằm trong dòng
+ * chảy.** `position: absolute` là cả cách giữ luật ấy. `pointer-events: none` vì nó nổi trên
+ * đúng chỗ ngón tay đang nhắm tới. */
 #says {
-  flex: none;
-  min-height: 0;
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 58px;
+  z-index: 20;
+  pointer-events: none;
   text-align: center;
   font-size: 11.5px;
   font-weight: 650;
   color: var(--gold);
-  transition: min-height 0.15s;
+  padding: 7px 12px;
+  border-radius: 11px;
+  background: rgba(38, 30, 12, 0.94);
+  border: 1px solid rgba(233, 196, 106, 0.4);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform: translateY(7px);
+  transition: opacity 0.18s ease-out, transform 0.18s ease-out;
 }
 
-#says:not(:empty) {
-  min-height: 26px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: rgba(233, 196, 106, 0.13);
-  border: 1px solid rgba(233, 196, 106, 0.28);
-}
+#says.up { opacity: 1; transform: none; }
 
 /* ---- how it ended ------------------------------------------------------------------------------ */
 
@@ -2428,3 +2442,288 @@ body {
 }
 
 .tx-bao-note { color: var(--gold); font-weight: 800; }
+
+/* ---- cờ vua và cờ tướng ---------------------------------------------------------------------
+
+   Một màn cho cả hai, và cái quyết định là hình dạng: hai bàn cờ khác nhau ở mọi quân và mọi
+   luật, mà giống nhau ở toàn bộ cách ngồi. Khác nhau nằm ở đúng ba chỗ — số cột, tỉ lệ khung, và
+   cái nền — nên ba chỗ ấy là biến, còn lại là chung. */
+
+#boardgame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Hai người, một hàng mỗi người, kẹp lấy bàn cờ. Đối thủ ở trên, mình ở dưới — đúng chỗ họ ngồi
+   nếu đây là một cái bàn thật. */
+.board-seat {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 2px;
+  overflow: hidden;
+}
+
+.side-dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #fffdf7, #ddd4bf);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+}
+
+.side-dot.dark { background: linear-gradient(160deg, #4a4a52, #23232a); }
+
+.board-name {
+  font-size: 12.5px;
+  font-weight: 750;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.board-turn {
+  flex: none;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--rim);
+  background: var(--gold);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+/* Quân đã ăn được. Ở cờ thì đây là cách đọc "ai đang hơn" nhanh nhất, và nó thay cho một bảng
+   điểm mà cái khung này không có chỗ để đặt. Một hàng, cuộn ngang nếu dài. */
+.taken {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.mini-piece {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f2ece0;
+  opacity: 0.75;
+}
+
+.mini-piece.dark { color: #8f95a3; }
+.mini-piece .piece-art { width: 15px; height: 15px; display: block; }
+
+.board-gold { margin-left: auto; font-size: 11.5px; font-weight: 800; }
+.board-gold.up { color: #7fe0a8; }
+.board-gold.down { color: var(--danger); }
+
+/* Bàn cờ giữ đúng tỉ lệ của nó và lấy hết chỗ còn lại, không hơn. Cờ vua vuông, cờ tướng chín
+   trên mười — `aspect-ratio` cộng hai cái trần là cả phép co: khung rộng thì chiều rộng chặn,
+   khung cao thì chiều cao chặn, và không có dòng JavaScript nào phải đo. */
+#board-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+/* Cỡ do `sizeGrid` đo và đặt: ô vuông lớn nhất mà cả bàn còn lọt khung. Mấy con số ở đây chỉ là
+   khung đầu — nhưng phải là một khung đầu đứng được, phòng khi dòng JavaScript ấy không chạy.
+
+   Từng thử để CSS tự lo bằng `aspect-ratio` + hai cái `max-*`. Không được: không đặt chiều nào
+   thì hộp lấy cỡ **nội dung** — mấy ô rỗng — nên cả bàn cờ co lại bằng một con tem. */
+.grid {
+  --cell: 40px;
+  width: calc(var(--cell) * var(--files, 8));
+  height: calc(var(--cell) * var(--ranks, 8));
+  display: grid;
+  grid-template-columns: repeat(var(--files, 8), var(--cell));
+  grid-template-rows: repeat(var(--ranks, 8), var(--cell));
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+.sq {
+  position: relative;
+  border: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sq:disabled { cursor: default; }
+
+/* Cờ vua: ô sáng ô tối, như mọi bàn cờ vua. */
+.grid.chess .sq { background: #e9dcc0; }
+.grid.chess .sq.odd { background: #9a7b56; }
+
+/* Cờ tướng: quân đứng trên **giao điểm**, không phải trong ô — nên nền là gỗ liền và các đường
+   kẻ được vẽ bằng gradient chạy qua giữa mỗi ô. Vẽ ô vuông ở đây là vẽ sai cái bàn. */
+.grid.xiangqi {
+  background:
+    linear-gradient(to right, rgba(60, 35, 12, 0.55) 1px, transparent 1px)
+      calc(var(--cell) / 2) calc(var(--cell) / 2) / var(--cell) var(--cell),
+    linear-gradient(to bottom, rgba(60, 35, 12, 0.55) 1px, transparent 1px)
+      calc(var(--cell) / 2) calc(var(--cell) / 2) / var(--cell) var(--cell),
+    linear-gradient(160deg, #e5c98f, #d8b678);
+}
+
+.grid.xiangqi .sq { background: none; }
+
+/* Con sông: hai hàng giữa, để trống và sáng hơn. Nó là thứ chia đôi bàn cờ, và tốt qua nó thì đổi
+   cách đi — nên nó phải nhìn thấy được, không phải nhớ. */
+.grid.xiangqi .sq:nth-child(n + 37):nth-child(-n + 45) {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.02));
+}
+
+.grid.xiangqi .sq:nth-child(n + 46):nth-child(-n + 54) {
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.02));
+}
+
+/* Quân cờ. Cùng một ô chứa cho cả hai trò: cờ vua bỏ hình vào, cờ tướng bỏ chữ vào. */
+.man {
+  width: 86%;
+  height: 86%;
+  display: grid;
+  place-items: center;
+  color: #fffdf6;
+  pointer-events: none;
+}
+
+.man.dark { color: #2b2b33; }
+
+.grid.chess .man .piece-art {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+}
+
+/* Nét viền quanh quân cờ vua. Không có nó thì quân trắng biến mất trên ô sáng và quân đen biến
+   mất trên ô tối — hai lần một ván, đúng ở chỗ đang phải nhìn. */
+.grid.chess .man .piece-art { stroke: rgba(0, 0, 0, 0.8); stroke-width: 1.1; }
+.grid.chess .man.dark .piece-art { stroke: rgba(255, 255, 255, 0.55); }
+
+/* Cờ tướng: quân là một đồng tròn có chữ, như mọi bàn cờ tướng. */
+.grid.xiangqi .man {
+  width: 84%;
+  height: 84%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #fff8e6, #e7d3a6 62%, #c9ad76);
+  border: 1.5px solid #8a6a3a;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), inset 0 -2px 3px rgba(120, 90, 45, 0.3);
+  color: #b3241d;
+  font-weight: 800;
+  font-size: calc(var(--cell) * 0.5);
+  line-height: 1;
+}
+
+.grid.xiangqi .man.dark { color: #1e2430; }
+
+/* Ô đi được, và ô ăn được. Hai dấu khác nhau vì đó là hai nước khác nhau, và ở cờ thì "ô này có
+   quân địch" là nửa quyết định. */
+.dot,
+.take {
+  position: absolute;
+  pointer-events: none;
+}
+
+.dot {
+  width: 26%;
+  height: 26%;
+  border-radius: 50%;
+  background: rgba(20, 90, 50, 0.55);
+}
+
+.take {
+  inset: 6%;
+  border-radius: 50%;
+  border: 3px solid rgba(180, 40, 30, 0.6);
+}
+
+.sq.picked { box-shadow: inset 0 0 0 3px var(--gold); }
+.sq.last { box-shadow: inset 0 0 0 2px rgba(233, 196, 106, 0.5); }
+.sq.picked.last { box-shadow: inset 0 0 0 3px var(--gold); }
+
+/* Tướng đang bị chiếu. Đỏ, và nhấp nháy một nhịp: nó là một chuyện vừa xảy ra và phải nhìn thấy
+   trước khi nghĩ tới nước đi. */
+@keyframes checked {
+  0%, 100% { box-shadow: inset 0 0 0 3px rgba(200, 40, 30, 0.95); }
+  50% { box-shadow: inset 0 0 0 6px rgba(200, 40, 30, 0.45); }
+}
+
+.sq.check { animation: checked 1s ease-in-out infinite; }
+
+/* Dòng dưới bàn: tới lượt ai, còn bao lâu. */
+#board-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+  padding: 0 3px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+#board-bar .who { color: var(--ink); font-weight: 700; }
+#board-bar .clock { margin-left: auto; font-variant-numeric: tabular-nums; }
+#board-bar .clock.low { color: var(--danger); font-weight: 700; }
+.in-check { color: var(--danger); font-weight: 700; }
+
+/* Chọn quân phong, và bảng kết quả. Cả hai **nổi trên bàn cờ**, không đẩy nó đi chỗ khác — cùng
+   một luật với dòng nhắn, và ở đây còn rõ hơn: bàn cờ vừa dịch đi vài chục pixel là ngón tay
+   đang nhắm vào một ô khác. */
+#promo,
+#board-over {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(5, 26, 18, 0.86);
+  border-radius: 8px;
+}
+
+.promo-title,
+.over-why { font-size: 12px; font-weight: 700; color: var(--muted); }
+
+.promo-row { display: flex; gap: 8px; }
+
+.promo-one {
+  width: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px 6px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.promo-one .man { width: 34px; height: 34px; }
+.promo-one em { font-style: normal; font-size: 10px; color: var(--muted); }
+
+#board-over h2 { margin: 0; font-size: 22px; font-weight: 800; color: var(--gold); }
+#board-over h2.last { color: var(--danger); }

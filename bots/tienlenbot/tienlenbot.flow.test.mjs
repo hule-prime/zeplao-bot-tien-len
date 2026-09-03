@@ -32,19 +32,29 @@ process.env.TIENLEN_SHOW_MS = '120';
 // trước nó: lúc máy bận, hai lệnh đặt cược mất hơn bảy trăm mili giây để tới nơi và cửa đã
 // đóng — test đỏ vì cái đồng hồ trong test, không phải vì cái sòng. Một cái test đỏ ngẫu nhiên
 // còn tệ hơn không có test, vì lần đỏ nào cũng bị đọc thành "chạy lại phát nữa xem".
-process.env.TIENLEN_BETTING_MS = '2500';
+//
+// Hai nghìn rưỡi thì vừa đủ cho tới khi có thêm hai bàn cờ. Cái máy nghĩ cờ đốt CPU thật — perft
+// tới độ sâu ba, rồi mấy ván máy-đấu-máy — và bộ test chạy trước bộ này, nên tiến trình vẫn còn
+// nóng lúc cửa đặt mở ra. Chạy riêng thì bốn mươi mốt trên bốn mươi mốt, ba lần liền; chạy sau
+// bộ kia thì thỉnh thoảng đỏ. **Cùng một cái bẫy, lần thứ hai**, nên lần này nới rộng hẳn ra
+// thay vì nới vừa đủ.
+process.env.TIENLEN_BETTING_MS = '4000';
 // Cái bát tài xỉu chạy theo đồng hồ riêng của nó, nên phải rút ngắn cả ba chặng ở đây nữa. Nặn ở
 // đó dài hơn bầu cua vì có hai chặng — mở nắp rồi lật ba con — nên khoảng hiện kết quả để rộng
 // hơn một chút, đúng theo tỷ lệ thật.
 process.env.TIENLEN_TX_ROLL_MS = '60';
 process.env.TIENLEN_TX_SHOW_MS = '160';
-process.env.TIENLEN_TX_BETTING_MS = '2500';
+process.env.TIENLEN_TX_BETTING_MS = '4000';
+// Bàn cờ: máy nghĩ nhanh lại, và đồng hồ một nước ngắn lại cho vừa một cái test.
+process.env.TIENLEN_BOARD_THINK_MS = '1';
+process.env.TIENLEN_BOARD_TURN_MS = '2000';
 process.env.TIENLEN_SCORES = LEDGER;
 
 const {
   run, chooseMove, shapeOf, nameOf, STARTING_GOLD, DAILY_GOLD, BOT_STAKE, ADS_GOLD, dayIn,
   FACES, boardWorth, staked, phomChoose, phomDiscard,
   TX_DOORS, TX_PAYS, txBoardWorth, txStaked, txWon,
+  chess, xiangqi, BOT_STAKE: BOARD_BOT_STAKE,
 } = await import('./tienlenbot.mjs');
 
 const nap = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -1575,3 +1585,164 @@ test('losing to the machines does not hand you the lead again', async () => {
     }
   }, { c1: ['u1'] });
 });
+
+// ---- cờ vua và cờ tướng -------------------------------------------------------------------------
+//
+// **Ở cuối file, và đó là một quyết định.**
+//
+// Mấy cái test này cho cái máy nghĩ cờ chạy thật, và nó đốt CPU — không nhiều, nhưng đủ. Mấy trò
+// xúc xắc phía trên thì chạy theo **đồng hồ thật**: cửa đặt mở hai mươi lăm giây ở đời thật và
+// bốn giây trong test, và nếu tiến trình đang bận thì lệnh đặt cược tới nơi sau khi cửa đã đóng.
+// Lúc ấy test đỏ vì cái đồng hồ trong test, không phải vì cái sòng.
+//
+// Đó là lần thứ ba cùng một cái bẫy trong file này. Hai lần trước chữa bằng cách nới con số ra;
+// lần này chữa bằng cách **xếp lại thứ tự** — cái gì đốt CPU thì chạy sau cái gì đo thời gian.
+// Nới con số là mua thêm chỗ thở; xếp lại thứ tự là bỏ hẳn chỗ hai bên đụng nhau.
+
+/// Nước đầu tiên trong danh sách bot gửi về. Cái test không cần đánh hay — nó cần đánh **đúng**.
+const aMove = (app, id) => (app.mine(id).me.moves || [])[0];
+
+test('a board table against the machine deals, moves, and pays', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    const purse = app.mine('u1').gold;
+
+    app.does('u1', { chess: 'solo' });
+    await app.until(() => (app.mine('u1') ?? {}).kind === 'chess', 'a chess board');
+
+    const table = app.mine('u1');
+    assert.equal(table.phase, 'playing');
+    assert.equal(table.solo, true);
+    assert.equal(table.board.length, 64, 'sixty-four squares');
+    assert.equal(table.seats.length, 2, 'two seats, always');
+    assert.ok(table.seats.some((one) => one.bot), 'and one of them is the machine');
+    // Hai bên phải là hai màu khác nhau, và rút thăm — không phải bao giờ cũng người mở cầm
+    // trắng, vì đi trước là một lợi thế đo được và nó đi thẳng vào sổ vàng.
+    assert.notEqual(table.seats[0].side, table.seats[1].side, 'the two seats hold two colours');
+
+    // Chờ tới lượt mình — có thể máy cầm trắng và đi trước.
+    await app.until(() => (app.mine('u1').me?.moves ?? []).length > 0, 'a turn of my own');
+    const mine = app.mine('u1');
+    assert.equal(mine.turn, mine.me.seat, 'the move list only goes to whoever is on the move');
+    assert.equal(mine.me.side, mine.seats[mine.me.seat].side);
+
+    const before = [...mine.board];
+    const move = aMove(app, 'u1');
+    app.does('u1', { move });
+    await app.until(() => app.mine('u1').board[move.to] !== before[move.to], 'the piece to move');
+
+    // Và máy trả lời, không cần ai giục.
+    await app.until(() => (app.mine('u1').me?.moves ?? []).length > 0
+      && app.mine('u1').last && app.mine('u1').turn === app.mine('u1').me.seat,
+    'the machine to answer');
+    assert.equal(app.mine('u1').gold, purse, 'nothing moves in the purse until the game ends');
+  });
+});
+
+test('two people at one board, in two different groups', async () => {
+  ledger();
+  await withBot(async (app) => {
+    for (const [id, room] of [['u1', 'c1'], ['u2', 'c2']]) {
+      app.asks(id, room);
+      await app.until(() => app.mine(id), `a screen for ${id}`);
+      await claim(app, id);
+    }
+    const purse = { u1: app.mine('u1').gold, u2: app.mine('u2').gold };
+
+    app.does('u1', { xiangqi: 'open', stake: 5000 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'lobby', 'a board waiting');
+    assert.equal(app.mine('u1').kind, 'xiangqi');
+    assert.equal(app.mine('u1').size, 2, 'a board is always for two');
+
+    await app.until(() => (app.mine('u2').rooms ?? []).length === 1, "the board on u2's list");
+    assert.equal(app.mine('u2').rooms[0].kind, 'xiangqi');
+    app.does('u2', { join: app.mine('u2').rooms[0].id });
+
+    // Đủ hai người là bàn tự bày quân — không ai phải bấm gì.
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'the board to set itself up');
+    assert.equal(app.mine('u1').board.length, 90, 'nine by ten');
+    assert.equal(app.mine('u1').gameId, app.mine('u2').gameId, 'one board, not two');
+
+    // Bên nào đi thì bên ấy có danh sách nước; bên kia không có nước nào.
+    const first = ['u1', 'u2'].find((id) => (app.mine(id).me?.moves ?? []).length > 0);
+    const other = first === 'u1' ? 'u2' : 'u1';
+    assert.ok(first, 'somebody is on the move');
+    assert.deepEqual(app.mine(other).me.moves, [], 'and only one of them is');
+
+    // Người chưa tới lượt đi thử một nước của người kia: phải bị từ chối và được nói ra.
+    app.does(other, { move: app.mine(first).me.moves[0] });
+    await app.until(() => !!app.mine(other).says, 'a refusal in words');
+    assert.match(app.mine(other).says, /lượt/, 'and it says what is wrong');
+
+    const before = [...app.mine(first).board];
+    const move = app.mine(first).me.moves[0];
+    app.does(first, { move });
+    await app.until(() => app.mine(first).board[move.to] !== before[move.to], 'the piece to move');
+    await app.until(() => (app.mine(other).me?.moves ?? []).length > 0, 'the turn to come round');
+
+    // Rời bàn giữa ván là xin thua, và tiền đi ngay.
+    app.does(other, { leave: true });
+    await app.until(() => (app.mine(first) ?? {}).phase === 'over', 'the game to end');
+    assert.equal(app.mine(first).over.over, 'resign');
+    assert.equal(app.mine(first).gold, purse[first] + 5000, 'the one still sitting there is paid');
+    assert.equal(app.mine(other).gold, purse[other] - 5000, 'and the one who left pays');
+  }, { c1: ['u1'], c2: ['u2'] });
+});
+
+test('nothing a widget can send moves a piece the rules will not move', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { chess: 'solo' });
+    await app.until(() => (app.mine('u1').me?.moves ?? []).length > 0, 'a turn of my own');
+
+    const table = app.mine('u1');
+    const before = [...table.board];
+
+    // Một quân của **đối phương**, tìm theo màu thật chứ không đoán theo ô: bên nào cầm quân gì
+    // là rút thăm, nên một ô viết cứng có ngày là quân của chính mình và nước ấy hợp lệ.
+    const theirs = before.findIndex((piece) => piece !== 0 && (piece & 8) !== table.me.side);
+    assert.notEqual(theirs, -1, 'the other side has pieces');
+
+    const nonsense = [
+      { from: 0, to: 63 },                   // xe từ góc này sang góc kia, xuyên qua tất cả
+      { from: -1, to: 5 },
+      { from: 'e2', to: 'e4' },              // ô gọi bằng tên, không phải bằng số
+      { from: 12, to: 12 },                  // đứng yên
+      { from: theirs, to: theirs + 8 },      // quân của đối phương
+      { from: 4, to: 6, promo: 5 },          // nhập thành khi đường chưa trống
+      {},
+    ];
+    for (const bad of nonsense) app.does('u1', { move: bad });
+
+    await nap(400);
+    assert.deepEqual([...app.mine('u1').board], before,
+      `one of ${JSON.stringify(nonsense)} moved a piece`);
+    assert.ok(app.mine('u1').says, 'and a refused move says so rather than sitting there silent');
+  });
+});
+
+test('a board hurried along by nobody still finishes', async () => {
+  // Hết giờ thì máy đi hộ một nước — cùng lối với phỏm. Một cái bàn đứng im không phân biệt được
+  // với một người đang nghĩ, mà bên kia thì đang đợi.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { chess: 'solo' });
+    await app.until(() => (app.mine('u1').me?.moves ?? []).length > 0, 'a turn of my own');
+
+    const was = app.mine('u1').last;
+    // Không ai bấm gì cả. Đồng hồ một nước là hai giây trong test này.
+    await app.until(() => app.mine('u1').last && app.mine('u1').last !== was,
+      'the clock to move a piece');
+    assert.ok(app.mine('u1').board, 'and the board is still a board');
+  });
+});
+

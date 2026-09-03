@@ -89,6 +89,23 @@
       <div id="tx-chips"></div>
     </section>
 
+    <!-- Cờ vua và cờ tướng, một màn cho cả hai. Ngược với hai cái bát: hai bàn cờ khác nhau ở
+         mọi quân và mọi luật, mà giống nhau ở **toàn bộ cách ngồi** — hai người, đi luân phiên,
+         một lưới ô, chạm quân rồi chạm ô. Cái khác nhau nằm gọn trong ba con số và một hàm vẽ
+         quân, nên nó là một màn với ba con số. -->
+    <section id="boardgame" hidden>
+      <div id="board-them" class="board-seat"></div>
+      <div id="board-wrap">
+        <div id="grid" class="grid"></div>
+        <!-- Tốt tới hàng cuối. Nổi lên trên bàn chứ không đẩy bàn đi chỗ khác — cùng một luật
+             với dòng nhắn: thứ chỉ hiện đôi lúc thì không nằm trong dòng chảy. -->
+        <div id="promo" hidden></div>
+        <div id="board-over" hidden></div>
+      </div>
+      <div id="board-me" class="board-seat"></div>
+      <div id="board-bar"></div>
+    </section>
+
     <!-- A table: the felt, whoever is round it, and whatever is in the middle. The same element
          through the waiting and the playing, because a seat filling up while you look at it is
          what makes a waiting room feel like a table rather than a form. -->
@@ -135,5 +152,7 @@
      chỉ đọc trong lòng hàm, tức là lúc đã chạy rồi. Ngược lại thì `z.ready()` ở cuối `tienlen.js`
      có thể gọi vào một hàm chưa tồn tại. -->
 <script src="sound.js"></script>
+<script src="pieces.js"></script>
+<script src="board.js"></script>
 <script src="taixiu.js"></script>
 <script src="tienlen.js"></script>
