@@ -947,6 +947,39 @@ test('and a row that already had one is left alone', async () => {
 
 // ---- bầu cua tôm cá ------------------------------------------------------------------------
 
+/**
+ * Đặt cược cho mấy người **trong cùng một ván**, và làm lại nếu cửa đóng mất giữa chừng.
+ *
+ * Cái test muốn nói là "hai người cùng đặt lên một cú xóc". Viết thẳng — gửi hai lệnh rồi chờ cả
+ * hai thấy tiền trên bàn — thì **không nói được điều ấy**: hai cái state đọc ra là hai cái state
+ * độc lập, nên có lúc cái của u1 còn là ván cũ mà cái của u2 đã sang ván mới, và phép chờ vẫn
+ * xanh. Rồi cú xóc chỉ trả cho một người, và test đỏ ở một dòng cách đó mười dòng.
+ *
+ * Đây là lần thứ tư cùng một họ lỗi trong file này: một phép chờ chạy đua với một cái đồng hồ
+ * thật. Ba lần trước chữa bằng nới con số và xếp lại thứ tự — cả hai đều là mua thêm chỗ thở.
+ * Lần này bỏ hẳn cuộc đua: **hỏi thẳng số ván**, và nếu ván trôi mất thì đặt lại ở ván sau.
+ */
+async function stakeTogether(app, table, sum) {
+  for (let go = 0; go < 8; go++) {
+    await app.until(() => table.every(([id]) => (app.mine(id) ?? {}).phase === 'betting'),
+      'cửa đặt mở cho mọi người');
+
+    const round = app.mine(table[0][0]).round;
+    for (const [id, bets] of table) app.does(id, { bets, at: ++clocks[id] });
+
+    // Chờ tới khi hoặc mọi người đã có đủ tiền trên bàn, hoặc ván đã trôi qua — cái nào tới
+    // trước cũng được, vì cả hai đều là câu trả lời.
+    await app.until(() => table.every(([id, bets]) => {
+      const now = app.mine(id) ?? {};
+      return now.round !== round || (now.me && sum(now.me.bets ?? {}) === sum(bets));
+    }), 'chip xuống bàn');
+
+    if (table.every(([id]) => (app.mine(id) ?? {}).round === round)) return round;
+  }
+  assert.fail('không đặt nổi cược của cả hai người trong cùng một ván');
+  return 0;
+}
+
 /// Waits for the throw to come round to a board anybody can bet on again.
 const betting = (app, id) => app.until(
   () => (app.mine(id) ?? {}).phase === 'betting', `${id} a board to bet on`);
@@ -979,12 +1012,11 @@ test('one sòng for the whole world, already throwing when anybody walks in', as
     await app.until(() => (app.mine('u1').seats ?? []).length === 2, 'both of them in the chairs');
 
     const purse = { u1: app.mine('u1').gold, u2: app.mine('u2').gold };
-    app.does('u1', { bets: { cua: 1000 }, at: ++clocks.u1 });
-    app.does('u2', { bets: { ga: 5000 }, at: ++clocks.u2 });
-    await app.until(() => app.mine('u1').me.staked === 1000 && app.mine('u2').me.staked === 5000,
-      'the board to fill up');
+    await stakeTogether(app, [['u1', { cua: 1000 }], ['u2', { ga: 5000 }]], staked);
 
     const bets = { u1: { ...app.mine('u1').me.bets }, u2: { ...app.mine('u2').me.bets } };
+    assert.equal(staked(bets.u1), 1000);
+    assert.equal(staked(bets.u2), 5000);
 
     // Nobody presses anything. The clock throws it.
     await app.until(() => (app.mine('u1') ?? {}).phase === 'paid', 'the clock to throw');
@@ -1159,13 +1191,12 @@ test('one tài xỉu table for the whole world, and no other kind of it', async 
       'the world table turned up on the list of tables to join');
 
     const purse = { u1: app.mine('u1').gold, u2: app.mine('u2').gold };
-    app.does('u1', { bets: { tai: 1000, chan: 1000 }, at: ++clocks.u1 });
-    app.does('u2', { bets: { xiu: 5000 }, at: ++clocks.u2 });
-    await app.until(() => app.mine('u1').me.staked === 2000 && app.mine('u2').me.staked === 5000,
-      'the board to fill up');
+    await stakeTogether(app,
+      [['u1', { tai: 1000, chan: 1000 }], ['u2', { xiu: 5000 }]], txStaked);
 
     const bets = { u1: { ...app.mine('u1').me.bets }, u2: { ...app.mine('u2').me.bets } };
     assert.equal(txStaked(bets.u1), 2000);
+    assert.equal(txStaked(bets.u2), 5000);
 
     // Nobody presses anything. The clock throws it.
     await app.until(() => (app.mine('u1') ?? {}).phase === 'paid', 'the clock to throw');
