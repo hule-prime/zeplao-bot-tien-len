@@ -54,19 +54,30 @@ sẽ cho người ta thấy một tay bài và không có cái bàn nào.
 | Quà mỗi ngày | **+30.000**, và phải **bấm nhận**. Ngày sang lúc nửa đêm giờ Việt Nam, không phải giờ UTC |
 | Bàn với máy | Cược cố định **10.000**, bất kể bàn mở ở mức nào. Nhất +10.000, nhì +5.000, ba −5.000, bét −10.000. Một ván cờ với máy cũng đúng con số ấy: thắng ăn, thua mất, hoà thì giữ nguyên |
 | Bàn giữa người | Cược của phòng — **tự đặt**, từ 1.000 tới 1.000.000 và không quá số tiền người mở đang có. Ba mức có sẵn chỉ là câu trả lời thường gặp |
-| Kiếm thêm | Quảng cáo 10 giây, **10.000** — đúng một ván với máy — tối đa 1.000 lần/ngày (con số đó chặn lỗi đếm chứ không phải để hạn chế — mười giây một lần đã là hạn chế rồi). Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** |
+| Kiếm thêm | Quảng cáo 10 giây, **8.000** — tối đa 1.000 lần/ngày (con số đó chặn lỗi đếm chứ không phải để hạn chế — mười giây một lần đã là hạn chế rồi). Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** |
 | Bảng xếp hạng | Vàng, của cả thế giới |
 
 **Quảng cáo trả đúng một ván với máy**, không phải trùng hợp: nó tồn tại để đưa người hết tiền
 quay lại bàn, mà một quảng cáo xem xong vẫn không đủ ngồi thứ rẻ nhất trên màn hình là một quảng
-cáo không làm được việc của nó. Nên `ADS_GOLD` **được định nghĩa bằng `BOT_STAKE`**, không phải
-bằng một con số riêng: nâng cược máy lên là nó tự theo, và không có cách nào để hai con số ấy rời
-nhau ra mà không ai để ý.
+cáo không làm được việc của nó.
 
-Ba con số ấy vừa nâng: vốn ban đầu 20.000 → **50.000**, quà mỗi ngày 10.000 → **30.000**, cược
-với máy 4.000 → **10.000**. Cái cuối kéo theo quảng cáo và kéo theo cả ngưỡng "hết vàng"
-(`BROKE`), vì cả hai đều định nghĩa bằng nó. Vốn ban đầu thì **không** hồi tố: `rowFor` phát nó
-đúng một lần rồi ghi `started` xuống sổ, nên ai đang chơi vẫn giữ số của mình.
+`ADS_GOLD` từng **được định nghĩa bằng `BOT_STAKE`** đúng vì câu ấy. Lý lẽ đó đứng vững khi ván
+với máy là bốn nghìn; khi nó lên mười thì không: mười nghìn cho mười giây là một phần ba quà cả
+ngày, mà quà cả ngày mới là thứ người ta được mong quay lại vì nó. Nên giờ nó là con số riêng —
+**8.000** — và cái phải nói ra là nó **mua được gì**: tám bàn rẻ nhất trên danh sách, một buổi
+dài ở hai cái bát, hay gần trọn một ván với máy. Hai lần xem là về lại bàn máy, còn dư.
+
+Sàn của nó là `MIN_STAKE`, không phải `BOT_STAKE`: dưới một cược nhỏ nhất thì thật sự không còn
+bàn nào ngồi được. Có test canh cả sàn lẫn trần — đường về bàn máy dài hơn bốn lần xem thì là một
+việc vặt, không phải một đường về.
+
+`BROKE` cũng đổi nghĩa theo, và đổi cho **đúng**: nó là chỗ không còn bàn nào ngồi được, tức là
+`MIN_STAKE`. Để nó bằng `BOT_STAKE` thì gọi người còn ngồi được bốn bàn trên danh sách và cả hai
+cái bát là "hết vàng", mà chữ ấy lúc đó thôi nói được điều gì.
+
+Ba con số vừa nâng: vốn ban đầu 20.000 → **50.000**, quà mỗi ngày 10.000 → **30.000**, cược với
+máy 4.000 → **10.000**. Vốn ban đầu **không hồi tố**: `rowFor` phát nó đúng một lần rồi ghi
+`started` xuống sổ, nên ai đang chơi vẫn giữ số của mình.
 
 **Tổng bằng không.** `payouts` cho nhất ăn một cược của bét, và ở bàn đủ bốn thì nhì ăn nửa cược
 của ba; giữa bàn lẻ thì hoà. Vàng chuyển giữa những người ngồi đó và không sinh ra từ đâu — đây là

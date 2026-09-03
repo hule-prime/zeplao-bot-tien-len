@@ -432,11 +432,11 @@ test('the numbers asked for: nhất takes a whole stake off a table of machines'
   assert.equal(at(2).change, -BOT_STAKE / 2, 'ba pays it');
   assert.equal(at(3).change, -BOT_STAKE, 'bét pays a whole one');
   assert.equal(BOT_STAKE, 10_000, 'and the number itself');
-  // Và mấy con số định nghĩa **bằng** nó phải đi theo. Quảng cáo mua đúng một ván với máy, và
-  // ngưỡng "hết vàng" là chỗ không còn bàn nào ngồi được — cả hai đều là `BOT_STAKE` viết lại,
-  // nên nâng cược máy mà chúng không theo là hai con số vừa rời nhau ra mà không ai nói gì.
-  assert.equal(ADS_GOLD, BOT_STAKE, 'quảng cáo phải mua đúng một ván với máy');
-  assert.equal(BROKE, BOT_STAKE, 'ngưỡng hết vàng phải là chỗ không ngồi được bàn nào');
+  // Quảng cáo **không còn** định nghĩa bằng con số này. Nó từng là `BOT_STAKE`, với lý do một
+  // quảng cáo phải mua nổi một ván; lý do ấy đúng khi ván với máy là bốn nghìn, và sai khi nó là
+  // mười — mười nghìn cho mười giây là một phần ba quà cả ngày, mà quà cả ngày mới là thứ người
+  // ta được mong quay lại vì nó.
+  assert.equal(ADS_GOLD, 8_000, 'quảng cáo có con số của riêng nó');
 });
 
 test('two people and two machines is a table of two, and the machines are furniture', () => {
@@ -513,9 +513,15 @@ test('a table can be opened at anything between the floor and the ceiling', () =
   assert.ok(STARTING_GOLD > BOT_STAKE * 4,
     'and survive a few hands against the machines before an advertisement is the only way on');
   assert.ok(DAILY_GOLD > BOT_STAKE * 2, 'a day of gold should be worth more than one hand');
-  assert.equal(BROKE, BOT_STAKE, 'the moment there is no table to sit at is the moment to offer an ad');
-  assert.ok(ADS_GOLD >= BROKE,
-    'an advertisement that leaves somebody still short of the cheapest table has not helped');
+  // "Hết vàng" là chỗ **không còn bàn nào ngồi được**, và bàn rẻ nhất là một cược nhỏ nhất —
+  // không phải một ván với máy. Gọi người còn ngồi được bốn bàn trên danh sách là hết vàng thì
+  // cái chữ ấy thôi nói được điều gì.
+  assert.equal(BROKE, MIN_STAKE, 'ngưỡng hết vàng phải là chỗ thật sự không ngồi được bàn nào');
+  assert.ok(ADS_GOLD >= MIN_STAKE,
+    'một quảng cáo phải mua nổi ít nhất một bàn rẻ nhất, nếu không nó chẳng giúp được gì');
+  // Và trần: một đường về bàn máy dài hơn bốn quảng cáo là một việc vặt, không phải một đường về.
+  assert.ok(Math.ceil(BOT_STAKE / ADS_GOLD) <= 4,
+    `phải xem ${Math.ceil(BOT_STAKE / ADS_GOLD)} quảng cáo mới đủ một ván với máy`);
 });
 
 test('nothing but declarations sits below the endless loop', () => {

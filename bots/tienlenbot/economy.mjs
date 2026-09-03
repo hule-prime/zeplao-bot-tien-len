@@ -30,9 +30,7 @@ export const DAILY_GOLD = 30_000;
 ///
 /// The ladder scales with it on its own: `payouts` is a share of one stake, so nhất takes this
 /// and nhì takes half of it whatever this number is. So does a board game, where the winner
-/// takes exactly one of these off the loser, and so does what an advertisement pays — that one
-/// is `ADS_GOLD`, and it is defined as this number rather than as a number of its own, because
-/// an advertisement exists to buy one hand and an advertisement that buys less has not worked.
+/// takes exactly one of these off the loser.
 export const BOT_STAKE = 10_000;
 
 /// The three a table can be opened at with one tap. Anything between the floor and the ceiling
@@ -60,22 +58,39 @@ export function asStake(asked) {
 /// so a countdown it runs is a countdown it can skip — the page shows the clock and the bot
 /// decides whether it ran.
 ///
-/// What it pays is one hand against the machines, and that is not a coincidence: this exists to
-/// get somebody who has run out back to a table, and an advertisement that leaves them still
-/// short of the cheapest thing on the screen has not done its one job. It used to pay two
-/// thousand against a two thousand table; when the table went to four, this had to follow.
+/// **What it pays is its own number, and no longer one hand against the machines.**
+///
+/// It used to be defined as `BOT_STAKE`, on the argument that an advertisement exists to buy
+/// one hand back and one that buys less has not done its job. That argument held while a
+/// machine table cost four thousand. At ten it does not: an advertisement worth ten thousand is
+/// a third of a day's gold for ten seconds, and the day's gold is the thing people are meant to
+/// come back for.
+///
+/// So eight thousand, and what it buys is stated plainly rather than implied: **eight of the
+/// cheapest tables on the list**, a long run at either bowl, or most of a hand against the
+/// machine — two of them and you are back at one, with change. Ten seconds a time is still the
+/// rationing, and it is the only rationing that matters.
+///
+/// The floor it must clear is `MIN_STAKE`, not `BOT_STAKE`: below the cheapest stake there is
+/// genuinely nothing to sit at, and an advertisement that leaves somebody there has helped
+/// nobody. Above it, how much is a matter of taste. There is a test on the floor and on the
+/// ceiling — a run back to a machine table longer than four advertisements would be a errand
+/// rather than a way back.
 ///
 /// The count is deliberately huge. It is not there to ration anything — ten seconds a time is
 /// the rationing, and somebody willing to sit through a thousand of them has earned whatever
 /// that comes to. It is there so a bug in the counting cannot run away with the ledger.
 export const ADS_MS = Number(process.env.TIENLEN_ADS_MS ?? 10_000);
-export const ADS_GOLD = BOT_STAKE;
+export const ADS_GOLD = 8_000;
 export const ADS_PER_DAY = 1_000;
 
-/// Below this there is no table anybody can sit at. Not a gate on anything — the way to more
-/// gold is beside the purse at every balance — but the widget draws the two ways in dark and
-/// says what they cost, and this is the number it says it about.
-export const BROKE = BOT_STAKE;
+/// Below this there is no table anybody can sit at — and now it says so literally.
+///
+/// It used to be `BOT_STAKE`, which read as "cannot afford the machine table". That was near
+/// enough while the two numbers were four thousand and one thousand apart; at ten thousand it
+/// would call somebody broke who can still sit at four tables on the list and at either bowl.
+/// The cheapest thing anybody can sit at is one stake, so that is the number.
+export const BROKE = MIN_STAKE;
 
 /**
  * What each place takes, as a share of one stake.
