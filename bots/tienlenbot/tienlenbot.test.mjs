@@ -17,7 +17,7 @@ import {
   TX_ROLL_MS, TX_SHOW_MS, TX_BETTING_MS,
   txRoll, txTotal, isBao, txHits, txWon, doorWorth, txBoardWorth, txStaked, txOutcome,
   bombRank, isChop, worthOf, rotting, instantWin, INSTANT, PAIRS_WORTH, twoWorth,
-  reckon, BLANCHE, decompose, playsAfter, unbeatable,
+  reckon, BLANCHE, BLANCHE_WORTH, blancheWorth, decompose, playsAfter, unbeatable,
 } from './tienlenbot.mjs';
 
 /// A card by name, which is how anybody talks about one.
@@ -1886,24 +1886,24 @@ test('a bomb landing on a 2 or on a bomb is a chặt; a higher pair is not', () 
 // ---- tiền: chặt bao nhiêu, thối bao nhiêu -----------------------------------------------------
 
 test('a black 2 and a red 2 are not the same money', () => {
-  assert.equal(twoWorth(c('2', '♠')), 1);
-  assert.equal(twoWorth(c('2', '♣')), 1);
-  assert.equal(twoWorth(c('2', '♦')), 2);
-  assert.equal(twoWorth(c('2', '♥')), 2);
+  assert.equal(twoWorth(c('2', '♠')), 3);
+  assert.equal(twoWorth(c('2', '♣')), 3);
+  assert.equal(twoWorth(c('2', '♦')), 6);
+  assert.equal(twoWorth(c('2', '♥')), 6);
 
-  assert.equal(worthOf(hand('2♠')), 1);
-  assert.equal(worthOf(hand('2♥')), 2);
-  assert.equal(worthOf(hand('2♠', '2♥')), 3, 'đôi heo đen đỏ');
-  assert.equal(worthOf(hand('2♦', '2♥')), 4, 'đôi heo đỏ cả hai');
+  assert.equal(worthOf(hand('2♠')), 3);
+  assert.equal(worthOf(hand('2♥')), 6);
+  assert.equal(worthOf(hand('2♠', '2♥')), 9, 'đôi heo đen đỏ');
+  assert.equal(worthOf(hand('2♦', '2♥')), 12, 'đôi heo đỏ cả hai');
 });
 
 test('what a bomb is worth is what the table pays for it', () => {
-  assert.equal(worthOf(hand('7♠', '7♣', '7♦', '7♥')), 3, 'tứ quý');
+  assert.equal(worthOf(hand('7♠', '7♣', '7♦', '7♥')), 8, 'tứ quý');
   assert.equal(worthOf(hand('3♠', '3♣', '4♠', '4♣', '5♠', '5♣')), PAIRS_WORTH[3]);
-  assert.equal(PAIRS_WORTH[3], 2);
-  assert.equal(PAIRS_WORTH[4], 4);
-  assert.equal(PAIRS_WORTH[5], 5);
-  assert.equal(PAIRS_WORTH[6], 6);
+  assert.equal(PAIRS_WORTH[3], 6);
+  assert.equal(PAIRS_WORTH[4], 12);
+  assert.equal(PAIRS_WORTH[5], 15);
+  assert.equal(PAIRS_WORTH[6], 18);
 
   // Không phải bom, không phải heo thì không đáng gì.
   assert.equal(worthOf(hand('K♠', 'K♥')), 0);
@@ -1912,10 +1912,10 @@ test('what a bomb is worth is what the table pays for it', () => {
 
 test('what is still in a hand at the end is counted card by card', () => {
   assert.equal(rotting(hand('5♠', '9♦')), 0, 'bài thường không thối');
-  assert.equal(rotting(hand('2♠')), 1);
-  assert.equal(rotting(hand('2♠', '2♦')), 3, 'một đen một đỏ, tính riêng từng con');
-  assert.equal(rotting(hand('7♠', '7♣', '7♦', '7♥')), 3, 'ôm tứ quý');
-  assert.equal(rotting(hand('2♥', '7♠', '7♣', '7♦', '7♥')), 5, 'ôm cả heo đỏ lẫn tứ quý');
+  assert.equal(rotting(hand('2♠')), 3);
+  assert.equal(rotting(hand('2♠', '2♦')), 9, 'một đen một đỏ, tính riêng từng con');
+  assert.equal(rotting(hand('7♠', '7♣', '7♦', '7♥')), 8, 'ôm tứ quý');
+  assert.equal(rotting(hand('2♥', '7♠', '7♣', '7♦', '7♥')), 14, 'ôm cả heo đỏ lẫn tứ quý');
 
   // Năm đôi liên tiếp là một dây năm, không phải một dây ba với hai đôi thừa.
   const five = hand('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '7♠', '7♣');
@@ -1926,12 +1926,12 @@ test('what is still in a hand at the end is counted card by card', () => {
   assert.equal(rotting(two), PAIRS_WORTH[3] * 2);
 
   // Đôi heo không nằm trong đôi thông, nhưng vẫn thối theo con.
-  assert.equal(rotting(hand('A♠', 'A♣', '2♠', '2♣')), 2);
+  assert.equal(rotting(hand('A♠', 'A♣', '2♠', '2♣')), 6);
 });
 
 // ---- tới trắng --------------------------------------------------------------------------------
 
-test('the five hands that are over before they start', () => {
+test('the harsh hands that are over before they start', () => {
   const quadTwos = hand('2♠', '2♣', '2♦', '2♥', '3♠', '4♠', '5♠', '6♠', '8♠', '9♠', 'J♠', 'Q♠', 'K♦');
   assert.equal(instantWin(quadTwos), INSTANT.quadTwos);
 
@@ -1947,6 +1947,18 @@ test('the five hands that are over before they start', () => {
   // Sáu đôi được phép tính cả đôi heo — nó không phải đôi thông, nó chỉ là một đôi.
   const sixWithTwos = hand('3♠', '3♣', '5♠', '5♣', '7♠', '7♣', '9♠', '9♣', 'J♠', 'J♣', '2♠', '2♣', '4♦');
   assert.equal(instantWin(sixWithTwos), INSTANT.sixPairs);
+
+  const sixPairsInARow = hand('3♠', '3♣', '4♠', '4♣', '5♠', '5♣', '6♠', '6♣', '7♠', '7♣', '8♠', '8♣', 'K♥');
+  assert.equal(instantWin(sixPairsInARow), INSTANT.sixPairs, 'sáu đôi thông không bị trả rẻ thành năm đôi thông');
+
+  const twoQuads = hand('3♠', '3♣', '3♦', '3♥', '8♠', '8♣', '8♦', '8♥', '9♠', 'J♦', 'Q♥', 'K♠', 'A♣');
+  assert.equal(instantWin(twoQuads), INSTANT.twoQuads);
+
+  const fourTriples = hand('3♠', '3♣', '3♦', '5♠', '5♣', '5♦', '7♠', '7♣', '7♦', '9♠', '9♣', '9♦', 'K♥');
+  assert.equal(instantWin(fourTriples), INSTANT.fourTriples);
+
+  const elevenFlush = hand('3♠', '4♠', '5♠', '6♠', '7♠', '8♠', '9♠', '10♠', 'J♠', 'Q♠', 'K♠', '3♥', '4♥');
+  assert.equal(instantWin(elevenFlush), INSTANT.elevenFlush);
 });
 
 test('and the hands that only look like them', () => {
@@ -1957,12 +1969,12 @@ test('and the hands that only look like them', () => {
 
   // Năm đôi nhưng không thông.
   assert.equal(
-    instantWin(hand('3♠', '3♣', '5♠', '5♣', '7♠', '7♣', '9♠', '9♣', 'J♠', 'J♣', 'K♥', 'A♠', '4♦')),
+    instantWin(hand('3♠', '3♦', '5♠', '5♦', '7♠', '7♦', '9♠', '9♦', 'J♠', 'J♦', 'K♥', 'A♠', '4♦')),
     null);
 
-  // Sảnh mười một lá, thiếu đúng một hạng.
+  // Mười lá đồng màu chưa tới trắng.
   assert.equal(
-    instantWin(hand('3♠', '4♠', '5♠', '6♠', '7♠', '8♠', '9♠', '10♠', 'J♠', 'Q♠', 'K♠', '3♥', '4♥')),
+    instantWin(hand('3♠', '4♠', '5♠', '6♠', '7♠', '8♠', '9♠', '10♠', 'J♠', 'Q♠', '3♥', '4♥', '5♥')),
     null);
 
   // Ba con heo chưa phải tứ quý heo.
@@ -2004,7 +2016,9 @@ function table(hands, { bots = [], stake = 1000 } = {}) {
 }
 
 const paidBy = (game) => settlement(game.seats, game.finished, game.stake, {
-  chops: game.chops, rot: game.rot, blanche: game.blanche, owes: game.owes,
+  chops: game.chops, rot: game.rot,
+  blanche: game.blanche, blancheWith: game.blancheWith,
+  owes: game.owes,
 });
 const sum = (paid) => paid.reduce((total, one) => total + one.change, 0);
 const forUser = (paid, id) => paid.find((one) => one.userId === id) ?? {};
@@ -2020,10 +2034,10 @@ test('cutting a 2 is paid by whoever put the 2 down', () => {
   assert.ok(applyPlay(game, 0, hand('2♥')), 'heo đỏ xuống bàn');
   assert.ok(applyPlay(game, 1, hand('7♠', '7♣', '7♦', '7♥')), 'tứ quý chặt');
 
-  // Heo đỏ đáng hai phần cược.
-  assert.equal(game.chops.get('u1'), 2);
-  assert.equal(game.chops.get('u0'), -2);
-  assert.equal(game.pot, 2, 'cái nồi giờ nằm trên đầu người vừa chặt');
+  // Heo đỏ đáng sáu phần cược.
+  assert.equal(game.chops.get('u1'), 6);
+  assert.equal(game.chops.get('u0'), -6);
+  assert.equal(game.pot, 6, 'cái nồi giờ nằm trên đầu người vừa chặt');
 });
 
 test('chặt chồng: whoever is cut last carries the whole run of it', () => {
@@ -2034,14 +2048,14 @@ test('chặt chồng: whoever is cut last carries the whole run of it', () => {
     hand('8♠', '8♣'),
   ]);
 
-  applyPlay(game, 0, hand('2♠'));                                    // heo đen, 1 phần
-  applyPlay(game, 1, hand('7♠', '7♣', '7♦', '7♥'));                  // tứ quý chặt, ăn 1
+  applyPlay(game, 0, hand('2♠'));                                    // heo đen, 3 phần
+  applyPlay(game, 1, hand('7♠', '7♣', '7♦', '7♥'));                  // tứ quý chặt, ăn 3
   applyPlay(game, 2, hand('3♣', '3♦', '4♣', '4♦', '5♣', '5♦', '6♣', '6♦'));  // bốn đôi thông
 
-  // Người thứ ba ăn cả nồi (1) cộng giá tứ quý (3) = 4, lấy của người thứ hai.
-  assert.equal(game.chops.get('u0'), -1, 'chủ con heo mất đúng con heo của mình');
-  assert.equal(game.chops.get('u1'), 1 - 4, 'người chặt giữa vừa ăn vừa bị đè');
-  assert.equal(game.chops.get('u2'), 4);
+  // Người thứ ba ăn cả nồi (3) cộng giá tứ quý (8) = 11, lấy của người thứ hai.
+  assert.equal(game.chops.get('u0'), -3, 'chủ con heo mất đúng con heo của mình');
+  assert.equal(game.chops.get('u1'), 3 - 11, 'người chặt giữa vừa ăn vừa bị đè');
+  assert.equal(game.chops.get('u2'), 11);
   assert.equal([...game.chops.values()].reduce((a, b) => a + b, 0), 0, 'tổng bằng không');
 });
 
@@ -2077,12 +2091,12 @@ test('what is left in a losing hand goes to whoever went out first', () => {
   game.state = 'over';
   reckon(game);
 
-  assert.equal(game.rot.get('u1'), 4, 'hai con heo đỏ');
+  assert.equal(game.rot.get('u1'), 12, 'hai con heo đỏ');
   assert.ok(!game.rot.has('u2'), 'bài thường không thối');
 
   const paid = paidBy(game);
-  assert.equal(forUser(paid, 'u1').rot, -4000);
-  assert.equal(forUser(paid, 'u0').rot, 4000, 'về nhất thu');
+  assert.equal(forUser(paid, 'u1').rot, -12000);
+  assert.equal(forUser(paid, 'u0').rot, 12000, 'về nhất thu');
   assert.equal(sum(paid), 0);
 });
 
@@ -2153,15 +2167,24 @@ test('nor when the hand was not won on a 2 at all', () => {
   assert.equal(game.owes, null);
 });
 
-test('tới trắng takes three stakes from everybody and no placing money at all', () => {
+test('tới trắng takes its own harsh multiplier from everybody and no placing money at all', () => {
   const game = table([hand('3♠'), hand('4♠'), hand('5♠')]);
   game.finished = [0, 1, 2];
   game.blanche = 'u0';
+  game.blancheWith = INSTANT.dragon;
   const paid = paidBy(game);
 
-  assert.equal(forUser(paid, 'u0').change, BLANCHE * 1000 * 2, 'ba lần cược từ mỗi người');
-  assert.equal(forUser(paid, 'u1').change, -BLANCHE * 1000);
-  assert.equal(forUser(paid, 'u2').change, -BLANCHE * 1000);
+  assert.equal(BLANCHE_WORTH[INSTANT.dragon], 9);
+  assert.equal(blancheWorth(INSTANT.quadTwos), 8);
+  assert.equal(blancheWorth(INSTANT.sixPairs), 8);
+  assert.equal(blancheWorth(INSTANT.fourTriples), 7);
+  assert.equal(blancheWorth(INSTANT.twoQuads), 6);
+  assert.equal(blancheWorth(INSTANT.fivePairs), 6);
+  assert.equal(blancheWorth(INSTANT.elevenFlush), 4);
+  assert.equal(blancheWorth('luật cũ không tên'), BLANCHE);
+  assert.equal(forUser(paid, 'u0').change, 9 * 1000 * 2, 'chín lần cược từ mỗi người');
+  assert.equal(forUser(paid, 'u1').change, -9 * 1000);
+  assert.equal(forUser(paid, 'u2').change, -9 * 1000);
   assert.equal(forUser(paid, 'u1').placing, 0, 'không có tiền thứ hạng, vì không ai đánh gì');
   assert.equal(sum(paid), 0);
 });

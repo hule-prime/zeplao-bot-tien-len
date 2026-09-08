@@ -44,6 +44,12 @@ export const MOM = 2;
 /// Ù ăn gấp đôi phần thường, thu của từng người.
 export const U = 2;
 
+/// Ăn lá thường leo theo số lá đã ăn trong ván; ăn chốt đau riêng.
+export const PHOM_EAT_WORTH = { normal: [0, 1, 2, 3, 4], chot: 4 };
+
+export const phomEatWorth = (nth = 1, chot = false) =>
+  chot ? Math.max(PHOM_EAT_WORTH.chot, nth) : (PHOM_EAT_WORTH.normal[nth] ?? nth);
+
 /**
  * Chia bài.
  *
@@ -387,13 +393,15 @@ export function phomScores(hands, { laid = [], locked = [] } = {}) {
  * Chia tiền một ván phỏm.
  *
  * Cùng khung với tiến lên, để một cái ví ba trò không có ba cách hiểu về "thắng bao nhiêu":
- * xếp hạng rồi trả theo `payouts`. Trên đó là ba thứ riêng của phỏm — móm thua gấp đôi, ù ăn
- * gấp đôi từ mỗi người, và đền là trả thay cả làng.
+ * xếp hạng rồi trả theo `payouts`. Trên đó là bốn thứ riêng của phỏm — ăn lá trả ngay theo
+ * lá, móm thua gấp đôi, ù ăn gấp đôi từ mỗi người, và đền là trả thay cả làng.
  *
  * Máy không bao giờ được trả tiền, y như bên tiến lên. Bàn dưới hai người thật thì đánh với nhà
  * ở mức cược cố định, và mọi khoản riêng của phỏm đứng yên.
  */
-export function phomSettle(seats, scores, stake, { u = null, owes = null, house = false } = {}) {
+export function phomSettle(seats, scores, stake, {
+  u = null, owes = null, eats = null, house = false,
+} = {}) {
   const people = seats.filter((one) => !one.bot);
   if (!people.length) return [];
 
@@ -424,6 +432,7 @@ export function phomSettle(seats, scores, stake, { u = null, owes = null, house 
       points: one.points,
       mom: one.mom,
       placing: Math.round((share[place] ?? 0) * worth),
+      eat: 0,
       extra: 0,
       owes: 0,
       change: 0,
@@ -477,6 +486,15 @@ export function phomSettle(seats, scores, stake, { u = null, owes = null, house 
       }
       owing.owes = -owed - owing.change;
       owing.change = -owed;
+    }
+  }
+
+  // Ăn lá. Pairwise money, like chặt in tiến lên: it belongs to the card that was fed and
+  // stays even when the hand later has ù or đền on top.
+  if (eats) {
+    for (const [userId, amount] of eats) {
+      const row = at.get(userId);
+      if (row) { row.eat = Math.round(amount * worth); row.change += row.eat; }
     }
   }
 

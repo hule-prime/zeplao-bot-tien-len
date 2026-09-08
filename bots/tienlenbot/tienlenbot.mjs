@@ -77,6 +77,7 @@ import {
 import {
   PHOM_DEAL, PHOM_TURNS, PHOM_THINK_MS, phomDeal, bestSplit, junkOf, isU, isMeld,
   canEat, eatOptions, phomChoose, phomDiscard, phomScores, phomSettle, points as phomPoints,
+  phomEatWorth,
 } from './rules/phom.mjs';
 import {
   FACES, FACE_NAMES, DICE, ROLL_MS, SHOW_MS, HISTORY, BETTING_MS, CHIPS, WORLD,
@@ -456,6 +457,8 @@ export function dealPhom(game, cai = 0) {
   game.discards = [];
   game.took = game.seats.map(() => 0);
   game.eaten = game.seats.map(() => []);
+  game.eats = new Map();
+  game.eatLog = [];
   // Bộ đã ăn, khoá lại. Ăn được là vì lá ấy vào phỏm, nên phỏm ấy phải đứng: không rút ruột nó
   // để ăn tiếp, và không đánh lá của nó đi.
   game.melded = game.seats.map(() => []);
@@ -473,6 +476,33 @@ export function dealPhom(game, cai = 0) {
   game.step = 'throw';
   game.state = 'playing';
   game.touched = Date.now();
+}
+
+function phomChargeEat(game, seat, from, card) {
+  if (from === null || from === undefined || from === seat) return;
+  const eater = game.seats[seat];
+  const feeder = game.seats[from];
+  if (!eater || !feeder || eater.bot || feeder.bot) return;
+  if (game.seats.filter((one) => !one.bot).length < 2) return;
+
+  const nth = game.eaten[seat].length;
+  const chot = (game.took?.[from] ?? 0) >= PHOM_TURNS;
+  const take = phomEatWorth(nth, chot);
+  if (!take) return;
+
+  game.eats = game.eats ?? new Map();
+  game.eats.set(eater.userId, (game.eats.get(eater.userId) ?? 0) + take);
+  game.eats.set(feeder.userId, (game.eats.get(feeder.userId) ?? 0) - take);
+  game.eatLog = [...(game.eatLog ?? []), {
+    by: eater.userId,
+    byName: eater.displayName,
+    from: feeder.userId,
+    fromName: feeder.displayName,
+    card,
+    take,
+    nth,
+    chot,
+  }];
 }
 
 /// Takes the card the player before threw, if it makes a phỏm on the spot.
@@ -498,6 +528,7 @@ export function phomEat(game, seat) {
   const from = game.tableFrom;
   game.hands[seat] = held.sort((a, b) => a - b);
   game.eaten[seat].push(card);
+  phomChargeEat(game, seat, from, card);
   game.melded[seat] = [...locked, [...meld].sort((a, b) => a - b)];
   // Who has been feeding whom. Three times to the same person and the hand is on them.
   if (from !== null && from !== seat) game.fed[from][seat]++;
@@ -889,6 +920,7 @@ export async function run(token, { signal, api = API } = {}) {
     const owed = phomSettle(game.seats, game.scores, game.solo ? BOT_STAKE : game.stake, {
       u: game.u,
       owes: game.owes,
+      eats: game.eats,
     });
 
     for (const one of owed) {
@@ -929,6 +961,7 @@ export async function run(token, { signal, api = API } = {}) {
       chops: game.chops,
       rot: game.rot,
       blanche: game.blanche,
+      blancheWith: game.blancheWith,
       owes: game.owes,
     });
 
@@ -2863,6 +2896,7 @@ export async function run(token, { signal, api = API } = {}) {
       u: game.u ?? null,
       owes: game.owes ?? null,
       owesWhy: game.owesWhy ?? null,
+      eatLog: game.eatLog ?? [],
 
       ranking: game.finished.map((seat, place) => ({
         id: game.seats[seat].userId,

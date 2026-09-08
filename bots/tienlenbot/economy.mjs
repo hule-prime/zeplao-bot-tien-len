@@ -7,7 +7,7 @@
  * không.
  */
 
-import { PLACES, placeName } from './rules/tienlen.mjs';
+import { INSTANT, PLACES, placeName } from './rules/tienlen.mjs';
 
 /// What somebody has the first time they open this.
 ///
@@ -188,7 +188,7 @@ export function settlement(seats, finished, stake, extra = {}) {
     if (!at.has(who.userId)) put(who, '', 0).placing = 0;
   }
 
-  const { chops, rot, blanche, owes } = extra;
+  const { chops, rot, blanche, blancheWith, owes } = extra;
 
   // Chặt. Already worked out as it happened and already zero-sum: `chops` is a plain map of
   // what each person is up or down on cutting and being cut.
@@ -214,8 +214,8 @@ export function settlement(seats, finished, stake, extra = {}) {
     if (first) { first.rot += total; first.change += total; }
   }
 
-  // Tới trắng. Every other person pays three times the stake, and there is no placing money at
-  // all — nobody played, so there is nothing to place.
+  // Tới trắng. Every other person pays by the hand that won on the deal, and there is no
+  // placing money at all — nobody played, so there is nothing to place.
   if (blanche) {
     const winner = at.get(blanche);
     if (winner) {
@@ -228,12 +228,13 @@ export function settlement(seats, finished, stake, extra = {}) {
         row.rot = 0;
         row.change = 0;
       }
-      winner.blanche = BLANCHE * worth * others;
+      const times = blancheWorth(blancheWith);
+      winner.blanche = times * worth * others;
       winner.change = winner.blanche;
       winner.place = PLACES[0];
       for (const row of paid) {
         if (row.userId === blanche) continue;
-        row.blanche = -BLANCHE * worth;
+        row.blanche = -times * worth;
         row.change = row.blanche;
       }
     }
@@ -268,4 +269,16 @@ export function settlement(seats, finished, stake, extra = {}) {
 }
 
 /// What a hand nobody had to play for is worth, from each person at the table.
+export const BLANCHE_WORTH = {
+  [INSTANT.dragon]: 9,
+  [INSTANT.quadTwos]: 8,
+  [INSTANT.sixPairs]: 8,
+  [INSTANT.fourTriples]: 7,
+  [INSTANT.twoQuads]: 6,
+  [INSTANT.fivePairs]: 6,
+  [INSTANT.elevenFlush]: 4,
+};
+
 export const BLANCHE = 3;
+
+export const blancheWorth = (what) => BLANCHE_WORTH[what] ?? BLANCHE;

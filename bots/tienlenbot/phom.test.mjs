@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   PHOM_RANKS, PHOM_DEAL, PHOM_TURNS, MOM, U,
+  PHOM_EAT_WORTH, phomEatWorth,
   phomRank, phomSuit, phomName, points, phomDeal,
   isMeld, meldsOf, bestSplit, junkOf, isU,
   eatOptions, canEat, sendable,
@@ -221,6 +222,31 @@ test('đền pays for everybody who lost', () => {
   }
 });
 
+test('eating cards pays immediately, and eating the chốt hurts more', () => {
+  assert.deepEqual(PHOM_EAT_WORTH.normal, [0, 1, 2, 3, 4]);
+  assert.equal(phomEatWorth(1), 1);
+  assert.equal(phomEatWorth(2), 2);
+  assert.equal(phomEatWorth(3), 3);
+  assert.equal(phomEatWorth(1, true), 4);
+  assert.equal(phomEatWorth(5, true), 5);
+});
+
+test('eating money is pairwise and stays on top of the hand result', () => {
+  const seats = [0, 1, 2].map((seat) => ({ userId: `u${seat}`, displayName: `Người ${seat}`, bot: false }));
+  const scores = phomScores([
+    hand('7♠', '7♣', '7♦'),
+    hand('5♥', '6♥', '7♥', 'K♦'),
+    hand('A♠', '4♣', '9♦', 'K♠'),
+  ], { laid: [0, 1, 2] });
+  const paid = phomSettle(seats, scores, 1000, {
+    eats: new Map([['u0', -1], ['u1', 1]]),
+  });
+
+  assert.equal(paid.find((one) => one.userId === 'u1').eat, 1000);
+  assert.equal(paid.find((one) => one.userId === 'u0').eat, -1000);
+  assert.equal(paid.reduce((sum, one) => sum + one.change, 0), 0);
+});
+
 test('every way a phỏm hand can end still adds to nothing', () => {
   const seats = [0, 1, 2, 3].map((seat) =>
     ({ userId: `u${seat}`, displayName: `Người ${seat}`, bot: false }));
@@ -402,6 +428,50 @@ test('ù stops the hand where it stands', () => {
   assert.equal(game.owes, 'u0', 'ai nhả lá cho người ta ù thì người đó đền');
   assert.equal(game.owesWhy, 'nhả bài ù');
   assert.equal(game.finished[0], 1, 'người ù đứng đầu');
+});
+
+test('a real player pays when another real player eats their card', () => {
+  const game = tableOf(3);
+  game.hands[0] = hand('7♥', 'K♠', 'K♦', 'Q♠', 'J♠', '4♣', '8♦', '10♥', '2♦', '3♣');
+  game.hands[1] = hand('7♠', '7♣', 'A♠', '3♣', '5♦', '8♠', 'J♣', 'Q♦', 'K♥');
+  game.turn = 0;
+  game.step = 'throw';
+
+  assert.ok(phomThrow(game, 0, p('7♥')));
+  assert.ok(phomEat(game, 1));
+  assert.equal(game.eats.get('u1'), 1);
+  assert.equal(game.eats.get('u0'), -1);
+  assert.equal(game.eatLog[0].take, 1);
+  assert.equal(game.eatLog[0].chot, false);
+});
+
+test('eating the chốt is charged as four stakes', () => {
+  const game = tableOf(3);
+  game.hands[0] = hand('7♥', 'K♠', 'K♦', 'Q♠', 'J♠', '4♣', '8♦', '10♥', '2♦', '3♣');
+  game.hands[1] = hand('7♠', '7♣', 'A♠', '3♣', '5♦', '8♠', 'J♣', 'Q♦', 'K♥');
+  game.took = [PHOM_TURNS - 1, 1, 1];
+  game.turn = 0;
+  game.step = 'throw';
+
+  assert.ok(phomThrow(game, 0, p('7♥')));
+  assert.ok(phomEat(game, 1));
+  assert.equal(game.eats.get('u1'), 4);
+  assert.equal(game.eats.get('u0'), -4);
+  assert.equal(game.eatLog[0].take, 4);
+  assert.equal(game.eatLog[0].chot, true);
+});
+
+test('machines do not create eating money in phỏm', () => {
+  const game = tableOf(3, { bots: [0] });
+  game.hands[0] = hand('7♥', 'K♠', 'K♦', 'Q♠', 'J♠', '4♣', '8♦', '10♥', '2♦', '3♣');
+  game.hands[1] = hand('7♠', '7♣', 'A♠', '3♣', '5♦', '8♠', 'J♣', 'Q♦', 'K♥');
+  game.turn = 0;
+  game.step = 'throw';
+
+  assert.ok(phomThrow(game, 0, p('7♥')));
+  assert.ok(phomEat(game, 1));
+  assert.equal(game.eats.size, 0);
+  assert.deepEqual(game.eatLog, []);
 });
 
 test('feeding the same player three times is the whole hand', () => {

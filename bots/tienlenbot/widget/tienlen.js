@@ -1194,6 +1194,7 @@ function drawResult() {
       if (took.chop) parts.push([took.chop, took.chop > 0 ? 'chặt' : 'bị chặt']);
       if (took.rot) parts.push([took.rot, took.rot > 0 ? 'người ta thối' : 'thối bài']);
       if (took.blanche) parts.push([took.blanche, 'tới trắng']);
+      if (took.eat) parts.push([took.eat, took.eat > 0 ? 'ăn lá' : 'bị ăn']);
       if (took.owes) parts.push([took.owes, state.owesWhy === 'ôm hàng' ? 'ôm hàng' : 'cóng']);
       if (parts.length) {
         const why = document.createElement('div');
@@ -1224,6 +1225,13 @@ function drawResult() {
     const line = document.createElement('div');
     line.className = 'chopline';
     line.textContent = `${cut.byName} chặt ${cut.fromName} · ${cut.cards.map(nameOfCard).join(' ')}`;
+    box.append(line);
+  }
+
+  for (const eat of state.eatLog || []) {
+    const line = document.createElement('div');
+    line.className = 'chopline';
+    line.textContent = `${eat.byName} ăn ${eat.fromName} · ${nameOfCard(eat.card)}${eat.chot ? ' · chốt' : ''}`;
     box.append(line);
   }
 }

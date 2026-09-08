@@ -148,20 +148,20 @@ export function isChop(mine, theirs) {
  * One table for two different questions, because at a real table they are the same table: what
  * you collect for cutting it, and what you pay for still holding it when the hand ends.
  *
- *   heo đen  1     heo đỏ  2
- *   3 đôi thông 2  tứ quý 3   4 đôi 4   5 đôi 5   6 đôi 6
+ *   heo đen  3     heo đỏ  6
+ *   3 đôi thông 6  tứ quý 8   4 đôi 12  5 đôi 15  6 đôi 18
  *
  * A black 2 and a red 2 are not the same card here and never have been, which is why 2s are
  * counted one at a time rather than by the shape they were played in.
  */
-export const PAIRS_WORTH = { 3: 2, 4: 4, 5: 5, 6: 6 };
+export const PAIRS_WORTH = { 3: 6, 4: 12, 5: 15, 6: 18 };
 
-export const twoWorth = (card) => (suitOf(card) >= 2 ? 2 : 1);
+export const twoWorth = (card) => (suitOf(card) >= 2 ? 6 : 3);
 
 export function worthOf(cards) {
   const shape = shapeOf(cards);
   if (!shape) return 0;
-  if (shape.kind === 'quad') return 3;
+  if (shape.kind === 'quad') return 8;
   if (shape.kind === 'pairs_run' && shape.pairs >= 3) {
     return PAIRS_WORTH[Math.min(shape.pairs, 6)] ?? shape.pairs;
   }
@@ -187,7 +187,7 @@ export function rotting(hand) {
   const groups = byRank(hand);
 
   for (const card of hand) if (rankOf(card) === TWO) total += twoWorth(card);
-  for (const [rank, cards] of groups) if (cards.length === 4 && rank !== TWO) total += 3;
+  for (const [rank, cards] of groups) if (cards.length === 4 && rank !== TWO) total += 8;
 
   // Runs of pairs, taken as long as they go. A block of five is one five, not a three and a
   // leftover, which is both the rule and the more expensive reading — as it should be.
@@ -208,15 +208,18 @@ export function rotting(hand) {
  *
  * Returns what it is, or null. Checked once, on the deal, and the hand never starts.
  *
- * These are the five every southern table plays. Ba đôi thông có 3 bích is a sixth at some
- * tables and is deliberately left out — it turns up often enough to end a great many hands
- * before they begin, and a game that is over on the deal one time in twenty is not a game.
+ * These are the hands most southern money tables recognise, including the harsher house rules:
+ * two quads, four triples, and a mostly one-colour hand. Ba đôi thông có 3 bích is deliberately
+ * left out — it turns up often enough to end a great many hands before they begin.
  */
 export const INSTANT = {
   quadTwos: 'Tứ quý heo',
-  fivePairs: 'Năm đôi thông',
-  sixPairs: 'Sáu đôi',
   dragon: 'Sảnh rồng',
+  sixPairs: 'Sáu đôi',
+  fivePairs: 'Năm đôi thông',
+  twoQuads: 'Hai tứ quý',
+  fourTriples: 'Bốn sám cô',
+  elevenFlush: 'Mười một lá đồng màu',
 };
 
 export function instantWin(hand) {
@@ -233,16 +236,27 @@ export function instantWin(hand) {
   let pairs = 0;
   let run = 0;
   let longest = 0;
+  let quads = 0;
+  let triples = 0;
   for (let rank = 0; rank <= TWO; rank++) {
-    const has = (groups.get(rank)?.length ?? 0) >= 2;
+    const count = groups.get(rank)?.length ?? 0;
+    const has = count >= 2;
     if (has) pairs++;
+    if (count >= 4) quads++;
+    if (count >= 3) triples++;
     // A 2 may be one of six pairs but is in no đôi thông, so the run breaks there.
     const inRun = has && rank !== TWO;
     run = inRun ? run + 1 : 0;
     longest = Math.max(longest, run);
   }
-  if (longest >= 5) return INSTANT.fivePairs;
   if (pairs >= 6) return INSTANT.sixPairs;
+  if (longest >= 5) return INSTANT.fivePairs;
+  if (quads >= 2) return INSTANT.twoQuads;
+  if (triples >= 4) return INSTANT.fourTriples;
+
+  const black = hand.filter((card) => suitOf(card) < 2).length;
+  const red = hand.length - black;
+  if (Math.max(black, red) >= 11) return INSTANT.elevenFlush;
 
   return null;
 }

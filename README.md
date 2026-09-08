@@ -38,8 +38,10 @@ money taken rather than money lost.
   thinks about it.
 - **Trình**: before the fourth turn's discard everybody lays their phỏm face up, so the rest of
   the table can see what is down, what their junk fits onto, and what is safe to throw. **Ù** — nothing left over — stops the hand and takes
-  double from everybody. **Móm** — no phỏm at all — loses double. Throwing the card somebody
-  ù's on, or feeding the same player three times, is **đền**: you pay for the table.
+  double from everybody. **Ăn lá** is paid by the person who threw it, climbing one, two,
+  three, then four stakes; **ăn chốt** is four stakes straight away. **Móm** — no phỏm at all
+  — loses double. Throwing the card somebody ù's on, or feeding the same player three times, is
+  **đền**: you pay for the table.
 
 **Bầu cua tôm cá**
 
@@ -346,13 +348,20 @@ kind. Same shape and same length answers, higher card wins, and the suit — bí
 breaks a tie.
 
 Chặt: ba đôi thông cuts a lone 2; tứ quý cuts a lone 2, a pair of them and ba đôi thông; bốn
-đôi thông cuts all of those and tứ quý. Nothing cuts bốn đôi thông but a bigger one.
+đôi thông cuts all of those and tứ quý. Five and six đôi thông keep climbing the same ladder,
+and the money climbs with it: heo đen 3 cược, heo đỏ 6, ba đôi thông 6, tứ quý 8, bốn đôi
+thông 12, năm đôi thông 15, sáu đôi thông 18. Chặt chồng carries the whole pot forward.
 
 Passing puts you out of the round. When nobody is left to answer, whoever played last leads
 again — or, if that was their last card, the seat after them. Everybody who goes out gets a
 place, whoever is still holding cards comes last, and so does anybody who walked out.
 
-**Not in this version:** tới trắng (a hand that wins on the deal), thối 2, and betting.
+Tới trắng ends the hand on the deal and wipes out placing money. The winner takes from every
+other real player by the hand: sảnh rồng 9 cược, tứ quý heo 8, sáu đôi 8, bốn sám cô 7, hai
+tứ quý 6, năm đôi thông 6, and mười một lá đồng màu 4. Thối uses the same harsh table as
+chặt and pays whoever went out first.
+
+**Not in this version:** betting.
 
 ## What is deliberately not here
 
