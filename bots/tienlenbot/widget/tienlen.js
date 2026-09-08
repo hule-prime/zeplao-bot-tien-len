@@ -3188,5 +3188,12 @@ say('Đang mở bàn…');
 // phủ kín ba con xúc xắc, mà một hình tròn phủ được một hàng ngang thì cao đúng bằng chiều rộng
 // của hàng ấy. Ba mươi pixel là chỗ cho việc đó và không hơn — cái khung này nổi lên trên một
 // cuộc trò chuyện, và mỗi pixel nó lấy là một pixel của cuộc trò chuyện ấy.
-z.setSize(390, 570);
-z.ready();
+// Web desktop can load this cached frame before the React host has attached its message listener.
+// A missed first `ready` leaves the frame waiting for the initial state forever; mobile does not
+// use this postMessage path. Asking again is harmless and gives the host a few chances to hear.
+for (const wait of [0, 80, 240, 800, 1600]) {
+  setTimeout(() => {
+    z.setSize(390, 570);
+    z.ready();
+  }, wait);
+}
