@@ -128,18 +128,22 @@ if [ -d "$ROOT/bots/$BOT/widget" ]; then
   step "widget"
   TOKEN=$(remote "grep -o 'ZEPLAO_BOT_TOKEN=.*' /opt/zeplao/$BOT/.env | cut -d= -f2-")
   # The bot long-polls through api-bot.kuku.vn, but the app opens hosted widget files through
-  # its own API base: https://kuku.vn/api/widgets/...
+  # the app API origins: https://kuku.vn/api/widgets/... and https://www.kuku.vn/api/widgets/...
   #
   # Uploading the bundle to api-bot updates the bot row but leaves the app API without the
   # files, so the frame pins a fresh version and then gets 404 for index.html: a blank widget.
-  WIDGET_API=${ZEPLAO_WIDGET_API:-https://kuku.vn/api/bot}
+  # Uploading only one app origin can leave desktop and mobile disagreeing about one file, so
+  # the default pushes through both.
+  WIDGET_APIS=${ZEPLAO_WIDGET_APIS:-${ZEPLAO_WIDGET_API:-"https://www.kuku.vn/api/bot https://kuku.vn/api/bot"}}
   ZIP=$(mktemp -t widget-XXXXXX).zip
   ( cd "$ROOT/bots/$BOT/widget" && zip -qr "$ZIP" . )
-  curl -sS -X POST "$WIDGET_API/setWidget" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H 'Content-Type: application/zip' \
-    --data-binary "@$ZIP"
-  echo
+  for WIDGET_API in $WIDGET_APIS; do
+    curl -sS -X POST "$WIDGET_API/setWidget" \
+      -H "Authorization: Bearer $TOKEN" \
+      -H 'Content-Type: application/zip' \
+      --data-binary "@$ZIP"
+    echo
+  done
   rm -f "$ZIP"
 fi
 
