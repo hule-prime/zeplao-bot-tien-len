@@ -2,7 +2,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>Tiến lên miền nam</title>
-<link rel="stylesheet" href="style.css">
+<script>
+  (function () {
+    var path = window.location.pathname;
+    if (!path.endsWith('/')) {
+      var last = path.split('/').pop() || '';
+      path = last.includes('.') ? path.replace(/[^/]*$/, '') : path + '/';
+    }
+    window.__tienlenAsset = function (name) { return window.location.origin + path + name; };
+    var css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = window.__tienlenAsset('style.css');
+    document.head.appendChild(css);
+  }());
+</script>
 
 <!-- Four screens in one page, one of them showing at a time, inside a shell that never moves:
      who you are and what you have at the top, what to do at the bottom, the game in between.
@@ -145,14 +158,24 @@
 
 <!-- Put into every bundle by the platform. Loaded before the game so window.Zeplao is there
      whether this is running on a phone or in a browser. -->
-<script src="zeplao.js"></script>
-<script src="faces.js"></script>
 <!-- Trước `tienlen.js`, không phải sau. `render()` bên kia gọi tới mấy hàm ở đây, mà khai báo hàm
      thì được hoist ra toàn cục ngay khi file này chạy xong; còn thứ file này đọc của bên kia thì
      chỉ đọc trong lòng hàm, tức là lúc đã chạy rồi. Ngược lại thì `z.ready()` ở cuối `tienlen.js`
-     có thể gọi vào một hàm chưa tồn tại. -->
-<script src="sound.js"></script>
-<script src="pieces.js"></script>
-<script src="board.js"></script>
-<script src="taixiu.js"></script>
-<script src="tienlen.js"></script>
+     có thể gọi vào một hàm chưa tồn tại.
+
+     Firefox resolves relative assets against `/api/widgets/<bot>/<version>` as if `version` were
+     a file when the URL has no trailing slash. The host can hand us exactly that URL, so load the
+     bundle from the computed version directory instead of leaving static tags for the parser. -->
+<script>
+  (function () {
+    var files = ['zeplao.js', 'faces.js', 'sound.js', 'pieces.js', 'board.js', 'taixiu.js', 'tienlen.js'];
+    function load(i) {
+      if (i >= files.length) return;
+      var script = document.createElement('script');
+      script.src = window.__tienlenAsset(files[i]);
+      script.onload = function () { load(i + 1); };
+      document.body.appendChild(script);
+    }
+    load(0);
+  }());
+</script>
