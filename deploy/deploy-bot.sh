@@ -138,12 +138,60 @@ if [ -d "$ROOT/bots/$BOT/widget" ]; then
   WIDGET_API=${ZEPLAO_WIDGET_API:-https://kuku.vn/api/bot}
   ZIP=$(mktemp -t widget-XXXXXX).zip
   ( cd "$ROOT/bots/$BOT/widget" && zip -qr "$ZIP" . )
-  curl -sS -X POST "$WIDGET_API/setWidget" \
+  WIDGET_JSON=$(curl -sS -X POST "$WIDGET_API/setWidget" \
     -H "Authorization: Bearer $TOKEN" \
     -H 'Content-Type: application/zip' \
-    --data-binary "@$ZIP"
-  echo
+    --data-binary "@$ZIP")
+  echo "$WIDGET_JSON"
   rm -f "$ZIP"
+
+  WIDGET_VERSION=$(node -e '
+    const chunks = [];
+    process.stdin.on("data", (chunk) => chunks.push(chunk));
+    process.stdin.on("end", () => {
+      const widget = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (!Number.isInteger(widget.version)) process.exit(2);
+      process.stdout.write(String(widget.version));
+    });
+  ' <<<"$WIDGET_JSON")
+  BOT_ID=$(curl -sS "$WIDGET_API/getMe" -H "Authorization: Bearer $TOKEN" \
+    | node -e '
+      const chunks = [];
+      process.stdin.on("data", (chunk) => chunks.push(chunk));
+      process.stdin.on("end", () => {
+        const bot = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        if (!bot.id) process.exit(2);
+        process.stdout.write(String(bot.id));
+      });
+    ')
+
+  # A hosted widget is immutable, but only if every public edge can read every file for the
+  # version the API just announced. If one node has metadata without files, some browsers get
+  # pinned to a version that returns 404 and the frame opens white.
+  step "widget files"
+  WIDGET_FILES="index.html style.css zeplao.js faces.js sound.js pieces.js board.js taixiu.js tienlen.js"
+  for round in 1 2 3; do
+    for host in https://kuku.vn https://www.kuku.vn; do
+      for file in "" "/" $WIDGET_FILES; do
+        if [ -z "$file" ]; then
+          url="$host/api/widgets/$BOT_ID/$WIDGET_VERSION"
+        elif [ "$file" = "/" ]; then
+          url="$host/api/widgets/$BOT_ID/$WIDGET_VERSION/"
+        else
+          url="$host/api/widgets/$BOT_ID/$WIDGET_VERSION/$file"
+        fi
+        code=$(curl -L -sS -o /dev/null -w '%{http_code}' \
+          -H 'Cache-Control: no-cache' \
+          -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0' \
+          "$url")
+        if [ "$code" != 200 ]; then
+          echo "widget file missing after upload: $code $url" >&2
+          exit 1
+        fi
+      done
+    done
+  done
+  echo "widget v$WIDGET_VERSION visible on public web hosts"
 fi
 
 step "start"
