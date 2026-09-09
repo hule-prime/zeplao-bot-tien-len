@@ -171,7 +171,7 @@ if [ -d "$ROOT/bots/$BOT/widget" ]; then
   step "widget files"
   WIDGET_FILES="index.html style.css zeplao.js faces.js sound.js pieces.js board.js taixiu.js tienlen.js"
   for round in 1 2 3; do
-    for host in https://kuku.vn https://www.kuku.vn; do
+    for host in https://kuku.vn https://www.kuku.vn https://api-bot.kuku.vn; do
       for file in "" "/" $WIDGET_FILES; do
         if [ -z "$file" ]; then
           url="$host/api/widgets/$BOT_ID/$WIDGET_VERSION"
