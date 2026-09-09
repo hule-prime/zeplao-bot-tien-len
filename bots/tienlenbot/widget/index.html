@@ -5,8 +5,12 @@
 <script>
   (function () {
     var path = window.location.pathname;
+    var last = path.split('/').pop() || '';
+    if (!path.endsWith('/') && !last.includes('.')) {
+      window.location.replace(window.location.origin + path + '/' + window.location.search + window.location.hash);
+      return;
+    }
     if (!path.endsWith('/')) {
-      var last = path.split('/').pop() || '';
       path = last.includes('.') ? path.replace(/[^/]*$/, '') : path + '/';
     }
     window.__tienlenAsset = function (name) { return window.location.origin + path + name; };
