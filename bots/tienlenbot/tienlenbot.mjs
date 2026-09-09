@@ -710,6 +710,7 @@ export async function run(token, { signal, api = API } = {}) {
 
   const me = await call('getMe');
   console.log(`@${me.username} is dealing`);
+  let widgetVersion = Number.isInteger(me.widgetVersion) ? me.widgetVersion : null;
 
   await call('setCommands', {
     commands: [{
@@ -778,6 +779,17 @@ export async function run(token, { signal, api = API } = {}) {
    */
   const screens = new Map();          // sessionId -> screen
   const openBy = new Map();           // userId -> sessionId
+
+  async function latestWidgetVersion() {
+    try {
+      const widget = await call('getWidget');
+      if (Number.isInteger(widget.version)) widgetVersion = widget.version;
+    } catch {
+      // Opening the table is more important than knowing whether the bundle changed. A failed
+      // check will try again on the next open.
+    }
+    return widgetVersion;
+  }
 
   /**
    * Who has how much gold, kept on disk.
@@ -1222,16 +1234,18 @@ export async function run(token, { signal, api = API } = {}) {
    */
   async function openFor(conversationId, who) {
     let screen = screenFor(who.userId);
+    const latest = await latestWidgetVersion();
 
     if (screen && screen.conversationId === conversationId) {
-      // The session may be gone even though the screen is not: sessions live in the API's
-      // memory and the API is replaced on every deploy. Notice and carry on rather than depend
-      // on everything restarting together.
+      // The session may be gone even though the screen is not: sessions live in the API's memory
+      // and the API is replaced on every deploy. The opposite happens on a widget-only deploy:
+      // the session survives and keeps serving the old bundle it was pinned to. Reuse only a
+      // live session that was made for the current bundle.
       const shown = await call('showSession', { sessionId: screen.sessionId, to: who.userId })
         .then(() => true)
         .catch(() => false);
 
-      if (shown) {
+      if (shown && (latest === null || screen.widgetVersion === latest)) {
         screen.displayName = who.displayName;
         screen.touched = Date.now();
         await pushTo(screen);
@@ -1267,6 +1281,7 @@ export async function run(token, { signal, api = API } = {}) {
       gameId: wasAt,
       adsAt: null,
       touched: Date.now(),
+      widgetVersion: latest,
     };
     screens.set(screen.sessionId, screen);
     openBy.set(who.userId, screen.sessionId);

@@ -70,6 +70,7 @@ function standIn(rooms = { c1: ['u1', 'u2'] }) {
     rooms,
     refused: [],        // every showSession the conversation rule turned away
     sessionNo: 0,
+    widgetVersion: 1,
   };
 
   const server = createServer(async (request, reply) => {
@@ -85,7 +86,15 @@ function standIn(rooms = { c1: ['u1', 'u2'] }) {
 
     switch (path) {
       case 'getMe':
-        return answer({ id: 'bot', username: 'tienlen', displayName: 'Tiến Lên' });
+        return answer({
+          id: 'bot',
+          username: 'tienlen',
+          displayName: 'Tiến Lên',
+          widgetVersion: app.widgetVersion,
+        });
+
+      case 'getWidget':
+        return answer({ version: app.widgetVersion, url: null, files: 8, bytes: 1 });
 
       case 'getUpdates': {
         // Answered from `offset`, the way the real one is: everything after that id, and the
@@ -108,6 +117,7 @@ function standIn(rooms = { c1: ['u1', 'u2'] }) {
 
       case 'showSession': {
         const session = app.sessions.get(sent.sessionId);
+        if (!session || !session.live) return answer({ error: 'session_not_found' }, 404);
         // The rule the whole design is built round, enforced here so the design is actually
         // tested against it.
         if (sent.to && !(app.rooms[session.conversationId] ?? []).includes(sent.to)) {
@@ -894,6 +904,24 @@ test('it says hello once, and not again because somebody deployed', async () => 
     });
     await app.until(() => app.said.length === 2, 'a hello on being put back');
   }, {});
+});
+
+test('a widget-only deploy opens a fresh session instead of the pinned old bundle', async () => {
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'the first screen');
+    const first = app.opened.u1;
+
+    app.asks('u1');
+    await nap(250);
+    assert.equal(app.opened.u1, first, 'same bundle, same room: reuse the live session');
+
+    app.widgetVersion += 1;
+    app.asks('u1');
+    await app.until(() => app.opened.u1 !== first, 'a fresh screen for the new bundle');
+    assert.equal(app.sessions.get(first).live, false, 'the old pinned session was closed');
+  }, { c1: ['u1'] });
 });
 
 test('and never to a room it was already in when it started', async () => {
@@ -1776,4 +1804,3 @@ test('a board hurried along by nobody still finishes', async () => {
     assert.ok(app.mine('u1').board, 'and the board is still a board');
   });
 });
-
