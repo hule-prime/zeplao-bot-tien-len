@@ -370,9 +370,29 @@ essential files prove they actually ran. On the loader as it was, all four scene
 thing: an ellipsis on an empty page. That is the white frame, and it is now a red test rather
 than a phone call.
 
-Widget files are served `immutable` with a year's max-age, so a bad response caught at one CDN
-edge stays there. That is why every retry changes the cache key rather than asking for the same
-URL again.
+### What actually causes it
+
+Caught in the act, and it is a server-side header. A widget file that misses answers like this:
+
+```
+HTTP/2 404
+content-length: 0
+cache-control: public, max-age=31536000, immutable
+age: 66
+cf-cache-status: HIT
+```
+
+**A 404 carrying a year of immutable caching.** The CDN stores it and serves `HIT` from then on.
+So one transient miss — a request that lands in the seconds after an upload, before the bundle
+is readable — freezes that file as gone **for a year at that edge**, while every other edge has
+the good copy. That is the whole shape of the bug: only some players, forever, always right
+after a widget upload, and never reproducible from the machine that deployed it.
+
+The fix belongs on the server: **cache headers must depend on the status.** `200` may be
+immutable for a year; `404` and `5xx` must be `no-store`. Until then the page defends itself —
+every retry uses a **fresh random cache key**, because a fixed one can be frozen too: while this
+was being written, `tienlen.js?r=1` became a permanent 404 at one edge, from a single click at
+the wrong moment.
 
 ## Tests
 

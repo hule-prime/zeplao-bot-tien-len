@@ -11,14 +11,25 @@
     }
     window.__tienlenAsset = function (name) { return window.location.origin + path + name; };
 
-    // Thử lại với đuôi khác đi, chứ không phải thử lại y nguyên.
-    //
-    // Thứ hay hỏng ở đây không phải cái mạng lúc này, mà là **một bản hỏng đã nằm trong cache**:
-    // file của bộ này đi qua CDN, mỗi edge cache riêng, và một cú 404 chộp đúng lúc file chưa
-    // kịp lan ra là một cú 404 nằm lại đó. Xin lại đúng cái URL ấy là xin lại đúng cái đã hỏng;
-    // thêm `?r=1` là một khoá cache khác, tức là một lần hỏi thật.
+    /*
+     * Thử lại với một cái khoá cache **chưa ai từng xin**, chứ không phải thử lại y nguyên.
+     *
+     * Thứ hỏng ở đây không phải cái mạng lúc này mà là **một bản hỏng đã bị đóng băng**, và đã
+     * bắt được tận tay: server trả `404` kèm `cache-control: public, max-age=31536000,
+     * immutable`, CDN cache đúng cái 404 ấy, rồi trả `HIT` cho mọi request sau đó. Một cú 404
+     * thoáng qua — lúc bundle vừa upload chưa kịp đọc được — thành một cái khung trắng **kéo
+     * dài một năm** cho mọi người đi qua edge đó, trong khi edge khác vẫn tốt.
+     *
+     * Nên khoá phải **ngẫu nhiên mỗi lần**, không phải `r=1`, `r=2`, `r=3`. Một khoá cố định là
+     * một khoá cũng đóng băng được: đúng lúc viết những dòng này, `?r=1` của `tienlen.js` đang
+     * là một cái 404 vĩnh viễn ở một edge — vì có người bấm thử đúng nó, đúng một lần, sai thời
+     * điểm. Ngẫu nhiên thì không có URL nào để mà đóng băng trước.
+     */
     window.__tienlenRetry = function (name, round) {
-      return window.__tienlenAsset(name) + (round ? '?r=' + round : '');
+      if (!round) return window.__tienlenAsset(name);
+      var fresh = round + '-' + Date.now().toString(36)
+        + '-' + Math.random().toString(36).slice(2, 8);
+      return window.__tienlenAsset(name) + '?r=' + fresh;
     };
 
     var css = document.createElement('link');
