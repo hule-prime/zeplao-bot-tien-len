@@ -329,6 +329,32 @@ not — but it remembers the last state pushed to each person the way the real o
 a bot pushes the table *before* it asks for the frame to be opened and without that the first
 push lands before anybody is listening.
 
+## The white frame
+
+Every widget upload has been a chance to hand players a blank screen, and a blank screen says
+nothing at all — no log, no error, no line anywhere. The only way it has ever been found is
+somebody opening the game and saying "trắng bóc". A run of commits here are all the same hunt
+by guesswork: asset paths, uploading through several origins, checking every file after upload,
+retrying the `ready` handshake.
+
+What all of that was missing is a test that **runs the bundle that was actually uploaded, in a
+browser, until it draws words on the screen**:
+
+```bash
+node tools/widget-selftest.mjs <botId> <version>
+```
+
+It opens the live bundle at the top level — where `parent === window`, so the page's own
+`parent.postMessage` lands back in the page and a listener installed before the page runs hears
+`ready` exactly as the host hears it — plays the host, and checks four things: all seven scripts
+loaded, nothing threw, `ready` was sent, and a real lobby was drawn once state arrived. Any of
+those failing is the white frame, named.
+
+`deploy-bot.sh` runs it after the upload and **refuses to restart the bot if it fails**. A file
+returning 200 was never proof: the seven scripts load one after another off `onload`, so one
+file that is served but broken — or two files that declare the same top-level name — kills the
+page mid-chain, silently.
+
 ## Tests
 
 ```bash

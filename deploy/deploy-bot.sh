@@ -192,6 +192,31 @@ if [ -d "$ROOT/bots/$BOT/widget" ]; then
     done
   done
   echo "widget v$WIDGET_VERSION visible on public web hosts"
+
+  # Và nó **chạy được**, không chỉ tải về được.
+  #
+  # Mọi thứ ở trên chỉ hỏi "file có ở đó không". Khung trắng thì không cần một file nào biến mất
+  # cả: bảy file nạp nối đuôi nhau ở `onload`, nên một file 200-nhưng-hỏng, hay hai file lỡ khai
+  # trùng một cái tên, cũng cho ra đúng cái kết quả ấy — trang chết ở giữa dây, im lặng, không
+  # một dòng lỗi ở đâu. Cách duy nhất từng phát hiện ra nó là có người mở game rồi nhắn "trắng
+  # bóc", và cả một dãy commit của kho này là những lần đi tìm nó bằng cách đoán.
+  #
+  # Nên bước này mở đúng bản vừa upload bằng một trình duyệt thật, đóng vai host, và chỉ chịu
+  # đi tiếp khi trang **vẽ ra được cái sảnh**.
+  step "widget chạy thật"
+  if node "$ROOT/tools/widget-selftest.mjs" "$BOT_ID" "$WIDGET_VERSION"; then
+    :
+  else
+    code=$?
+    # Không có Chrome (2) thì nói to rồi đi tiếp — không thể bắt mọi cái máy phải có trình duyệt.
+    # Trang hỏng thật (1) thì dừng: đi tiếp lúc này là đẩy một cái khung trắng ra cho người chơi.
+    if [ "$code" = 2 ]; then
+      echo "CHƯA THỬ ĐƯỢC bản v$WIDGET_VERSION — không chạy được self-test trên máy này" >&2
+    else
+      echo "bản v$WIDGET_VERSION KHÔNG CHẠY — dừng lại trước khi restart bot" >&2
+      exit 1
+    fi
+  fi
 fi
 
 step "start"
