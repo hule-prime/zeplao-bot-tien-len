@@ -55,7 +55,8 @@ sẽ cho người ta thấy một tay bài và không có cái bàn nào.
 | Bàn với máy | Cược cố định **10.000**, bất kể bàn mở ở mức nào. Nhất +10.000, nhì +5.000, ba −5.000, bét −10.000. Một ván cờ với máy cũng đúng con số ấy: thắng ăn, thua mất, hoà thì giữ nguyên |
 | Bàn giữa người | Cược của phòng — **tự đặt**, từ 1.000 tới 1.000.000 và không quá số tiền người mở đang có. Ba mức có sẵn chỉ là câu trả lời thường gặp |
 | Kiếm thêm | Quảng cáo 10 giây, **8.000** — tối đa 1.000 lần/ngày (con số đó chặn lỗi đếm chứ không phải để hạn chế — mười giây một lần đã là hạn chế rồi). Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** |
-| Bảng xếp hạng | Vàng, của cả thế giới |
+| Bảng xếp hạng | **Hai bảng**, cả hai của cả thế giới: **vàng**, và **công đức** — vàng đã phát cho cả sòng |
+| Phát tiền cho cả sòng | Ít nhất **100.000**, chia đều cho mọi người trong sổ, **1.000 vàng = 1 công đức**. Có lịch sử công khai, ai cũng đọc được |
 
 **Quảng cáo trả đúng một ván với máy**, không phải trùng hợp: nó tồn tại để đưa người hết tiền
 quay lại bàn, mà một quảng cáo xem xong vẫn không đủ ngồi thứ rẻ nhất trên màn hình là một quảng
@@ -106,6 +107,42 @@ lại nhiều hơn người ta tưởng.
 
 **Một người là một ví.** Sổ khoá theo người và không theo gì khác — không theo phòng, không theo
 màn hình, không theo phiên. Ai ở năm nhóm cũng chỉ một đống vàng và một chỗ trên bảng.
+
+### Công đức: đường tiền duy nhất không đi qua một cái bàn
+
+Mọi đường vàng khác ở đây hoặc là **tổng bằng không giữa những người ngồi cùng một bàn**, hoặc
+là nhà phát ra — vốn ban đầu, quà mỗi ngày, quảng cáo. Phát tiền cho cả sòng là đường thứ ba, và
+nó cũng tổng bằng không, chỉ khác ở chỗ **không có kẻ thua**: người phát biết mình mất gì trước
+khi bấm.
+
+Ba quyết định làm nên nó:
+
+**Chia cho cả sổ, không phải cho người đang online.** Một cái sòng thưởng người đang mở widget
+đúng lúc ai đó hào phóng là một cái sòng dạy người ta ngồi chờ. Sổ thì không chờ được: ai từng
+mở widget một lần là có phần, kể cả người tối nay không vào. Bảng vàng lọc theo số ván đã chơi
+vì một bảng xếp hạng người chưa chơi thì vô nghĩa — một món quà thì không kén người nhận như
+thế.
+
+**Phần lẻ về người ít vàng nhất**, mỗi người một đồng, tính từ đáy sổ lên. Không phải để công
+bằng hơn — một đồng thì công bằng cái gì — mà để **ra khỏi tay đúng bằng số đem phát**. Giữ phần
+lẻ lại thì người phát 100.000 cho 320 người chỉ thật sự phát 99.840, và một cái bảng công đức
+ghi con số không khớp với cái ví là một cái bảng không ai đối chiếu lần thứ hai. Đã phải chọn
+chỗ cho mấy đồng lẻ thì chọn chỗ nó đáng nằm nhất.
+
+**Lịch sử nằm ngay dưới cái bảng, không nằm sau một cái nút nữa.** Năm mươi lần phát gần nhất:
+ai, bao nhiêu, cho mấy người, lúc nào. Một bảng xếp hạng chỉ đưa ra con số là thứ người ta phải
+tin; một bảng đưa ra cả những lần phát làm nên con số ấy là một cái biên lai. Đó cũng là thứ
+biến việc cho tiền thành một việc **người khác thấy được** — mà một cái bảng công đức không ai
+thấy ai lên là một cái bảng không ai lên.
+
+Điểm **không được cất riêng**. Trong sổ chỉ có `gave`, tổng vàng đã phát; điểm là số đó chia cho
+1.000. Một con số chép ra hai chỗ là một con số lệch nhau ở lần sửa sau, và ở đây "lệch" nghĩa là
+bảng xếp hạng nói một đằng còn lịch sử nói một nẻo.
+
+Cái sàn 100.000 là cố ý đắt: gấp đôi vốn ban đầu, hơn ba ngày quà cộng lại. Một cái bảng ai cũng
+lên được bằng một nghìn vàng lẻ là một cái bảng dài vô tận và không nói lên điều gì — và dưới
+mức ấy, chia ra cho cả sổ thì mỗi người được mấy đồng bạc lẻ, mà một món quà không ai nhận ra là
+quà.
 
 ## 4. Luật, viết ở một chỗ
 

@@ -192,7 +192,8 @@ A few things that are the way they are on purpose:
 | A table against the machines | Fixed **10.000** a stake, whatever the table was opened at. Nhất +10.000, nhì +5.000, ba −5.000, bét −10.000. A board against the machine is the same number: win it, lose it, or draw and keep it |
 | A table between people | Whatever the room was opened at — **1.000** to 1.000.000, and never more than the opener has. Three presets for the common answers, and a field for anything else |
 | More gold | A ten second advertisement, worth **8.000**, behind the `+` beside the purse at any balance. The daily cap is a thousand, which is a guard against a counting bug rather than a ration — ten seconds a time is the ration |
-| The board | Gold, the world's, everybody |
+| The boards | Two, both the world's and everybody's: **gold**, and **công đức** — what somebody has handed out to the room |
+| Giving it away | **100.000** at least, split evenly across everybody in the ledger, and worth **1 công đức per 1.000 gold**. The only gold here that leaves one purse for another without a table in between |
 | A board between two people | Winner takes one stake off the loser; a draw costs nobody anything. Against the machine it is the fixed **10.000**, played against the house |
 | What the two bowls keep | Bầu cua **7,87%** — 17/216, the number every pavement table plays. Tài xỉu **2,78%** on tài, xỉu, chẵn and lẻ, and **13,89%** on bão. Worked out exactly over all 216 throws rather than measured, and pinned by a test |
 
@@ -234,6 +235,24 @@ of the cheapest thing on the screen has not done its job.
 **The ten seconds of the advertisement are counted by the bot.** The page draws the clock; a
 claim that arrives early is refused. A countdown a widget runs is a countdown a widget can skip,
 because a widget is a file anybody can edit.
+
+**Công đức is the one way gold moves without a table.** Somebody hands the room a hundred
+thousand or more; it is split evenly across every row in the ledger except their own, and what
+stays with them is a hundred points a hundred thousand, on a board of its own. Two things make
+it more than a button:
+
+- **What does not divide goes to the poorest**, one gold each from the bottom of the ledger up
+  until the remainder is gone. Not out of fairness — a single gold is not fair or unfair — but
+  so that *what leaves the giver is exactly what was given*. Keeping the remainder would have
+  somebody who gave a hundred thousand recorded as having given 99.840, and a board that does
+  not match the purse it came out of is a board nobody checks twice.
+- **The history is public and sits under the board.** Every gift, who gave it, how much, to how
+  many, and when — the last fifty of them. A leaderboard that only shows a total is one people
+  have to take on trust; one that shows the gifts behind it is a receipt.
+
+It is split across **the ledger**, not across whoever happens to be online. The gold board
+already ignores people who have never played a hand — a gift does not get to be that
+selective — and the third person in the test gets their share before they have opened anything.
 
 ## Layout
 

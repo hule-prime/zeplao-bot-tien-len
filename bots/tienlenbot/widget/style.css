@@ -1480,8 +1480,12 @@ body {
   pointer-events: none;
 }
 
-/* ---- soi cầu -------------------------------------------------------------------------------- */
+/* ---- hai cái tab, ba chỗ ---------------------------------------------------------------------- */
 
+/* Vàng hay công đức, ở đầu tab Xếp hạng. Cùng bộ áo với hai cái tab của sòng, vì cùng một việc:
+   một chỗ, hai cách đọc, và cái đang đọc thì sáng lên. Nó không nằm trong `flex` cột như hai cái
+   kia nên phải tự chừa khoảng dưới. */
+.board-tabs,
 #bc-tabs,
 #tx-tabs {
   flex: none;
@@ -1493,6 +1497,9 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.board-tabs { margin-bottom: 8px; }
+
+.board-tabs button,
 #bc-tabs button,
 #tx-tabs button {
   flex: 1;
@@ -1507,11 +1514,14 @@ body {
   cursor: pointer;
 }
 
+.board-tabs button.on,
 #bc-tabs button.on,
 #tx-tabs button.on {
   color: var(--rim);
   background: linear-gradient(180deg, var(--gold), var(--gold-deep));
 }
+
+/* ---- soi cầu -------------------------------------------------------------------------------- */
 
 /* Six rows, one a face, newest throw on the left. The shape of a real soi cầu board: a run of
    marks you can read down a column and across a row without counting anything. */

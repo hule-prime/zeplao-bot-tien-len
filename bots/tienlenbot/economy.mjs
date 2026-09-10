@@ -282,3 +282,63 @@ export const BLANCHE_WORTH = {
 export const BLANCHE = 3;
 
 export const blancheWorth = (what) => BLANCHE_WORTH[what] ?? BLANCHE;
+
+// ---- công đức ---------------------------------------------------------------------------------
+//
+// Phát tiền cho cả sòng. Một người bỏ vàng ra, **cả sổ** được chia đều, và cái ở lại với họ là
+// điểm công đức đứng tên mình trên một cái bảng riêng.
+//
+// Đây là chỗ duy nhất trong cả cái sòng này vàng **đi ra khỏi tay người có mà không qua một ván
+// nào**. Mọi đường tiền khác đều là tổng bằng không giữa người với người, hoặc là nhà phát ra —
+// quà mỗi ngày, quảng cáo, vốn ban đầu. Đường này cũng tổng bằng không, chỉ khác ở chỗ nó không
+// có kẻ thua: người phát biết mình mất gì trước khi bấm, và đó là cái làm nó thành công đức chứ
+// không phải một ván bài.
+
+/// Một nghìn vàng một điểm.
+///
+/// Chọn tròn để nhẩm được: phát một trăm nghìn là một trăm điểm, và không ai phải mở bảng ra mới
+/// biết mình sắp được bao nhiêu. Đây là con số **duy nhất** quy đổi giữa hai thứ ấy — điểm không
+/// được cất riêng ở đâu cả, nó là tổng vàng đã phát chia cho đây, nên đổi con số này là đổi cách
+/// đọc cả cái bảng chứ không phải viết lại lịch sử của ai.
+export const MERIT_PER = 1_000;
+
+/// Ít nhất phải phát bấy nhiêu.
+///
+/// Một trăm nghìn, tức là gấp đôi vốn ban đầu và hơn ba ngày quà cộng lại. Cố ý đắt: một cái
+/// bảng mà ai cũng lên được bằng một nghìn vàng lẻ là một cái bảng dài vô tận và không nói lên
+/// điều gì. Nó cũng là cái sàn giữ cho mỗi người trong sổ nhận được một con số đáng nhận —
+/// dưới nữa thì chia ra là mấy đồng bạc lẻ, và một món quà không ai nhận ra là quà.
+export const MERIT_MIN = 100_000;
+
+/// Bao nhiêu vàng đã phát thì thành bao nhiêu điểm.
+export const meritOf = (given) => Math.floor(given / MERIT_PER);
+
+/**
+ * Chia một món tiền cho cả sổ.
+ *
+ * Ai cũng như ai, và **phần lẻ không chia hết thì về người ít vàng nhất** — mỗi người một đồng,
+ * tính từ dưới đáy sổ lên, cho tới khi hết dư. Không phải để công bằng hơn (một đồng thì công
+ * bằng cái gì) mà để **phát bao nhiêu là ra khỏi tay đúng bấy nhiêu**: bỏ phần dư lại thì người
+ * phát một trăm nghìn cho ba trăm hai mươi người chỉ thật sự phát chín mươi chín nghìn tám, và
+ * cái bảng công đức sẽ ghi một con số không khớp với cái ví. Đã phải chọn chỗ cho mấy đồng lẻ
+ * thì chọn chỗ nó đáng nằm nhất.
+ *
+ * Hoà thì xếp theo id, để cùng một món tiền chia hai lần ra cùng một kết quả — một cái test
+ * không đoán trước được là một cái test không canh được gì.
+ *
+ * Thuần: nhận vào `[{ userId, gold }]` và trả ra `[{ userId, got }]`, không có ai bị bỏ sót và
+ * cũng không có ai nhận số không. Tổng phần trả ra đúng bằng `amount`, và có một cái test canh
+ * đúng câu ấy — vì đây là hàm duy nhất trong file có thể in tiền ra nếu cộng sai.
+ */
+export function shareOut(amount, people) {
+  const many = people.length;
+  if (!many || amount <= 0) return [];
+
+  const each = Math.floor(amount / many);
+  const over = amount - each * many;
+
+  return [...people]
+    .sort((one, two) => one.gold - two.gold || String(one.userId).localeCompare(String(two.userId)))
+    .map((one, place) => ({ userId: one.userId, got: each + (place < over ? 1 : 0) }))
+    .filter((one) => one.got > 0);
+}
