@@ -125,6 +125,24 @@ scp -q -i "$SSH_KEY" -P "$SSH_PORT" \
 # makes the order here load-bearing — the other way round, the new bot comes up and hands out
 # tables pinned to the *old* bundle for as long as it takes the upload to finish.
 if [ -d "$ROOT/bots/$BOT/widget" ]; then
+  # Trước khi upload: cái vòng nạp của trang, thử với một file hỏng đặt sẵn.
+  #
+  # Chạy ở đây chứ không ở `npm test`, vì nó cần một trình duyệt thật — mà bộ test thì phải chạy
+  # được ở mọi chỗ. Hỏng thì dừng trước cả lúc upload: một bộ widget mà một file không tới nơi
+  # là mất cả trang thì không nên có mặt trên mạng.
+  step "vòng nạp chịu được file hỏng"
+  if node "$ROOT/tools/loader-test.mjs"; then
+    :
+  else
+    code=$?
+    if [ "$code" = 2 ]; then
+      echo "CHƯA THỬ ĐƯỢC vòng nạp — không chạy được trình duyệt trên máy này" >&2
+    else
+      echo "vòng nạp để trang chết trắng khi một file hỏng — dừng trước khi upload" >&2
+      exit 1
+    fi
+  fi
+
   step "widget"
   TOKEN=$(remote "grep -o 'ZEPLAO_BOT_TOKEN=.*' /opt/zeplao/$BOT/.env | cut -d= -f2-")
   # The bot long-polls through api-bot.kuku.vn, but the app opens hosted widget files through

@@ -355,6 +355,25 @@ returning 200 was never proof: the seven scripts load one after another off `onl
 file that is served but broken — or two files that declare the same top-level name — kills the
 page mid-chain, silently.
 
+And the chain itself no longer breaks quietly:
+
+```bash
+node tools/loader-test.mjs      # also run by the deploy, before the upload
+```
+
+serves the bundle with one file deliberately broken and checks four things that have all
+happened somewhere: a file that 404s at its plain URL is **retried under a different cache key**
+and recovers; a file that is not essential is skipped and the table still opens; an essential
+file that is gone for good puts **words on the screen** with a reload button; and a file served
+as `200` with an empty body — the failure `onerror` never reports — is caught by making the two
+essential files prove they actually ran. On the loader as it was, all four scenes render one
+thing: an ellipsis on an empty page. That is the white frame, and it is now a red test rather
+than a phone call.
+
+Widget files are served `immutable` with a year's max-age, so a bad response caught at one CDN
+edge stays there. That is why every retry changes the cache key rather than asking for the same
+URL again.
+
 ## Tests
 
 ```bash

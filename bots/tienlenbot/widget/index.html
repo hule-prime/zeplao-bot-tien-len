@@ -10,9 +10,33 @@
       path = last.includes('.') ? path.replace(/[^/]*$/, '') : path + '/';
     }
     window.__tienlenAsset = function (name) { return window.location.origin + path + name; };
+
+    // Thử lại với đuôi khác đi, chứ không phải thử lại y nguyên.
+    //
+    // Thứ hay hỏng ở đây không phải cái mạng lúc này, mà là **một bản hỏng đã nằm trong cache**:
+    // file của bộ này đi qua CDN, mỗi edge cache riêng, và một cú 404 chộp đúng lúc file chưa
+    // kịp lan ra là một cú 404 nằm lại đó. Xin lại đúng cái URL ấy là xin lại đúng cái đã hỏng;
+    // thêm `?r=1` là một khoá cache khác, tức là một lần hỏi thật.
+    window.__tienlenRetry = function (name, round) {
+      return window.__tienlenAsset(name) + (round ? '?r=' + round : '');
+    };
+
     var css = document.createElement('link');
     css.rel = 'stylesheet';
     css.href = window.__tienlenAsset('style.css');
+    // Mất stylesheet thì trang vẫn chạy, chỉ là xấu — nhưng "xấu" ở đây là chữ đen trên nền
+    // trắng, mà nền trắng chính là thứ người ta gọi điện báo. Nên nó cũng thử lại.
+    css.onerror = function () {
+      var round = (css.__round || 0) + 1;
+      if (round > 3) return;
+      var again = document.createElement('link');
+      again.rel = 'stylesheet';
+      again.href = window.__tienlenRetry('style.css', round);
+      again.__round = round;
+      again.onerror = css.onerror;
+      css = again;
+      document.head.appendChild(again);
+    };
     document.head.appendChild(css);
   }());
 </script>
@@ -169,13 +193,90 @@
 <script>
   (function () {
     var files = ['zeplao.js', 'faces.js', 'sound.js', 'pieces.js', 'board.js', 'taixiu.js', 'tienlen.js'];
-    function load(i) {
+
+    /*
+     * Bảy file nạp nối đuôi nhau, và **cái dây ấy không được phép đứt trong im lặng**.
+     *
+     * Nó chỉ nối tiếp ở `onload`, nên một file không tải được là dừng ngay tại đó: `tienlen.js`
+     * không bao giờ chạy, `z.ready()` không bao giờ gọi, host chờ mãi — và cái người ta nhìn
+     * thấy là một cái khung **trắng bóc**, không một dòng lỗi ở đâu, không log, không gì. Không
+     * ai chẩn được nó, kể cả người viết ra nó: nó im lặng đúng ở chỗ cần phải kêu.
+     *
+     * Nên ba việc, theo thứ tự đó:
+     *
+     *   1. **Thử lại**, tới ba lần, mỗi lần một khoá cache khác. Thứ hỏng thường không phải
+     *      cái mạng lúc này mà là một bản hỏng đã nằm trong cache của một edge CDN — xin lại
+     *      đúng URL cũ là nhận lại đúng cái hỏng cũ.
+     *   2. **Bỏ qua file không thiết yếu**. Tiếng xúc xắc hay bộ mặt mà thiếu thì bàn xấu đi
+     *      chứ không chết; dừng cả trang vì một file trang trí là đổi một lỗi nhỏ lấy một lỗi
+     *      to nhất có thể.
+     *   3. Còn hai file **không thiếu được** — cái cầu sang app và chính trò chơi — thì nói ra
+     *      thành chữ trên màn hình, kèm tên file. Một câu tiếng Việt bao giờ cũng hơn một màn
+     *      trắng, cho cả người chơi lẫn người sắp phải đi tìm.
+     */
+    var NEEDED = { 'zeplao.js': 1, 'tienlen.js': 1 };
+
+    /*
+     * Và **nạp xong không có nghĩa là có gì trong đó**.
+     *
+     * Một file trả về 200 với thân rỗng hay cụt thì `onerror` không kêu một tiếng: trình duyệt
+     * coi như nạp xong, `onload` chạy, dây đi tiếp — rồi trang chết ở một chỗ chẳng liên quan,
+     * hoặc không chết mà chỉ đơn giản là không bao giờ gọi `z.ready()`. Vẫn đúng cái khung trắng
+     * ấy, lần này còn khó tìm hơn.
+     *
+     * Không phải chuyện lý thuyết: file của bộ này được phục vụ kèm `immutable` và hạn một năm,
+     * nên một phản hồi hỏng chộp đúng lúc là một phản hồi hỏng **nằm lại một năm** ở đúng cái
+     * edge ấy, còn người ở edge khác thì không thấy gì cả.
+     *
+     * Nên hai file sống còn phải **chứng minh là chúng thật sự đã chạy**: mỗi cái để lại một cái
+     * tên ở tầng toàn cục, và không thấy cái tên ấy thì coi như chưa nạp — thử lại bằng một khoá
+     * cache khác, y như khi tải hỏng.
+     */
+    var LEFT_BEHIND = { 'zeplao.js': 'Zeplao', 'tienlen.js': 'drawMenu' };
+
+    function took(name) {
+      var mark = LEFT_BEHIND[name];
+      return !mark || typeof window[mark] !== 'undefined';
+    }
+
+    function load(i, round) {
       if (i >= files.length) return;
+      var name = files[i];
       var script = document.createElement('script');
-      script.src = window.__tienlenAsset(files[i]);
-      script.onload = function () { load(i + 1); };
+      script.src = window.__tienlenRetry(name, round);
+      script.onload = function () {
+        if (took(name)) { load(i + 1, 0); return; }
+        script.onerror();
+      };
+      script.onerror = function () {
+        if (round < 3) { setTimeout(function () { load(i, round + 1); }, 200 * (round + 1)); return; }
+        if (!NEEDED[name]) { load(i + 1, 0); return; }
+        stuck(name);
+      };
       document.body.appendChild(script);
     }
-    load(0);
+
+    // Kiểu viết thẳng vào thẻ, vì lúc này rất có thể chính stylesheet cũng là thứ không tải nổi.
+    function stuck(name) {
+      var box = document.createElement('div');
+      box.setAttribute('style', 'position:fixed;inset:0;display:flex;flex-direction:column;'
+        + 'align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center;'
+        + 'background:#072318;color:#cfe0d6;font:14px/1.5 -apple-system,BlinkMacSystemFont,'
+        + '"Segoe UI",Roboto,sans-serif');
+      var what = document.createElement('div');
+      what.textContent = 'Không tải được ' + name + '.';
+      var how = document.createElement('div');
+      how.setAttribute('style', 'font-size:12px;opacity:.75');
+      how.textContent = 'Mạng hoặc bộ nhớ đệm đang giữ một bản hỏng. Bấm để thử lại.';
+      var again = document.createElement('button');
+      again.setAttribute('style', 'font:inherit;font-weight:650;padding:8px 18px;border:0;'
+        + 'border-radius:10px;background:#e9c46a;color:#08251a;cursor:pointer');
+      again.textContent = 'Tải lại';
+      again.onclick = function () { window.location.reload(); };
+      box.appendChild(what); box.appendChild(how); box.appendChild(again);
+      document.body.appendChild(box);
+    }
+
+    load(0, 0);
   }());
 </script>
