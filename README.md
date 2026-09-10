@@ -388,6 +388,9 @@ is readable — freezes that file as gone **for a year at that edge**, while eve
 the good copy. That is the whole shape of the bug: only some players, forever, always right
 after a widget upload, and never reproducible from the machine that deployed it.
 
+The whole hunt, the evidence, and what has to change on the platform side is written up for
+the kuku team in [docs/loi-khung-trang.md](docs/loi-khung-trang.md).
+
 The fix belongs on the server: **cache headers must depend on the status.** `200` may be
 immutable for a year; `404` and `5xx` must be `no-store`. Until then the page defends itself —
 every retry uses a **fresh random cache key**, because a fixed one can be frozen too: while this
