@@ -276,7 +276,10 @@ const web = createServer(async (request, reply) => {
   };
 
   if (url.pathname === '/') return send('text/html', HOME);
-  if (url.pathname === '/zeplao.js') return send('text/javascript', SHIM);
+  // Cả hai đường, vì trang xin nó qua `/widget/` — xem chỗ dọn tên file ở dưới.
+  if (url.pathname === '/zeplao.js' || url.pathname === '/widget/zeplao.js') {
+    return send('text/javascript', SHIM);
+  }
 
   if (url.pathname === '/send') {
     const userId = url.searchParams.get('user');
@@ -335,7 +338,16 @@ const web = createServer(async (request, reply) => {
     return;
   }
 
-  const name = url.pathname === '/widget' ? 'index.html' : url.pathname.slice(1);
+  // `/widget/tienlen.js` cũng là `tienlen.js`.
+  //
+  // Trang tự tính đường dẫn của bộ file từ `location.pathname`: khung ở đây mở `/widget`, không
+  // có dấu gạch cuối và không có dấu chấm, nên nó coi đó là một thư mục và đi xin
+  // `/widget/zeplao.js`. Chỗ này từng chỉ nhận đúng `/zeplao.js`, mà một cái tên có dấu `/`
+  // trong đó thì rơi vào luật chặn ngay dưới — nên **mọi file của trang đều 404** và cái khung
+  // ngồi im ở dấu ba chấm. Không có lỗi nào hiện ra: script không nạp được thì không có gì để
+  // báo lỗi cả.
+  const asked = url.pathname === '/widget' ? 'index.html' : url.pathname.slice(1);
+  const name = asked.startsWith('widget/') ? asked.slice('widget/'.length) : asked;
   if (/[^\w.-]/.test(name)) { reply.writeHead(404); return reply.end(); }
 
   try {
