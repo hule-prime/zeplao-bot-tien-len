@@ -685,8 +685,14 @@ test('phát tiền cho cả sòng: cả sổ được chia, và người phát l
 
     // Và cả phòng được biết, vì một cái bảng công đức không ai thấy ai lên là một cái bảng
     // không ai lên.
-    assert.ok(app.said.some((one) => one.text.includes('Thọ vừa phát 100.000 vàng cho 2 người')),
-      `phòng không được nói gì: ${app.said.map((one) => one.text).join(' | ')}`);
+    //
+    // **Chờ, không phải kiểm ngay.** Dòng cho phòng đi sau khi mọi màn hình đã được đẩy — nên
+    // cái ví đổi số xong không có nghĩa là tin nhắn đã tới nơi, nó chỉ có nghĩa là chưa tới
+    // lượt nó. Kiểm ngay tại đó là một cái test xanh trên máy rảnh và đỏ trên máy bận, mà đỏ
+    // ngẫu nhiên thì lần nào cũng bị đọc thành "chạy lại phát nữa xem".
+    await app.until(
+      () => app.said.some((one) => one.text.includes('Thọ vừa phát 100.000 vàng cho 2 người')),
+      `dòng cho phòng, thấy: ${app.said.map((one) => one.text).join(' | ')}`);
 
     // Người thứ ba chưa mở màn hình nào vẫn có phần — cái sổ mới là chỗ chia, không phải cái
     // danh sách ai đang online.

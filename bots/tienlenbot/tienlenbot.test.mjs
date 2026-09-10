@@ -1428,13 +1428,36 @@ test('không hai lần xóc nào mang cùng một tên', () => {
 // ---- hai luật của cái trang, đắt tiền cả hai --------------------------------------------------
 
 /// Mọi file kịch bản trong bundle, theo đúng thứ tự trang nạp chúng.
+///
+/// Đọc từ **mảng `files` của cái vòng nạp**, không phải từ mấy thẻ `<script src>`. Trang thôi
+/// dùng thẻ tĩnh từ lúc phải tự tính đường dẫn của bộ file cho Firefox — và cái hàm này vẫn đi
+/// tìm thẻ, nên nó trả về **rỗng**. Hai cái test dưới đây quét một danh sách rỗng, không tìm ra
+/// gì cả, và xanh. Mất bao lâu thì không ai biết: một cái test xanh vì không có gì để soi trông
+/// y hệt một cái test xanh vì mọi thứ đều đúng.
+///
+/// Nên nó **tự canh chính mình**: không đọc ra danh sách, hoặc đọc ra ít hơn số file trang thật
+/// sự có, là đỏ ngay tại đây. Cả hai luật dưới đây đều mua bằng một cái khung trắng, và một cái
+/// lưới thủng thì thà biết là nó thủng.
 function widgetScripts() {
   const dir = new URL('./widget/', import.meta.url);
   const html = readFileSync(new URL('index.html', dir), 'utf8');
-  return [...html.matchAll(/<script src="([\w.-]+)"><\/script>/g)]
+
+  const listed = /var files = \[([^\]]+)\]/.exec(html);
+  assert.ok(listed, 'không đọc được danh sách file của trang — cái vòng nạp đã đổi hình');
+
+  const names = [...listed[1].matchAll(/'([\w.-]+)'/g)]
     .map((one) => one[1])
-    .filter((name) => name !== 'zeplao.js')
-    .map((name) => [name, readFileSync(new URL(name, dir), 'utf8')]);
+    // Cái file nền tảng tự viết vào lúc upload. Không có nó trong repo để mà đọc.
+    .filter((name) => name !== 'zeplao.js');
+
+  // Số file thật trong thư mục, trừ đúng cái nền tảng viết vào. Lệch nhau nghĩa là trang có một
+  // file không ai soi, hoặc cái vòng nạp gọi tới một file không còn nữa.
+  const onDisk = readdirSync(dir)
+    .filter((name) => name.endsWith('.js') && name !== 'zeplao.js');
+  assert.deepEqual([...names].sort(), onDisk.sort(),
+    'danh sách trang nạp và mấy file có thật trong thư mục không khớp nhau');
+
+  return names.map((name) => [name, readFileSync(new URL(name, dir), 'utf8')]);
 }
 
 test('không hai file nào của trang khai trùng một cái tên ở tầng ngoài cùng', () => {
