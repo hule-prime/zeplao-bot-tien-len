@@ -892,8 +892,12 @@ test('coming first is paid at once, and leaving after it is not walking out', as
     const paid = (won.paid ?? []).find((one) => one.userId === first);
     assert.ok(paid, 'paid at the moment of going out, not at the end of the table');
     assert.equal(paid.place, 'Nhất');
-    assert.equal(paid.change, 1000, 'a stake, off whoever comes last');
-    assert.equal(won.gold, STARTING_GOLD + DAILY_GOLD + 1000, 'and the purse already says so');
+    // Tiền **về nhất** là con số tất định; `change` thì không, vì ván có thể có chặt — và một
+    // cú chặt tứ quý ở mức cược này là tám nghìn. Cái test từng canh `change` bằng đúng một
+    // cược, nên nó đỏ mỗi khi bài chia ra có tứ quý: không phải chập chờn, là canh nhầm chỗ.
+    assert.equal(paid.placing, 1000, 'a stake, off whoever comes last');
+    assert.equal(won.gold, STARTING_GOLD + DAILY_GOLD + paid.change,
+      'and the purse already says so, chặt và thối tính cả vào');
 
     // And now they can put it down. This is not forfeiting.
     app.does(first, { leave: true });
