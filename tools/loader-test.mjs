@@ -18,8 +18,9 @@
 //   5. Một file **không thiết yếu không bao giờ trả lời**: không `onload`, không `onerror`, dây
 //      nạp đứng chờ vô hạn. Phải bỏ lại mà đi tiếp — và **không được tạo thẻ thứ hai** cho nó,
 //      vì cái thẻ cũ vẫn sống và file sẽ chạy hai lần.
-//   6. Một file **sống còn treo**: không bỏ qua được, nên trang phải nạp lại chính mình một
-//      lần; treo tiếp thì nói ra thành chữ.
+//   6. Một file **sống còn treo**: không bỏ qua được, và cũng **không được tự nạp lại trang** —
+//      trên điện thoại, app đẩy trạng thái vào đúng một lần lúc trang mở, nên nạp lại là mất
+//      luôn. Nói ra thành chữ và để người dùng bấm.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
@@ -159,6 +160,9 @@ await call('Page.enable');
 // Cái host, cài trước khi trang chạy một dòng nào.
 await call('Page.addScriptToEvaluateOnNewDocument', {
   source: `
+    // Ngưỡng treo của trang để rất rộng cho mạng thật (20 giây). Bộ thử rút xuống, vì một
+    // cảnh chờ hai mươi giây là một cảnh không ai chạy.
+    window.__tienlenStallMs = 1500;
     window.__calls = [];
     window.__blew = [];
     window.addEventListener('error', function (e) { window.__blew.push(String(e.message)); });
@@ -181,7 +185,7 @@ async function scene(what, fault, expect) {
   await call('Page.navigate', { url: 'about:blank' });
   await call('Page.navigate', { url: at });
   // Đủ lâu cho ba lần thử lại cộng đồng hồ chống treo của trang.
-  await nap(18_000);
+  await nap(12_000);
 
   const calls = (await inPage('window.__calls')) ?? [];
   // Một file chạy hai lần là `SyntaxError: ... has already been declared`. Bộ thử phải nhìn
@@ -222,8 +226,9 @@ const all = [
     { breaks: 'tienlen.js', empty: true }, opened),
   await scene('file phụ treo thì bỏ lại mà đi tiếp, và không chạy hai lần',
     { breaks: 'board.js', hang: true, always: true }, (calls, drawn) => opened(calls, drawn)),
-  await scene('file sống còn treo thì nạp lại trang, rồi mới chịu nói là hỏng',
-    { breaks: 'tienlen.js', hang: true, always: true }, said('tienlen.js')),
+  await scene('file sống còn treo thì nói ra thành chữ, và tuyệt đối không tự nạp lại trang',
+    { breaks: 'tienlen.js', hang: true, always: true },
+    (calls, drawn) => said('tienlen.js')(calls, drawn)),
 ];
 
 leave(all.every(Boolean) ? 0 : 1,

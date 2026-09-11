@@ -252,31 +252,37 @@
 
     /*
      * Và **hỏng không phải kiểu duy nhất**: một request có thể chỉ đơn giản là **không bao giờ
-     * trả lời**. Treo thì `onload` không kêu mà `onerror` cũng không, nên dây nạp đứng im vô
-     * hạn — vẫn đúng cái khung trắng ấy.
+     * trả lời**. Treo thì `onload` không kêu mà `onerror` cũng không, nên dây nạp đứng im vô hạn.
      *
-     * Nhưng **một file treo thì không được xin lại bằng một cái thẻ thứ hai**, và đây là bài học
-     * đắt nhất trong cả cái vòng nạp này. Bản đầu của chỗ này làm đúng thế: quá ba giây thì bỏ
-     * cái đang treo, tạo thẻ mới. Rồi cái thẻ cũ về đích — và file chạy **hai lần**. Một file có
-     * `const` ở tầng ngoài cùng chạy hai lần là `SyntaxError: Identifier ... has already been
-     * declared`, tức là chết còn chắc hơn lúc nó treo. Bước tự kiểm của deploy bắt được ngay ở
-     * bản upload kế tiếp.
+     * Chỗ này đã sai hai lần, và cả hai lần đều vì **nhầm chậm với treo**:
      *
-     * Nên treo thì xử theo việc, không xử theo phản xạ:
+     *   - Bản đầu: quá ba giây thì bỏ cái đang treo, tạo thẻ mới. Cái thẻ cũ về đích sau, và
+     *     file chạy **hai lần** — `SyntaxError: Identifier ... has already been declared`, chết
+     *     chắc hơn cả lúc treo.
+     *   - Bản thứ hai: quá ba giây thì nạp lại cả trang. Trên một cái máy điện thoại mạng yếu,
+     *     ba giây là **thời gian tải bình thường** của một file trăm ki-lô-bai — nên nó nạp lại
+     *     giữa chừng, và trên điện thoại thì app đẩy trạng thái vào **một lần** lúc trang mở:
+     *     nạp lại là mất luôn cái state ấy. Đo bằng webview giả lập ở 60 kbps: trang tự nạp
+     *     lại, `tienlen.js` không bao giờ chạy, người dùng nhận một cái thẻ báo lỗi thay vì bàn.
      *
-     *   - **File không thiết yếu**: đi tiếp luôn, không đụng gì tới cái đang treo. Nó về muộn
-     *     thì cũng chỉ chạy đúng một lần, và mấy file ấy chỉ khai hàm chứ không cần thứ tự.
-     *   - **File sống còn**: không bỏ qua được, mà cũng không được nhân đôi — nên **nạp lại cả
-     *     trang** một lần, với một khoá khác ở đuôi. Cả trang nạp lại thì không có cái thẻ cũ
-     *     nào còn sống để mà chạy lần thứ hai. Lần thứ hai vẫn treo thì thôi, nói ra thành chữ.
+     * Nên: **đồng hồ để rất rộng** (bốn mươi lăm giây), và
+     * quá hạn thì cũng **không nạp lại trang, không tạo thẻ thứ hai cho cùng file**. File phụ
+     * thì bỏ lại mà đi tiếp; file sống còn thì nói ra thành chữ và để **người dùng** bấm tải
+     * lại — một cái nạp lại do người ta chọn thì không cướp mất thứ gì của ai.
+     *
+     * Cái ngưỡng để hở cho bộ thử chỉnh, vì một bộ thử phải chờ hai mươi giây mỗi cảnh là một
+     * bộ thử không ai chạy.
      */
-    var STALLED_MS = 3000;
-
-    function reloadOnce(name) {
-      if (/[?&]w=/.test(window.location.search)) { stuck(name); return; }
-      var mark = (window.location.search ? window.location.search + '&' : '?') + 'w=' + Date.now();
-      window.location.replace(window.location.pathname + mark);
-    }
+    /*
+     * Bốn mươi lăm giây, và con số ấy đo ra chứ không nghĩ ra.
+     *
+     * Cả bộ nặng hơn ba trăm ki-lô-bai. Trên một đường 60 kbps — đo bằng webview giả lập — nguyên
+     * bộ mất **khoảng 55 giây**, và riêng file to nhất mất gần hai mươi. Đặt ngưỡng ở hai mươi
+     * giây là bắn vào đúng cái file đang tải bình thường của một cái máy mạng yếu, tức là đúng
+     * người cần được kiên nhẫn nhất. Bốn mươi lăm giây thì một đường 3G tử tế (cả bộ ~2 giây)
+     * không bao giờ chạm tới, còn một cái treo thật thì vẫn có người nói cho biết.
+     */
+    var STALLED_MS = window.__tienlenStallMs || 45000;
 
     function load(i, round) {
       if (i >= files.length) return;
@@ -297,13 +303,13 @@
         stuck(name);
       };
 
-      // Treo. Cái thẻ cũ vẫn còn sống, nên tuyệt đối không tạo thẻ thứ hai cho cùng file.
-      // Treo. Cái thẻ cũ vẫn còn sống, nên tuyệt đối không tạo thẻ thứ hai cho cùng file.
+      // Treo. Cái thẻ cũ vẫn còn sống nên không được xin lại cùng file, và cũng không nạp lại
+      // trang — chỉ đi tiếp, hoặc chịu thua và nói ra.
       var stalled = function () {
         if (settled) return;
         settled = true;
         if (!NEEDED[name]) { load(i + 1, 0); return; }
-        reloadOnce(name);
+        stuck(name);
       };
 
       script.src = window.__tienlenRetry(name, round);
