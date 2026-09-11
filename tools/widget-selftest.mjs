@@ -137,7 +137,10 @@ await call('Page.addScriptToEvaluateOnNewDocument', {
 });
 
 await call('Page.navigate', { url: URL_ });
-await nap(7_000);
+// Lâu hơn bảy giây của bản đầu: trang giờ tự thử lại tới ba lần mỗi file, mỗi lần có đồng hồ
+// chống treo ba giây, nên một bộ đang chật vật vẫn có thể về đích sau hơn chục giây. Chờ ngắn
+// hơn quãng ấy là tự mình dựng ra một cái đỏ giả.
+await nap(20_000);
 
 const scripts = (await inPage(
   `[...document.querySelectorAll('script')].map((s) => s.src.split('/').pop()).filter(Boolean)`,

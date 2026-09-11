@@ -7,15 +7,16 @@
 // file không tới nơi thì chuyện gì xảy ra**. Câu trả lời cũ là "khung trắng, im lặng, vĩnh
 // viễn", vì bảy file nạp nối đuôi nhau và cái dây ấy chỉ nối tiếp ở `onload`.
 //
-// Bốn cảnh, và cả bốn đều đã xảy ra thật ở đâu đó:
+// Năm cảnh, và cả năm đều đã xảy ra thật ở đâu đó:
 //
 //   1. Một file 404 ở URL gốc rồi lành khi khoá cache đổi — đúng hình dạng của một edge CDN
 //      đang giữ bản hỏng. File widget được phục vụ kèm `immutable` và hạn một năm, nên một
 //      phản hồi hỏng chộp đúng lúc là một phản hồi hỏng nằm lại rất lâu.
 //   2. Một file **không thiết yếu** chết hẳn: bàn phải vẫn mở được, chỉ xấu đi.
 //   3. Một file **sống còn** chết hẳn: phải hiện ra chữ, không được để trắng.
-//   4. Một file trả **200 với thân rỗng** — kiểu hỏng mà `onerror` không bao giờ kêu, và là
-//      kiểu khó tìm nhất trong cả bốn.
+//   4. Một file trả **200 với thân rỗng** — kiểu hỏng mà `onerror` không bao giờ kêu.
+//   5. Một file **không bao giờ trả lời**. Kiểu này còn im hơn nữa: không `onload`, không
+//      `onerror`, dây nạp đứng chờ vô hạn. Bắt được lần đầu ở chính bước tự kiểm của deploy.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
@@ -69,13 +70,15 @@ const TYPES = { html: 'text/html', css: 'text/css', js: 'text/javascript' };
 ///
 /// `always` sai nghĩa là chỉ hỏng khi xin đúng URL gốc — tức là thứ tự lành được bằng một khoá
 /// cache khác, đúng như một bản hỏng nằm trong cache.
-function serve({ breaks = '', empty = false, always = false } = {}) {
+function serve({ breaks = '', empty = false, always = false, hang = false } = {}) {
   return createServer((request, reply) => {
     const [path, query] = request.url.split('?');
     const name = (path === '/widget' || path === '/') ? 'index.html'
       : path.replace(/^\/widget\//, '');
 
     if (name === breaks && (always || !query)) {
+      // Không trả lời gì cả, và cũng không đóng kết nối: đúng thứ làm dây nạp đứng im.
+      if (hang) return;
       if (empty) {
         reply.writeHead(200, { 'Content-Type': 'text/javascript' });
         reply.end('');
@@ -97,7 +100,7 @@ function serve({ breaks = '', empty = false, always = false } = {}) {
   });
 }
 
-// ---- một cái trình duyệt, dùng cho cả bốn cảnh --------------------------------------------------
+// ---- một cái trình duyệt, dùng cho cả năm cảnh --------------------------------------------------
 
 const profile = mkdtempSync(join(tmpdir(), 'loader-test-'));
 const port = 9700 + Math.floor(Math.random() * 200);
@@ -172,11 +175,18 @@ async function scene(what, fault, expect) {
 
   await call('Page.navigate', { url: 'about:blank' });
   await call('Page.navigate', { url: at });
-  await nap(3_500);
+  // Đủ lâu cho ba lần thử lại cộng đồng hồ chống treo của trang.
+  await nap(16_000);
 
   const calls = (await inPage('window.__calls')) ?? [];
   const drawn = (await inPage(
     `document.body ? document.body.innerText.replace(/\\s+/g, ' ').trim() : ''`)) ?? '';
+  // `closeAllConnections` trước, rồi mới đóng.
+  //
+  // `server.close()` chờ mọi kết nối đóng lại — mà cảnh "treo" thì có đúng một kết nối **không
+  // bao giờ đóng**, nên nó ngồi đợi mãi. Cái bộ thử viết ra để bắt lỗi treo mà tự nó treo, ở
+  // đúng cái cảnh ấy.
+  server.closeAllConnections();
   await new Promise((done) => server.close(done));
 
   const ok = expect(calls, drawn);
@@ -200,8 +210,10 @@ const all = [
     { breaks: 'tienlen.js', always: true }, said('tienlen.js')),
   await scene('file trả 200 rỗng — thứ onerror không bao giờ kêu — cũng phải bắt được',
     { breaks: 'tienlen.js', empty: true }, opened),
+  await scene('file không bao giờ trả lời thì bỏ lại, xin bằng khoá khác, và bàn vẫn mở',
+    { breaks: 'board.js', hang: true }, opened),
 ];
 
 leave(all.every(Boolean) ? 0 : 1,
-  all.every(Boolean) ? '  cả bốn cảnh đều không dẫn tới một cái khung trắng im lặng'
+  all.every(Boolean) ? '  cả năm cảnh đều không dẫn tới một cái khung trắng im lặng'
     : 'CÓ CẢNH DẪN TỚI KHUNG TRẮNG');

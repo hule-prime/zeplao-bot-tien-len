@@ -361,14 +361,16 @@ And the chain itself no longer breaks quietly:
 node tools/loader-test.mjs      # also run by the deploy, before the upload
 ```
 
-serves the bundle with one file deliberately broken and checks four things that have all
+serves the bundle with one file deliberately broken and checks five things that have all
 happened somewhere: a file that 404s at its plain URL is **retried under a different cache key**
 and recovers; a file that is not essential is skipped and the table still opens; an essential
-file that is gone for good puts **words on the screen** with a reload button; and a file served
-as `200` with an empty body — the failure `onerror` never reports — is caught by making the two
-essential files prove they actually ran. On the loader as it was, all four scenes render one
-thing: an ellipsis on an empty page. That is the white frame, and it is now a red test rather
-than a phone call.
+file that is gone for good puts **words on the screen** with a reload button; a file served as
+`200` with an empty body — the failure `onerror` never reports — is caught by making the two
+essential files prove they actually ran; and a file that **never answers at all** is given up on
+after three seconds and asked for again, because a request that hangs fires neither `onload` nor
+`onerror` and leaves the chain waiting for ever. That last one was found by the deploy's own
+self-test, on a real upload. On the loader as it was, every scene renders one thing: an ellipsis
+on an empty page. That is the white frame, and it is now a red test rather than a phone call.
 
 ### What actually causes it
 

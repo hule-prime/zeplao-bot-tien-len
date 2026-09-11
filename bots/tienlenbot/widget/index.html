@@ -250,20 +250,51 @@
       return !mark || typeof window[mark] !== 'undefined';
     }
 
+    /*
+     * Và **hỏng không phải kiểu duy nhất**: một request có thể chỉ đơn giản là **không bao giờ
+     * trả lời**.
+     *
+     * Treo thì `onload` không kêu mà `onerror` cũng không — dây nạp đứng im vô hạn, và người
+     * dùng lại thấy đúng cái khung trắng ấy. Bắt được lần đầu ở chính bước tự kiểm của deploy:
+     * `zeplao.js` nạp xong, rồi sáu file sau không có lấy một cái thẻ script nào được tạo ra,
+     * vì cái trước nó vẫn đang chờ một câu trả lời không tới. Cùng một ngày, một lần deploy cũng
+     * kẹt mười hai phút ở một `curl` không có hạn giờ — cùng một bài học, hai tầng khác nhau.
+     *
+     * Nên mỗi file có một cái đồng hồ. Quá ba giây mà chưa xong thì coi như hỏng: bỏ cái đang
+     * treo đó lại, xin lại bằng một khoá cache khác. Ba giây là chọn cho một cái khung đang mở
+     * trong một cuộc trò chuyện — chờ lâu hơn thế thì người ta đã đóng đi rồi.
+     */
+    var STALLED_MS = 3000;
+
     function load(i, round) {
       if (i >= files.length) return;
+
       var name = files[i];
       var script = document.createElement('script');
-      script.src = window.__tienlenRetry(name, round);
-      script.onload = function () {
-        if (took(name)) { load(i + 1, 0); return; }
-        script.onerror();
-      };
-      script.onerror = function () {
+      var settled = false;
+      var clock = null;
+
+      // Hỏng, treo, hay nạp xong mà rỗng ruột — ba đường vào cùng một chỗ, và chỉ đi được một lần.
+      var failed = function () {
+        if (settled) return;
+        settled = true;
+        clearTimeout(clock);
         if (round < 3) { setTimeout(function () { load(i, round + 1); }, 200 * (round + 1)); return; }
         if (!NEEDED[name]) { load(i + 1, 0); return; }
         stuck(name);
       };
+
+      script.src = window.__tienlenRetry(name, round);
+      script.onload = function () {
+        if (settled) return;
+        if (!took(name)) { failed(); return; }
+        settled = true;
+        clearTimeout(clock);
+        load(i + 1, 0);
+      };
+      script.onerror = failed;
+      clock = setTimeout(failed, STALLED_MS);
+
       document.body.appendChild(script);
     }
 
