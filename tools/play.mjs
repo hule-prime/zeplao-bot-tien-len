@@ -175,6 +175,7 @@ const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascrip
 const SHIM = `
 (function () {
   var listeners = [];
+  var rooms = [];
   var where = new URLSearchParams(location.search);
   var id = where.get('user') || 'u1';
   var name = where.get('name') || (id === 'u1' ? 'Thọ' : 'Lan Anh');
@@ -190,7 +191,26 @@ const SHIM = `
       });
     },
     onState: function (f) { listeners.push(f); },
-    setSize: function () {},
+
+    // Cái khung, và **cái vòng phản hồi quanh nó**.
+    //
+    // Bản đầu để \`setSize\` rỗng không và không có \`onRoom\` nào cả. Vì thế cái stand-in này mù
+    // trước đúng một lỗi: trang xin cỡ, host đổi khung, host báo \`onRoom\`, trang xin lại — một
+    // vòng lặp tự nuôi ăn sạch luồng chính và làm **trắng cả trang**. Nó đã lên tới production
+    // rồi mới bị bắt, bằng cách đếm số dòng log trên server.
+    //
+    // Nên ở đây host **kẹp** cỡ y như host thật (đo được: xin cao 855, được cho 667) và **báo
+    // lại** sau mỗi lần xin. Xin một thứ không bao giờ được cho, rồi xin lại vì chưa được như ý,
+    // là cái bẫy này — và giờ nó sập ngay trên máy người viết.
+    room: { host: 'web', width: 0, height: 0 },
+    onRoom: function (f) { rooms.push(f); },
+    setSize: function (w, h) {
+      var gave = { host: 'web', width: Math.min(w, 585), height: Math.min(h, 667) };
+      window.Zeplao.room = gave;
+      setTimeout(function () {
+        rooms.forEach(function (f) { try { f(gave); } catch (e) { console.error(e); } });
+      }, 0);
+    },
     close: function () {
       document.body.innerHTML =
         '<p style="padding:24px;color:#9dbcac;font:13px sans-serif">' +

@@ -3412,29 +3412,32 @@ const WEB = { w: 585, h: 855 };
 /**
  * Có đang chạy trên web không.
  *
- * **Hỏi nền tảng trước.** Cái bắt tay `hello` mà host gửi về sau `ready` có mang theo
- * `room.host` — `tools/widget-selftest.mjs` dựng lại đúng cái gói ấy với `host: 'web'`, vì đó là
- * cái nó phải giả cho giống. Nếu `zeplao.js` có đưa nó ra thì đó là **câu trả lời của chính
- * người biết**, và không có lý do gì đi đoán khi có người nói sẵn.
+ * **Chỉ đúng một câu trả lời được coi là "có": đúng chữ `web`.** Mọi chữ khác rơi xuống phép đo
+ * bên dưới — kể cả `unknown`, và `unknown` là cái nó **thật sự** trả về lúc khởi động.
  *
- * **Chỉ đoán khi nó im.** `zeplao.js` là file nền tảng ghi vào lúc upload, không nằm trong kho
- * này, nên không kiểm được từ đây là nó có đưa `room` ra hay không — và một câu lệnh viết theo
- * một cái API mình chưa đọc là một câu lệnh sẽ im lặng trả về `undefined`. Lúc ấy hai câu dưới
- * phải cùng đúng, và cả hai đều chọn theo hướng **đoán sai thì rơi về cỡ điện thoại**:
+ * Bản đầu viết `if (typeof told === 'string') return told === 'web'`, tức là tin nền tảng cả khi
+ * nền tảng nói *"tôi không biết"*. Đó là một câu trả lời "không biết" được cho quyền **phủ quyết
+ * một phép đo biết rõ**, và nó làm cả cái khung web đứng nguyên cỡ điện thoại. Đo thật trên máy:
+ *
+ *     room={"host":"unknown","width":0,"height":0}  framed=true  screen=2560x1080
+ *
+ * Cả hai vế của phép đo đều đã đúng, và cái `unknown` chặn chúng lại. Bài học rẻ hơn nếu ghi ra:
+ * **một nguồn có thẩm quyền chỉ được phép nói "có", không được phép nói "không" bằng cách im.**
+ *
+ * Phép đo, và cả hai vế đều chọn theo hướng **đoán sai thì rơi về cỡ điện thoại**:
  *
  * - **Nằm trong một cái iframe.** Bản web dựng cái khung này bằng một host React và nói chuyện
- *   với nó qua `postMessage` — chính là lý do cái `ready` ngay bên dưới được gọi năm lần. App
- *   điện thoại không đi qua đường ấy.
+ *   với nó qua `postMessage` — chính là lý do cái `ready` bên dưới được gọi năm lần. App điện
+ *   thoại không đi qua đường ấy.
  * - **Và màn hình thật sự đủ rộng.** Một cái điện thoại mở trang web cũng nằm trong iframe, mà
  *   585 pixel thì nó không có chỗ để đặt.
  *
  * `window.top` **so sánh** được kể cả khi khác nguồn gốc; chỉ đọc thuộc tính của nó mới ném lỗi.
  * Bọc `try` vì đây là dòng chạy sớm nhất của cả trang, và một lỗi ở đây là một khung trắng.
  */
-function webHost() {
+function webHost(room) {
   try {
-    const told = z.room && z.room.host;
-    if (typeof told === 'string') return told === 'web';
+    if ((room ?? z.room ?? {}).host === 'web') return true;
     return window.top !== window.self && window.screen.width >= 900;
   } catch {
     return false;
@@ -3443,12 +3446,35 @@ function webHost() {
 
 const want = webHost() ? WEB : PHONE;
 
+/**
+ * Cỡ đã xin lần gần nhất — và **xin lại đúng cỡ ấy là không xin gì cả**.
+ *
+ * Không phải tối ưu. Không có dòng này thì `onRoom` bên dưới thành một vòng lặp tự nuôi: xin
+ * `setSize` → host đổi khung → host bắn `onRoom` → xin lại → lặp mãi. Đo thật trên máy: **141
+ * lần trong vài giây**, luồng chính bị ăn sạch, và cái người ta nhìn thấy là **khung trắng**.
+ *
+ * Cái nuôi nó là chỗ host **kẹp** cái mình xin: xin cao 855, được cho 667. Nên cứ mỗi vòng lại
+ * là "chưa được như ý, xin tiếp" — một vòng lặp không bao giờ hội tụ, vì thứ nó đợi là thứ
+ * không bao giờ tới. So theo **cái đã xin**, không theo cái nhận được, thì nó dừng sau đúng một
+ * lần.
+ */
+let asked = null;
+
+/// Xin một cỡ. Trả về `false` nếu đã xin đúng cỡ ấy rồi — tức là không có gì để làm.
+function ask(size) {
+  const want = `${size.w}x${size.h}`;
+  if (asked === want) return false;
+  asked = want;
+  z.setSize(size.w, size.h);
+  return true;
+}
+
 // Web desktop can load this cached frame before the React host has attached its message listener.
 // A missed first `ready` leaves the frame waiting for the initial state forever; mobile does not
 // use this postMessage path. Asking again is harmless and gives the host a few chances to hear.
 for (const wait of [0, 80, 240, 800, 1600]) {
   setTimeout(() => {
-    z.setSize(want.w, want.h);
+    ask(want);
     z.ready();
   }, wait);
 }
@@ -3466,5 +3492,60 @@ for (const wait of [0, 80, 240, 800, 1600]) {
  * tìm ở chỗ nạp file.
  *
  * Gửi một lần, không chờ ai trả lời, và bot không trả lời gì cả — nó chỉ ghi xuống.
+ *
+ * **Kèm cả cái khung rộng hẹp ra sao, và vì sao nó ra con số ấy.** Cùng một lý lẽ với đoạn trên:
+ * "mở trên web mà vẫn bé" là một câu mà từ ngoài nhìn vào có **ít nhất ba** nguyên nhân khác hẳn
+ * nhau — trang đoán sai chỗ mình đang chạy, trang xin đúng mà host kẹp lại, hay host không nghe
+ * `setSize` bao giờ. Ba cái ấy sửa ở ba nơi khác nhau, một trong ba nơi ấy **không thuộc kho
+ * này**, và không cái nào nhìn ra được từ phía người mở game. Một dòng ở đây chia được ba.
  */
-z.send({ boot: 1 });
+z.send({
+  boot: 1,
+  fit: {
+    want: `${want.w}x${want.h}`,
+    // Nền tảng có tự nói nó là gì không, và nó đưa ra những gì.
+    room: z.room ? JSON.stringify(z.room).slice(0, 120) : null,
+    keys: Object.keys(z || {}).join(','),
+    framed: window.top !== window.self,
+    screen: `${window.screen.width}x${window.screen.height}`,
+    inner: `${window.innerWidth}x${window.innerHeight}`,
+  },
+});
+
+// Và đo lại sau khi host đã kịp nghe `setSize`.
+//
+// Con số lúc khởi động là con số **trước** khi có ai trả lời, nên một mình nó không phân biệt
+// được "xin bé" với "xin to mà bị kẹp". Hai con số thì phân biệt được, và đó là cả lý do có cái
+// thứ hai này.
+setTimeout(() => {
+  z.send({ boot: 2, fit: { inner: `${window.innerWidth}x${window.innerHeight}` } });
+}, 3000);
+
+/**
+ * Và xin lại cỡ khi nền tảng **biết** cái khung của nó rộng hẹp ra sao.
+ *
+ * Lúc khởi động nó nói `host: "unknown"` và `width: 0, height: 0` — tức là chính nó cũng chưa
+ * biết, nên câu trả lời thật tới sau, qua `onRoom`. Xin một lần lúc nạp rồi thôi là xin đúng vào
+ * cái lúc duy nhất không ai trả lời được.
+ *
+ * Bọc `try` và kiểm kiểu trước khi gọi: `onRoom` có trong bảng hàm mà `zeplao.js` bày ra hôm
+ * nay, nhưng `zeplao.js` là file nền tảng ghi vào lúc upload và không nằm trong kho này — một
+ * bản cũ không có nó thì chỗ này phải im lặng đi tiếp, không phải làm trắng cả trang.
+ */
+try {
+  if (typeof z.onRoom === 'function') {
+    z.onRoom((room) => {
+      // Chỉ khi cỡ **muốn xin** đổi. Host kẹp cái mình xin, nên "cái nhận được chưa bằng cái
+      // muốn" là chuyện thường trực chứ không phải một lý do để xin lại — xem `asked`.
+      if (!ask(webHost(room) ? WEB : PHONE)) return;
+      z.send({
+        boot: 3,
+        fit: {
+          room: JSON.stringify(room ?? null).slice(0, 120),
+          want: asked,
+          inner: `${window.innerWidth}x${window.innerHeight}`,
+        },
+      });
+    });
+  }
+} catch { /* bản zeplao.js cũ không có onRoom — cỡ xin lúc nạp là cỡ cuối cùng */ }

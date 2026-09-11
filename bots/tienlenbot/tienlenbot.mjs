@@ -1588,7 +1588,14 @@ export async function run(token, { signal, api = API } = {}) {
     // chết lúc nạp, trang chạy mà không có trạng thái, hay app chưa dựng nổi cái khung. Kèm số
     // bản, vì "máy anh ấy đang chạy bản nào" là câu hỏi đầu tiên mỗi lần có người báo trắng.
     if (action.boot) {
-      console.log(`widget chạy được cho ${who.displayName} · bản v${screen.widgetVersion ?? '?'}`);
+      // Kèm cái khung rộng hẹp ra sao, nếu trang có nói. Nó tới từ một trang ai cũng sửa được,
+      // nên nó **chỉ đi vào một dòng log** và không vào một quyết định nào — cắt ngắn và bỏ
+      // xuống dòng, vì một cái log nhận chuỗi tuỳ ý từ ngoài là một cái log giả mạo được.
+      const fit = action.fit && typeof action.fit === 'object'
+        ? ' · ' + JSON.stringify(action.fit).replace(/[\r\n]/g, ' ').slice(0, 300)
+        : '';
+      console.log(`widget chạy được cho ${who.displayName}`
+        + ` · bản v${screen.widgetVersion ?? '?'} · boot ${action.boot}${fit}`);
       return;
     }
 
