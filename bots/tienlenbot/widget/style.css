@@ -184,6 +184,9 @@ body {
 }
 
 #tabs button {
+  /* Gốc toạ độ cho hai cái huy hiệu bên dưới. Thiếu dòng này thì chúng neo vào cả trang, và mọi
+     con số phần trăm rơi vào chúng sẽ tính theo bề rộng của khung chứ không phải của nút. */
+  position: relative;
   flex: 1;
   border: 0;
   background: none;
@@ -216,8 +219,9 @@ body {
 
 /* A count, when there is something to count — and a bare dot when the thing waiting on a tab
    has no number to it. */
-#tabs button u.dot {
+#tabs button u.tab-dot {
   font-size: 0;
+  width: 8px;
   min-width: 8px;
   height: 8px;
   padding: 0;
@@ -2673,21 +2677,29 @@ body {
 .grid.xiangqi .man.dark { color: #1e2430; }
 
 /* Ô đi được, và ô ăn được. Hai dấu khác nhau vì đó là hai nước khác nhau, và ở cờ thì "ô này có
-   quân địch" là nửa quyết định. */
-.dot,
-.take {
+   quân địch" là nửa quyết định.
+
+   **Buộc vào trong `.sq`**, chứ không để `.dot` trần.
+
+   Hai dấu này chỉ sống trong một ô cờ, nhưng viết trần thì chúng với tay ra cả trang — và đã với
+   thật: cái chấm "có quà" trên tab Chơi cũng từng tên `dot`, nên nó ăn nguyên `width: 26%` ở
+   đây. 26% của cái gì thì tuỳ chỗ đứng, mà nút tab lúc ấy không có `position`, nên nó lấy 26%
+   của **cả khung 390px** và nở thành một vạch vàng 101px vắt ngang tab. Một cái tên chung chung
+   trong một stylesheet dùng chung là một quả mìn; buộc nó vào chỗ nó thuộc về thì mìn hết ngòi. */
+.sq .dot,
+.sq .take {
   position: absolute;
   pointer-events: none;
 }
 
-.dot {
+.sq .dot {
   width: 26%;
   height: 26%;
   border-radius: 50%;
   background: rgba(20, 90, 50, 0.55);
 }
 
-.take {
+.sq .take {
   inset: 6%;
   border-radius: 50%;
   border: 3px solid rgba(180, 40, 30, 0.6);

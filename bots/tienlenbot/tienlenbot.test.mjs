@@ -1608,6 +1608,56 @@ test('bàn cờ đo ra cỡ, chứ không nhờ CSS tự lo', () => {
   }
 });
 
+test('không hai thứ khác nhau của trang mang cùng một tên class trần', () => {
+  /*
+   * Luật thứ ba, và lại mua bằng một cái lỗi ra tới tay người chơi.
+   *
+   * `board.js` gọi dấu ô đi được là `.dot`. `tienlen.js` gọi cái chấm "có quà" trên tab Chơi
+   * cũng là `.dot`. Một stylesheet, một cái tên, hai thứ chẳng liên quan gì nhau — nên cái chấm
+   * ăn nguyên `width: 26%` của luật bàn cờ. 26% của cái gì thì tuỳ chỗ đứng, mà nút tab lúc ấy
+   * không có `position`, nên nó lấy 26% của **cả cái khung 390px** và nở thành một vạch vàng
+   * 101px vắt ngang tab Chơi — sáng rực ở đó kể cả khi người ta đang đứng ở tab khác.
+   *
+   * Không ai đọc ra được chuyện đó từ chỗ vẽ, vì chỗ vẽ chỉ ghi `className = 'dot'` và trông
+   * hoàn toàn vô tội. Cùng một bài học với luật trùng tên ở tầng JavaScript ngay trên đây, chỉ
+   * khác tầng.
+   *
+   * Chỉ soi **luật trần** — `.tên {` hoặc `.tên,` ở đầu dòng. Một luật đã buộc vào chỗ của nó
+   * (`.sq .dot`) thì không với ra ngoài được nữa, và đó cũng chính là cách sửa.
+   */
+  const dir = new URL('./widget/', import.meta.url);
+  const css = readFileSync(new URL('style.css', dir), 'utf8');
+
+  const bare = new Set();
+  for (const found of css.matchAll(/(^|\n)\.([a-z][\w-]*)\s*[,{]/g)) bare.add(found[2]);
+  assert.ok(bare.size > 20, `chỉ đọc được ${bare.size} luật trần — regex hỏng rồi`);
+
+  // Dùng chung **có chủ ý**: cùng một thứ, vẽ ở hai chỗ. Thêm tên vào đây là một quyết định,
+  // và phải là một quyết định — đó là lúc người ta dừng lại đủ lâu để nhận ra "à, bên kia đã
+  // có một cái tên này rồi, mà nó là thứ khác".
+  const SHARED = new Set([
+    'big',                                              // thẻ lớn ở màn đầu, tài xỉu dùng lại
+    'step-note', 'cau-none', 'cau-head', 'cau-span', 'cau-key',  // hai cái bát chung một bộ áo
+    'finished-gold',                                    // số vàng cuối ván, bàn cờ dùng lại
+  ]);
+
+  const owner = new Map();
+  for (const [name, src] of widgetScripts()) {
+    for (const found of src.matchAll(/[`'"]([a-z][\w -]*)[`'"]/g)) {
+      for (const one of found[1].split(/\s+/)) {
+        if (!bare.has(one) || SHARED.has(one)) continue;
+        if (!owner.has(one)) owner.set(one, new Set());
+        owner.get(one).add(name);
+      }
+    }
+  }
+
+  const clash = [...owner]
+    .filter(([, files]) => files.size > 1)
+    .map(([one, files]) => `.${one}: ${[...files].join(' và ')}`);
+  assert.deepEqual(clash, [], 'hai thứ khác nhau chung một cái tên class:\n  ' + clash.join('\n  '));
+});
+
 test('không hai phần tử nào của trang mang cùng một id', () => {
   // Ra tới tay người chơi: "cờ vua vào còn không hiển thị gì".
   //

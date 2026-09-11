@@ -2351,7 +2351,11 @@ function drawTabs() {
     if (count) {
       const many = document.createElement('u');
       many.textContent = String(count);
-      if (count === '•') many.className = 'dot';
+      // `tab-dot`, không phải `dot`. Bàn cờ đã có một `.dot` của nó — dấu ô đi được — và hai
+      // thứ chẳng liên quan gì nhau mà chung một cái tên trong một stylesheet dùng chung thì
+      // sớm muộn cũng gặp nhau. Lần này là cái chấm "có quà" nở thành một vạch vàng vắt ngang
+      // tab, vì luật bên kia đặt `width: 26%`.
+      if (count === '•') many.className = 'tab-dot';
       tab.append(many);
     }
 
