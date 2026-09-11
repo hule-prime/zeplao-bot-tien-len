@@ -193,7 +193,7 @@ A few things that are the way they are on purpose:
 | A table between people | Whatever the room was opened at — **1.000** to 1.000.000, and never more than the opener has. Three presets for the common answers, and a field for anything else |
 | More gold | A ten second advertisement, worth **8.000**, behind the `+` beside the purse at any balance. The daily cap is a thousand, which is a guard against a counting bug rather than a ration — ten seconds a time is the ration |
 | The boards | Two, both the world's and everybody's: **gold**, and **công đức** — what somebody has handed out to the room |
-| Giving it away | **100.000** at least, split evenly across everybody in the ledger, and worth **1 công đức per 1.000 gold**. The only gold here that leaves one purse for another without a table in between |
+| Giving it away | **100.000** at least, split evenly across everybody in the ledger, and worth **1 công đức per 100 gold**, so a hundred thousand is a thousand points. The only gold here that leaves one purse for another without a table in between |
 | A board between two people | Winner takes one stake off the loser; a draw costs nobody anything. Against the machine it is the fixed **10.000**, played against the house |
 | What the two bowls keep | Bầu cua **7,87%** — 17/216, the number every pavement table plays. Tài xỉu **2,78%** on tài, xỉu, chẵn and lẻ, and **13,89%** on bão. Worked out exactly over all 216 throws rather than measured, and pinned by a test |
 
@@ -238,7 +238,7 @@ because a widget is a file anybody can edit.
 
 **Công đức is the one way gold moves without a table.** Somebody hands the room a hundred
 thousand or more; it is split evenly across every row in the ledger except their own, and what
-stays with them is a hundred points a hundred thousand, on a board of its own. Two things make
+stays with them is a thousand points a hundred thousand, on a board of its own. Two things make
 it more than a button:
 
 - **What does not divide goes to the poorest**, one gold each from the bottom of the ledger up

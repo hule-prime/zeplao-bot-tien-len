@@ -42,6 +42,15 @@ const SCORES = process.env.TIENLEN_SCORES ?? '/app/data/scores.json';
 /// How many names a table shows.
 export const TABLE_SIZE = 20;
 
+/// How many gifts the history remembers.
+///
+/// A record everybody can read, so it is kept the way the bowls keep their cầu: on disk beside
+/// the gold, and cut to a length. Long enough that a gift is still there the next evening,
+/// short enough that the lobby state does not grow without end — every screen not at a table
+/// carries this list on every push, and a list that only ever gets longer is a list that
+/// eventually costs more to send than the game it sits beside.
+export const ALMS_KEPT = 50;
+
 // ---- luật, ở nơi luật sống --------------------------------------------------------------------
 //
 // Ba trò và một cái ví. Mỗi luật chơi là một file thuần, không biết gì về mạng, và cái file này
@@ -94,6 +103,7 @@ import { BOARD_TURN_MS, BOARD_THINK_MS } from './rules/search.mjs';
 import {
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, STAKES, MIN_STAKE, MAX_STAKE, asStake,
   ADS_MS, ADS_GOLD, ADS_PER_DAY, BROKE, payouts, dayIn, gold, settlement,
+  MERIT_PER, MERIT_MIN, meritOf, shareOut,
 } from './economy.mjs';
 
 // ---- two bowls, one set of machinery --------------------------------------------------------
@@ -183,6 +193,20 @@ export const SAY = {
   // Said with the number, because "not enough gold" leaves somebody to work out how much a
   // table they cannot see costs.
   tooPoor: (stake) => `Cần ${gold(stake)} vàng mới ngồi được bàn này.`,
+  // Phát tiền cho cả sòng. Ba câu từ chối, ba lý do khác nhau — một câu "không phát được" dùng
+  // chung cho cả ba là ba người đi sửa ba việc khác nhau mà không ai biết mình đang sửa gì.
+  almsTooLittle: (least) => `Phát ít nhất ${gold(least)} vàng mới được tính công đức.`,
+  almsTooPoor: (purse) => `Bạn chỉ có ${gold(purse)} vàng.`,
+  almsAlone: 'Chưa có ai khác trong sổ để phát.',
+  // Nói cho cả phòng, vì đây là việc duy nhất ở đây làm cho người khác. Một việc tốt làm trong
+  // im lặng thì đúng là tốt hơn, nhưng một cái bảng công đức mà không ai thấy ai lên thì không
+  // ai lên.
+  almsGave: (who, amount, many, points) =>
+    `${who} vừa phát ${gold(amount)} vàng cho ${many} người trong sòng — +${gold(points)} công đức.`,
+  // Và nói riêng cho từng người nhận, ngay trên màn hình họ đang mở.
+  almsGot: (who, amount) => `${who} vừa phát cho cả sòng — bạn được ${gold(amount)} vàng.`,
+  almsMine: (amount, many, points) =>
+    `Đã phát ${gold(amount)} vàng cho ${many} người · +${gold(points)} công đức.`,
   pinned: 'Lá này nằm trong phỏm đã ăn — không đánh đi được.',
   notNow: 'Nước này không đi được lúc này.',
   notYourTurn: 'Chưa tới lượt bạn.',
@@ -811,12 +835,15 @@ export async function run(token, { signal, api = API } = {}) {
       // And the tài xỉu one, which is its own run and its own length. Two bowls, two boards:
       // pouring one into the other would be reading somebody else's game as this one's cầu.
       kept.cauTx = Array.isArray(kept.cauTx) ? kept.cauTx.slice(0, TX_HISTORY) : [];
+      // Ai đã phát cho cả sòng, bao nhiêu, lúc nào. Cùng chỗ với vàng vì cùng lý do: một cái
+      // bảng công đức bắt đầu lại từ đầu sau mỗi lần deploy là một cái bảng không ai tin.
+      kept.alms = Array.isArray(kept.alms) ? kept.alms.slice(0, ALMS_KEPT) : [];
       return kept;
     } catch {
       // No file yet, or one somebody edited into nonsense. An empty ledger is the honest
       // starting point — refusing to run because a scoreboard is missing would take the games
       // down with it.
-      return { people: {}, offset: 0, greeted: {}, cau: [], cauTx: [] };
+      return { people: {}, offset: 0, greeted: {}, cau: [], cauTx: [], alms: [] };
     }
   })();
 
@@ -858,9 +885,14 @@ export async function run(token, { signal, api = API } = {}) {
     const row = scores.people[userId]
       ?? {
         name: '', gold: STARTING_GOLD, started: true, games: 0, first: 0, last: 0,
-        claimed: '', adsDay: '', ads: 0,
+        claimed: '', adsDay: '', ads: 0, gave: 0,
       };
     if (displayName) row.name = displayName;
+
+    // Rows written before there was anything to give away. Công đức is kept as **the gold
+    // handed out**, not as points: points are that number divided by `MERIT_PER`, and a second
+    // copy of a number is a number that goes stale the first time the first one changes.
+    if (row.gave === undefined) row.gave = 0;
 
     // Rows written before the day's gold became something you take rather than something you
     // are given. One field did both jobs; two do them separately, because somebody who never
@@ -1025,6 +1057,71 @@ export async function run(token, { signal, api = API } = {}) {
       // board at all, above, and is not sent — nothing draws it.
       .map(([id, row]) => ({ id, name: row.name, gold: row.gold, first: row.first }))
       .sort((a, b) => b.gold - a.gold || b.first - a.first || a.name.localeCompare(b.name))
+      .slice(0, TABLE_SIZE);
+  }
+
+  /**
+   * Phát tiền cho cả sòng.
+   *
+   * Trừ đúng một lần ở đây, cộng cho từng người ở đây, và ghi vào sổ ở đây — cả ba trong một
+   * hàm không có một chỗ `await` nào. Đó không phải chuyện gọn: vòng lặp update là một luồng,
+   * nên một hàm chạy thẳng từ đầu tới cuối không thể bị chen ngang, còn một hàm dừng lại giữa
+   * chừng để đẩy màn hình thì **có** — và cái ví bị trừ rồi mà tiền chưa chia xong là thứ duy
+   * nhất ở đây không được phép xảy ra. Đẩy màn hình là việc của người gọi, sau khi sổ đã đúng.
+   *
+   * Kiểm ba việc trước khi đụng tới đồng nào: đủ mức tối thiểu, đủ tiền trong ví, và có người
+   * để phát. Con số đi vào đây tới từ một trang web ai cũng sửa được, nên nó được làm tròn và
+   * kiểm lại ở đây chứ không phải ở đó.
+   *
+   * Trả về lời từ chối, hoặc kết quả để nói lại cho cả phòng và cho từng người nhận.
+   */
+  function giveAll(who, asked) {
+    const row = rowFor(who.userId, who.displayName);
+    const amount = Math.round(Number(asked));
+
+    if (!Number.isFinite(amount) || amount < MERIT_MIN) {
+      return { refused: SAY.almsTooLittle(MERIT_MIN) };
+    }
+    if (amount > row.gold) return { refused: SAY.almsTooPoor(row.gold) };
+
+    // Cả sổ trừ chính mình. Ai từng mở widget một lần là có một dòng trong sổ, kể cả người chưa
+    // đánh ván nào — bảng vàng lọc theo số ván đã chơi vì một bảng xếp hạng người chưa chơi là
+    // vô nghĩa, còn một món quà thì không kén người nhận như thế.
+    const others = Object.entries(scores.people)
+      .filter(([id]) => id !== who.userId)
+      .map(([id, one]) => ({ userId: id, gold: one.gold }));
+    if (!others.length) return { refused: SAY.almsAlone };
+
+    const shares = shareOut(amount, others);
+
+    row.gold -= amount;
+    row.gave += amount;
+    for (const one of shares) scores.people[one.userId].gold += one.got;
+
+    const gift = {
+      at: Date.now(),
+      id: who.userId,
+      name: row.name || who.displayName || '',
+      gold: amount,
+      many: shares.length,
+    };
+    scores.alms.unshift(gift);
+    scores.alms.length = Math.min(scores.alms.length, ALMS_KEPT);
+    saveScores();
+
+    return { gift, shares };
+  }
+
+  /// Bảng công đức: ai đã phát nhiều nhất cho cả sòng.
+  ///
+  /// Xếp theo vàng đã phát chứ không theo điểm, dù cái hiện ra là điểm. Hai người cùng một trăm
+  /// điểm mà một người phát một trăm nghìn còn người kia phát một trăm chín thì họ không ngang
+  /// nhau, và một cái bảng xếp họ ngang nhau là một cái bảng làm tròn mất thứ nó đang xếp.
+  function merit() {
+    return Object.entries(scores.people)
+      .filter(([, row]) => row.gave > 0)
+      .map(([id, row]) => ({ id, name: row.name, gave: row.gave, merit: meritOf(row.gave) }))
+      .sort((a, b) => b.gave - a.gave || a.name.localeCompare(b.name))
       .slice(0, TABLE_SIZE);
   }
 
@@ -1455,6 +1552,42 @@ export async function run(token, { signal, api = API } = {}) {
       }
 
       await pushTo(screen);
+      return;
+    }
+
+    /*
+     * Phát tiền cho cả sòng.
+     *
+     * Sổ được sửa xong xuôi trước khi đẩy một màn hình nào — `giveAll` không có `await` ở giữa,
+     * nên không có khoảnh khắc nào ví người phát đã trừ mà người nhận chưa nhận.
+     *
+     * Rồi **mọi màn hình đang mở đều được vẽ lại**, không phải chỉ những màn hình đang ở sảnh.
+     * Số vàng nằm ở góc trên mọi màn, kể cả lúc đang giữa ván bài — một người đang đánh mà được
+     * chia tiền thì con số ấy phải đổi ngay, chứ không phải đợi tới lúc họ về sảnh.
+     *
+     * Và mỗi người nhận được nói riêng bằng chính con số của họ. Một dòng chung kiểu "có người
+     * vừa phát tiền" là dòng ai cũng phải tự đi trừ ví mới biết mình được bao nhiêu.
+     */
+    if (action.give !== undefined) {
+      const done = giveAll(who, action.give);
+      if (done.refused) { await pushTo(screen, { says: done.refused }); return; }
+
+      const { gift, shares } = done;
+      const got = new Map(shares.map((one) => [one.userId, one.got]));
+      const points = meritOf(gift.gold);
+
+      await Promise.all([...screens.values()].map((one) => {
+        if (one.userId === who.userId) {
+          return pushTo(one, { says: SAY.almsMine(gift.gold, gift.many, points) });
+        }
+        const share = got.get(one.userId);
+        return pushTo(one, share ? { says: SAY.almsGot(gift.name, share) } : {});
+      }));
+
+      // Và một dòng cho căn phòng người ấy đang đứng. Không gửi đi khắp nơi: bot chỉ nói ở chỗ
+      // được gọi tên, và một cái tin nhắn tự dưng hiện ra trong một phòng không ai vừa chơi gì
+      // là một cái bot bị tắt tiếng.
+      await send(screen.conversationId, SAY.almsGave(gift.name, gift.gold, gift.many, points));
       return;
     }
 
@@ -2661,6 +2794,19 @@ export async function run(token, { signal, api = API } = {}) {
       rooms: openTables(),
       playing: running(),
       table: table(),
+      // The other board, and the record behind it. The record goes out with the board rather
+      // than behind a button of its own: a leaderboard nobody can check is a leaderboard, and
+      // one anybody can read the working of is a receipt.
+      merit: merit(),
+      alms: scores.alms,
+      // What giving costs and what it is worth, from here rather than from the page. The page
+      // draws the sums it is about to ask for, and a page that kept its own copy of these two
+      // numbers would draw a promise this side then refuses.
+      meritMin: MERIT_MIN,
+      meritPer: MERIT_PER,
+      // Công đức của chính người đang xem, kể cả khi họ chưa lên nổi bảng. Người mới phát lần
+      // đầu mà nhìn xuống không thấy mình ở đâu thì lần thứ hai không phát nữa.
+      meritMine: meritOf(row.gave),
     };
   }
 

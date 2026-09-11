@@ -24,6 +24,13 @@ let picked = new Set();
 let screen = 'play';
 let ticking = null;
 
+/// Which of the two boards the Xếp hạng tab is showing: vàng hay công đức.
+///
+/// Hai cái bảng chứ không phải hai cái tab. Một tab nữa ở thanh dưới là một trò nữa ngang hàng
+/// với tiến lên và bầu cua trong mắt người mới mở lần đầu — mà cả hai bảng đều trả lời đúng một
+/// câu hỏi, "ai đứng đầu ở đây", chỉ khác ở chỗ đứng đầu bằng gì.
+let board = 'gold';
+
 /// Whether somebody who has finished has asked to watch the rest of it.
 ///
 /// Theirs and local: the table has no opinion about whether they are still looking, and two
@@ -1513,6 +1520,16 @@ function drawMenu() {
       '', purse >= cheapest,
       () => { step = 'xiangqi'; render(); }));
 
+    // Cái duy nhất trên màn hình này không phải một trò chơi, và nó nằm dưới cùng vì thế. Nó
+    // không tối đi khi hết vàng như mấy cái trên: một cái thẻ tối kèm một dòng nói cần bao nhiêu
+    // là cách người ta biết cái bảng công đức có thật và mình vào được bằng đường nào — còn một
+    // cái thẻ biến mất thì không dạy được ai điều gì.
+    const least = state.meritMin || 100_000;
+    body.append(bigCard('❋', 'Phát tiền cho cả sòng',
+      purse < least ? `Cần ${gold(least)} vàng` : 'Cả sổ chia đều · lấy điểm công đức',
+      '', purse >= least,
+      () => { step = 'alms'; render(); }));
+
     // Said here, on the screen somebody is actually looking at.
     //
     // Both ways in are dark when there is nothing to play with, and a dark card with no line
@@ -1672,6 +1689,40 @@ function drawMenu() {
     return;
   }
 
+  /*
+   * Phát tiền cho cả sòng.
+   *
+   * Ba mức có sẵn là **mức tối thiểu, năm lần và mười lần nó**, chứ không phải ba con số ai đó
+   * nghĩ ra. Người phát biết mình đang cho đi cái gì, nên thứ họ cần thấy là cái thang, và cái
+   * thang ấy phải bắt đầu ở chỗ thấp nhất còn được tính công đức.
+   *
+   * Mỗi dòng nói luôn được bao nhiêu điểm. Phép chia thì nhẩm được, nhưng cái đang mua ở đây là
+   * điểm chứ không phải vàng — bắt người ta tự nhẩm ra thứ mình đang mua là bắt sai người.
+   *
+   * Trần là **cái ví**, không phải một con số nào khác. Đây là chỗ duy nhất trong cả widget
+   * người ta được tiêu tới đồng cuối cùng, và giữ lại một cái trần cho ra vẻ an toàn thì chỉ là
+   * đứng chắn trước một việc người ta cố ý làm.
+   */
+  if (step === 'alms') {
+    const least = state.meritMin || 100_000;
+    const per = state.meritPer || 1_000;
+
+    body.append(stepHead('Phát tiền cho cả sòng', `Bạn có ${gold(purse)} vàng`, null));
+
+    for (const one of [least, least * 5, least * 10]) {
+      body.append(pick(`${gold(one)} vàng`,
+        purse < one ? 'thiếu vàng' : `+${gold(one / per)} công đức`,
+        purse >= one, () => giveAway(one)));
+    }
+
+    body.append(customAmount(least, purse, 'Phát', giveAway));
+    body.append(stepNote(purse < least
+      ? `Phát ít nhất ${gold(least)} vàng mới được tính công đức.`
+      : `Tự nhập từ ${gold(least)} đến ${gold(purse)} vàng. Số tiền chia đều cho mọi người `
+        + `trong sổ, phần lẻ về người ít vàng nhất. ${gold(per)} vàng được 1 công đức.`));
+    return;
+  }
+
   if (step === 'stake') {
     const floor = state.minStake || 1000;
     const roof = state.maxStake || purse;
@@ -1772,11 +1823,38 @@ const openTable = (stake) => (gameWanted === 'chess' || gameWanted === 'xiangqi'
     ? { phom: seatsWanted, stake }
     : { open: seatsWanted, stake });
 
+/**
+ * Phát tiền đi, rồi đứng ở chỗ nhìn thấy kết quả.
+ *
+ * Sang thẳng bảng công đức chứ không ở lại cái màn vừa bấm. Mọi thứ khác trong widget này bấm
+ * xong là màn hình tự đổi vì cái bàn hiện ra; cái này thì trạng thái vẫn là "đang chọn", nên
+ * không đổi tay thì người ta ngồi lại đúng cái màn hình vừa bấm và chỉ có mỗi số vàng tụt xuống.
+ * Chỗ đáng đứng sau khi cho đi là chỗ có tên mình và có dòng vừa ghi.
+ *
+ * Bấm trước, đẩy sau: cái bot sẽ đẩy lại trạng thái mới ngay sau đó, còn màn hình thì đổi ngay
+ * lúc ngón tay rời ra.
+ */
+function giveAway(amount) {
+  step = null;
+  screen = 'rank';
+  board = 'merit';
+  z.send({ give: amount });
+  render();
+}
+
 /// A stake somebody types, with the one button that opens it.
 ///
 /// A field and a button rather than a slider: the numbers here span three orders of magnitude
 /// and a slider over that is a slider nobody can land on a round number with.
-function customStake(floor, roof) {
+const customStake = (floor, roof) =>
+  customAmount(floor, roof, 'Mở bàn', (amount) => z.send(openTable(amount)));
+
+/// Cùng cái ô ấy, cho một số tiền khác và một cái nút khác.
+///
+/// Tách ra khi màn phát tiền cần đúng thứ này với một chữ khác trên nút. Chép ra một bản thứ hai
+/// thì hai cái ô sẽ lệch nhau ở lần sửa sau — mà cái đáng giá nhất ở đây không phải cái ô, nó là
+/// chỗ kiểm số vừa gõ vừa kiểm.
+function customAmount(floor, roof, label, send) {
   const row = document.createElement('div');
   row.className = 'custom';
 
@@ -1791,7 +1869,7 @@ function customStake(floor, roof) {
 
   const go = document.createElement('button');
   go.className = 'go-custom';
-  go.textContent = 'Mở bàn';
+  go.textContent = label;
   go.disabled = true;
 
   const asked = () => Math.round(Number(box.value));
@@ -1806,7 +1884,7 @@ function customStake(floor, roof) {
   go.onclick = () => {
     if (!ok()) return;
     go.disabled = true;
-    z.send(openTable(asked()));
+    send(asked());
   };
 
   row.append(box, go);
@@ -1865,6 +1943,118 @@ function adsTick() {
   if (take) take.disabled = left > 0;
 }
 
+/// Đổi giữa hai cái bảng. Cùng bộ áo với hai cái tab của sòng bầu cua, vì cùng một việc.
+function boardTabs() {
+  const tabs = document.createElement('nav');
+  tabs.className = 'board-tabs';
+
+  for (const [key, label] of [['gold', 'Vàng'], ['merit', 'Công đức']]) {
+    const tab = document.createElement('button');
+    tab.className = board === key ? 'on' : '';
+    tab.textContent = label;
+    tab.onclick = () => { board = key; render(); };
+    tabs.append(tab);
+  }
+
+  return tabs;
+}
+
+/// Bao lâu rồi, đọc bằng tiếng người ta nói.
+///
+/// Trước một ngày thì đếm ngược từ bây giờ; xa hơn thì nói ngày, và nói **theo giờ Việt Nam**
+/// chứ không theo giờ cái máy đang mở nó — cùng một cái lịch với ngày sang của quà mỗi ngày, để
+/// một món quà phát tối qua không hiện ra là hôm kia trên máy của người đang ở nước khác.
+function when(at) {
+  const gone = Date.now() - at;
+  if (gone < 60_000) return 'vừa xong';
+  if (gone < 3600_000) return `${Math.floor(gone / 60_000)} phút`;
+  if (gone < 86_400_000) return `${Math.floor(gone / 3_600_000)} giờ`;
+  const day = new Date(at + 7 * 3_600_000);
+  return `${day.getUTCDate()}/${day.getUTCMonth() + 1}`;
+}
+
+/**
+ * Bảng công đức, và cái sổ đứng sau nó.
+ *
+ * **Điểm ở trên, lịch sử ở dưới, trên cùng một màn hình.** Một cái bảng xếp hạng chỉ đưa ra con
+ * số là một cái bảng người ta phải tin; một cái bảng đưa ra cả những lần phát làm nên con số ấy
+ * là một cái bảng người ta kiểm được. Đó là lý do lịch sử không nằm sau một cái nút nữa — thứ
+ * duy nhất nó có để chứng minh mình là chỗ ai cũng đọc được nó.
+ *
+ * Cửa vào việc phát tiền nằm ngay đây, trên đầu cái bảng nó dẫn tới. Nó cũng có một cửa nữa ở
+ * màn hình đầu: đây là chỗ người ta **hiểu ra** vì sao nên phát, còn kia là chỗ người ta đi
+ * ngang qua mỗi lần mở widget.
+ */
+function drawMerit(box) {
+  const rows = state.merit || [];
+  const log = state.alms || [];
+  const least = state.meritMin || 100_000;
+  const per = state.meritPer || 1_000;
+  const purse = state.gold || 0;
+
+  box.append(bigCard('❋', 'Phát tiền cho cả sòng',
+    `Cả sổ chia đều · ${gold(per)} vàng = 1 công đức`,
+    'gold', purse >= least,
+    () => { step = 'alms'; screen = 'play'; render(); }));
+
+  if (purse < least) {
+    box.append(stepNote(`Phát ít nhất ${gold(least)} vàng mới được tính công đức. `
+      + `Bạn có ${gold(purse)}.`));
+  }
+
+  box.append(heading(rows.length ? 'Nhiều công đức nhất · thế giới' : 'Chưa ai phát lần nào'));
+
+  rows.forEach((person, place) => {
+    const row = document.createElement('div');
+    row.className = 'row' + (person.id === z.viewer.id ? ' me' : '');
+    row.style.cursor = 'default';
+
+    const rank = document.createElement('span');
+    rank.className = 'rank';
+    rank.textContent = `${place + 1}`;
+    const name = document.createElement('span');
+    name.className = 'row-names';
+    name.textContent = person.name || 'Ai đó';
+    // Điểm, không kèm số vàng đã phát. Hai con số mà một cái chia ra là cái kia thì cái thứ hai
+    // chỉ làm cái thứ nhất khó đọc hơn — vàng đã phát nằm ở lịch sử ngay bên dưới, từng lần một.
+    const score = document.createElement('span');
+    score.className = 'row-seats';
+    score.textContent = gold(person.merit);
+
+    row.append(rank, name, score);
+    box.append(row);
+  });
+
+  // Công đức của chính người đang xem, nếu họ chưa lên nổi bảng. Người phát lần đầu nhìn xuống
+  // không thấy mình ở đâu thì lần thứ hai không phát nữa.
+  const mine = state.meritMine || 0;
+  if (mine > 0 && !rows.some((person) => person.id === z.viewer.id)) {
+    box.append(stepNote(`Công đức của bạn: ${gold(mine)}.`));
+  }
+
+  if (!log.length) return;
+
+  box.append(heading('Lịch sử công đức'));
+  for (const gift of log) {
+    const row = document.createElement('div');
+    row.className = 'row' + (gift.id === z.viewer.id ? ' me' : '');
+    row.style.cursor = 'default';
+
+    const name = document.createElement('span');
+    name.className = 'row-names';
+    name.textContent = gift.name || 'Ai đó';
+    const what = document.createElement('span');
+    what.className = 'row-seats';
+    what.textContent = `${gold(gift.gold)} · ${gift.many} người`;
+    const at = document.createElement('span');
+    at.className = 'score';
+    at.textContent = when(gift.at);
+
+    row.append(name, what, at);
+    box.append(row);
+  }
+}
+
 /// The tables everybody else has open, and the table of who has won what.
 function drawBrowse() {
   const box = $('browse');
@@ -1872,9 +2062,14 @@ function drawBrowse() {
   if (!state) return;
 
   if (screen === 'rank') {
-    // One board, and it is everybody's. A group's own stopped meaning anything the moment a
-    // table stopped belonging to a group — two people at the same table can be in two rooms,
-    // so a per-room table would count the same hand for one of them and not the other.
+    // Hai cái bảng, đổi bằng một hàng nút ở trên cùng. Cả hai đều là của cả thế giới: bảng của
+    // riêng một phòng thôi nghĩa lý gì từ lúc cái bàn không còn thuộc về phòng nào — hai người
+    // cùng một bàn có thể ở hai phòng khác nhau, nên một cái bảng theo phòng sẽ tính ván ấy cho
+    // người này mà không tính cho người kia.
+    box.append(boardTabs());
+
+    if (board === 'merit') { drawMerit(box); return; }
+
     const rows = state.table || [];
     box.append(heading(rows.length ? 'Nhiều vàng nhất · thế giới' : 'Chưa ai chơi ván nào'));
 

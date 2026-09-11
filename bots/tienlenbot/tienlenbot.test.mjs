@@ -9,6 +9,7 @@ import {
   movesFrom, canAnswer, costOf, chooseMove,
   nextInRound, nextActive, opensGame, stillIn, lowestElsewhere, placeName,
   payouts, settlement, dayIn, gold,
+  MERIT_PER, MERIT_MIN, meritOf, shareOut,
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, MIN_STAKE, MAX_STAKE, STAKES, BROKE, ADS_GOLD, asStake,
   FACES, FACE_NAMES, DICE, ROLL_MS, SHOW_MS, CHIPS, roll, faceWorth, boardWorth, staked, tally,
   chance, HISTORY,
@@ -1427,13 +1428,36 @@ test('không hai lần xóc nào mang cùng một tên', () => {
 // ---- hai luật của cái trang, đắt tiền cả hai --------------------------------------------------
 
 /// Mọi file kịch bản trong bundle, theo đúng thứ tự trang nạp chúng.
+///
+/// Đọc từ **mảng `files` của cái vòng nạp**, không phải từ mấy thẻ `<script src>`. Trang thôi
+/// dùng thẻ tĩnh từ lúc phải tự tính đường dẫn của bộ file cho Firefox — và cái hàm này vẫn đi
+/// tìm thẻ, nên nó trả về **rỗng**. Hai cái test dưới đây quét một danh sách rỗng, không tìm ra
+/// gì cả, và xanh. Mất bao lâu thì không ai biết: một cái test xanh vì không có gì để soi trông
+/// y hệt một cái test xanh vì mọi thứ đều đúng.
+///
+/// Nên nó **tự canh chính mình**: không đọc ra danh sách, hoặc đọc ra ít hơn số file trang thật
+/// sự có, là đỏ ngay tại đây. Cả hai luật dưới đây đều mua bằng một cái khung trắng, và một cái
+/// lưới thủng thì thà biết là nó thủng.
 function widgetScripts() {
   const dir = new URL('./widget/', import.meta.url);
   const html = readFileSync(new URL('index.html', dir), 'utf8');
-  return [...html.matchAll(/<script src="([\w.-]+)"><\/script>/g)]
+
+  const listed = /var files = \[([^\]]+)\]/.exec(html);
+  assert.ok(listed, 'không đọc được danh sách file của trang — cái vòng nạp đã đổi hình');
+
+  const names = [...listed[1].matchAll(/'([\w.-]+)'/g)]
     .map((one) => one[1])
-    .filter((name) => name !== 'zeplao.js')
-    .map((name) => [name, readFileSync(new URL(name, dir), 'utf8')]);
+    // Cái file nền tảng tự viết vào lúc upload. Không có nó trong repo để mà đọc.
+    .filter((name) => name !== 'zeplao.js');
+
+  // Số file thật trong thư mục, trừ đúng cái nền tảng viết vào. Lệch nhau nghĩa là trang có một
+  // file không ai soi, hoặc cái vòng nạp gọi tới một file không còn nữa.
+  const onDisk = readdirSync(dir)
+    .filter((name) => name.endsWith('.js') && name !== 'zeplao.js');
+  assert.deepEqual([...names].sort(), onDisk.sort(),
+    'danh sách trang nạp và mấy file có thật trong thư mục không khớp nhau');
+
+  return names.map((name) => [name, readFileSync(new URL(name, dir), 'utf8')]);
 }
 
 test('không hai file nào của trang khai trùng một cái tên ở tầng ngoài cùng', () => {
@@ -2228,6 +2252,82 @@ test('every way a hand can end still adds to nothing', () => {
     const paid = paidBy(game);
     assert.equal(sum(paid), 0, `${what}: bàn làm ra ${sum(paid)} vàng từ hư không`);
   }
+});
+
+// ---- công đức ---------------------------------------------------------------------------------
+
+test('một món phát ra khỏi tay đúng bằng số cộng vào cả sổ', () => {
+  // Cùng lý do với cái test tổng-bằng-không ở trên, và cùng một cái mất mát nếu sai: đây là hàm
+  // duy nhất trong `economy.mjs` đụng tới ví của **mọi người cùng một lúc**. Lệch một đồng ở đây
+  // là lệch một đồng nhân với cả cái sổ, mỗi lần có người phát.
+  const people = (many) => Array.from({ length: many },
+    (ignore, i) => ({ userId: `u${i}`, gold: (i * 7919) % 100_000 }));
+
+  for (const many of [1, 2, 3, 7, 12, 99, 320, 1_000]) {
+    for (const amount of [MERIT_MIN, 100_001, 123_456, 1_000_000]) {
+      const shares = shareOut(amount, people(many));
+      const out = shares.reduce((total, one) => total + one.got, 0);
+      assert.equal(out, amount, `${amount} chia cho ${many} người ra ${out}`);
+      assert.ok(shares.every((one) => one.got > 0), 'không ai được ghi nhận là nhận số không');
+      assert.equal(new Set(shares.map((one) => one.userId)).size, shares.length,
+        'không ai được nhận hai lần');
+    }
+  }
+});
+
+test('ai cũng như ai, và phần lẻ về người ít vàng nhất', () => {
+  const shares = shareOut(100, [
+    { userId: 'giàu', gold: 90_000 },
+    { userId: 'nghèo', gold: 12 },
+    { userId: 'giữa', gold: 5_000 },
+  ]);
+  const got = new Map(shares.map((one) => [one.userId, one.got]));
+
+  assert.equal(got.get('nghèo'), 34, 'đồng lẻ về người ít vàng nhất');
+  assert.equal(got.get('giữa'), 33);
+  assert.equal(got.get('giàu'), 33);
+});
+
+test('cùng một món tiền chia hai lần ra cùng một kết quả', () => {
+  // Hai người cùng số vàng thì thứ tự phải do một thứ đứng yên quyết định, không phải do thứ tự
+  // `Object.entries` trả về hôm ấy. Một cái bảng chia tiền khác nhau giữa hai lần chạy là một
+  // cái bảng không ai đối chiếu được với cái ví của mình.
+  const same = [
+    { userId: 'b', gold: 1_000 }, { userId: 'a', gold: 1_000 }, { userId: 'c', gold: 1_000 },
+  ];
+  const once = shareOut(100_001, same);
+  const twice = shareOut(100_001, [...same].reverse());
+  assert.deepEqual(once, twice);
+});
+
+test('phát cho nhiều người hơn số vàng đem phát thì chỉ những người ít nhất có phần', () => {
+  const shares = shareOut(3, [
+    { userId: 'a', gold: 5 }, { userId: 'b', gold: 4 }, { userId: 'c', gold: 3 },
+    { userId: 'd', gold: 2 }, { userId: 'e', gold: 1 },
+  ]);
+  assert.equal(shares.length, 3, 'ba đồng thì đúng ba người có phần');
+  assert.deepEqual(shares.map((one) => one.userId), ['e', 'd', 'c']);
+  assert.ok(shares.every((one) => one.got === 1));
+});
+
+test('không có ai để phát, hoặc không có gì để phát', () => {
+  assert.deepEqual(shareOut(MERIT_MIN, []), [], 'một mình trong sổ thì không chia được cho ai');
+  assert.deepEqual(shareOut(0, [{ userId: 'a', gold: 1 }]), []);
+  assert.deepEqual(shareOut(-5, [{ userId: 'a', gold: 1 }]), [], 'và không ai bị lấy ngược');
+});
+
+test('một trăm nghìn là một nghìn điểm', () => {
+  // Con số trong đầu người chơi, và cái sàn phải nằm đúng chỗ nhẩm ra được. Nếu hai con số này
+  // rời nhau ra thì cái câu "phát 100k được 1.000 công đức" trên màn hình thành một lời hứa
+  // suông — mà đây là cái câu duy nhất người ta đọc trước khi bấm.
+  assert.equal(meritOf(MERIT_MIN), 1_000);
+  assert.equal(MERIT_MIN / MERIT_PER, 1_000);
+  assert.equal(meritOf(1_000_000), 10_000);
+  // Điểm là vàng đã phát chia cho `MERIT_PER`, làm tròn xuống — không ai được điểm cho phần lẻ
+  // chưa đủ một nghìn, và cũng không ai mất điểm đã có vì phần lẻ ấy.
+  assert.equal(meritOf(99), 0);
+  assert.equal(meritOf(100_099), 1_000);
+  assert.equal(meritOf(0), 0);
 });
 
 // ---- máy mới đấu máy cũ -----------------------------------------------------------------------

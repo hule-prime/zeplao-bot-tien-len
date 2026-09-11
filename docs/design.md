@@ -56,7 +56,7 @@ sẽ cho người ta thấy một tay bài và không có cái bàn nào.
 | Bàn giữa người | Cược của phòng — **tự đặt**, từ 1.000 tới 1.000.000 và không quá số tiền người mở đang có. Ba mức có sẵn chỉ là câu trả lời thường gặp |
 | Kiếm thêm | Quảng cáo 10 giây, **8.000** — tối đa 1.000 lần/ngày (con số đó chặn lỗi đếm chứ không phải để hạn chế — mười giây một lần đã là hạn chế rồi). Nằm sau dấu `+` cạnh ví, **ở mọi mức tiền** |
 | Bảng xếp hạng | **Hai bảng**, cả hai của cả thế giới: **vàng**, và **công đức** — vàng đã phát cho cả sòng |
-| Phát tiền cho cả sòng | Ít nhất **100.000**, chia đều cho mọi người trong sổ, **1.000 vàng = 1 công đức**. Có lịch sử công khai, ai cũng đọc được |
+| Phát tiền cho cả sòng | Ít nhất **100.000**, chia đều cho mọi người trong sổ, **100 vàng = 1 công đức**, tức phát 100k được **1.000 điểm**. Có lịch sử công khai, ai cũng đọc được |
 
 **Quảng cáo trả đúng một ván với máy**, không phải trùng hợp: nó tồn tại để đưa người hết tiền
 quay lại bàn, mà một quảng cáo xem xong vẫn không đủ ngồi thứ rẻ nhất trên màn hình là một quảng
@@ -136,7 +136,7 @@ biến việc cho tiền thành một việc **người khác thấy được** 
 thấy ai lên là một cái bảng không ai lên.
 
 Điểm **không được cất riêng**. Trong sổ chỉ có `gave`, tổng vàng đã phát; điểm là số đó chia cho
-1.000. Một con số chép ra hai chỗ là một con số lệch nhau ở lần sửa sau, và ở đây "lệch" nghĩa là
+100. Một con số chép ra hai chỗ là một con số lệch nhau ở lần sửa sau, và ở đây "lệch" nghĩa là
 bảng xếp hạng nói một đằng còn lịch sử nói một nẻo.
 
 Cái sàn 100.000 là cố ý đắt: gấp đôi vốn ban đầu, hơn ba ngày quà cộng lại. Một cái bảng ai cũng

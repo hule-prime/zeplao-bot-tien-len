@@ -642,6 +642,167 @@ test('the leaderboard is the world, counted in gold', async () => {
   });
 });
 
+test('phát tiền cho cả sòng: cả sổ được chia, và người phát lên bảng công đức', async () => {
+  // Ba người trong sổ, một người phát. Đây là đường tiền duy nhất trong cả cái bot này đi từ ví
+  // người này sang ví người khác **mà không qua một cái bàn nào**, nên nó được kiểm ở đây theo
+  // đúng cách một ván bài được kiểm: đếm từng cái ví trước và sau.
+  ledger({
+    u1: { name: 'Thọ', gold: 500_000, games: 2, first: 1, last: 0, claimed: dayIn(), ads: 0 },
+    u2: { name: 'Lan Anh', gold: 1_000, games: 1, first: 0, last: 1, claimed: dayIn(), ads: 0 },
+    u3: { name: 'Minh', gold: 3_000, games: 0, first: 0, last: 0, claimed: dayIn(), ads: 0 },
+  });
+  await withBot(async (app) => {
+    app.asks('u1');
+    app.asks('u2');
+    await app.until(() => app.mine('u1') && app.mine('u2'), 'hai màn hình');
+
+    const lobby = app.mine('u1');
+    assert.equal(lobby.meritMin, 100_000, 'cái sàn tới từ bot chứ không phải từ trang');
+    assert.equal(lobby.meritPer, 100, 'và tỷ lệ quy đổi cũng vậy — trang không giữ bản sao');
+    assert.deepEqual(lobby.merit, [], 'chưa ai phát thì bảng công đức trống');
+    assert.deepEqual(lobby.alms, []);
+
+    app.does('u1', { give: 100_000 });
+    await app.until(() => app.mine('u1').gold === 400_000, 'số vàng rời khỏi ví người phát');
+    await app.until(() => app.mine('u2').gold === 51_000, 'phần của người nhận');
+
+    const after = app.mine('u1');
+    assert.equal(after.meritMine, 1_000, 'một trăm nghìn là một nghìn công đức');
+    assert.deepEqual(after.merit.map((one) => [one.name, one.merit]), [['Thọ', 1_000]]);
+    assert.equal(after.says, 'Đã phát 100.000 vàng cho 2 người · +1.000 công đức.',
+      'và người phát được nói lại đúng con số vừa cho đi');
+
+    // Lịch sử, đủ để ai cũng đối chiếu được với cái bảng ở trên.
+    assert.equal(after.alms.length, 1);
+    const [gift] = after.alms;
+    assert.equal(gift.name, 'Thọ');
+    assert.equal(gift.gold, 100_000);
+    assert.equal(gift.many, 2, 'cả sổ trừ chính mình');
+    assert.ok(Date.now() - gift.at < 25_000, 'và có mốc thời gian thật');
+
+    // Người nhận được nói riêng, bằng con số của chính họ chứ không phải một dòng chung.
+    assert.equal(app.mine('u2').says, 'Thọ vừa phát cho cả sòng — bạn được 50.000 vàng.');
+
+    // Và cả phòng được biết, vì một cái bảng công đức không ai thấy ai lên là một cái bảng
+    // không ai lên.
+    //
+    // **Chờ, không phải kiểm ngay.** Dòng cho phòng đi sau khi mọi màn hình đã được đẩy — nên
+    // cái ví đổi số xong không có nghĩa là tin nhắn đã tới nơi, nó chỉ có nghĩa là chưa tới
+    // lượt nó. Kiểm ngay tại đó là một cái test xanh trên máy rảnh và đỏ trên máy bận, mà đỏ
+    // ngẫu nhiên thì lần nào cũng bị đọc thành "chạy lại phát nữa xem".
+    await app.until(
+      () => app.said.some((one) => one.text.includes('Thọ vừa phát 100.000 vàng cho 2 người')),
+      `dòng cho phòng, thấy: ${app.said.map((one) => one.text).join(' | ')}`);
+
+    // Người thứ ba chưa mở màn hình nào vẫn có phần — cái sổ mới là chỗ chia, không phải cái
+    // danh sách ai đang online.
+    app.asks('u3');
+    await app.until(() => app.mine('u3'), 'màn hình của người thứ ba');
+    assert.equal(app.mine('u3').gold, 53_000);
+  }, { c1: ['u1', 'u2', 'u3'] });
+});
+
+test('phát hai lần thì cộng dồn, và sổ vẫn không đẻ ra đồng nào', async () => {
+  ledger({
+    u1: { name: 'Thọ', gold: 1_000_000, games: 1, first: 1, last: 0, claimed: dayIn(), ads: 0 },
+    u2: { name: 'Lan Anh', gold: 0, games: 1, first: 0, last: 1, claimed: dayIn(), ads: 0 },
+  });
+  await withBot(async (app) => {
+    app.asks('u1');
+    app.asks('u2');
+    await app.until(() => app.mine('u1') && app.mine('u2'), 'hai màn hình');
+
+    app.does('u1', { give: 100_000 });
+    await app.until(() => app.mine('u2').gold === 100_000, 'lần phát thứ nhất');
+    app.does('u1', { give: 250_000 });
+    await app.until(() => app.mine('u2').gold === 350_000, 'lần phát thứ hai');
+
+    const after = app.mine('u1');
+    assert.equal(after.gold, 650_000);
+    assert.equal(after.meritMine, 3_500, 'công đức cộng dồn, không phải lấy lần cuối');
+    assert.equal(after.alms.length, 2, 'hai dòng lịch sử');
+    assert.equal(after.alms[0].gold, 250_000, 'mới nhất lên đầu');
+    assert.equal(after.gold + app.mine('u2').gold, 1_000_000,
+      'cả sổ trước và sau vẫn đúng bằng nhau');
+  });
+});
+
+test('không phát được thì nói vì sao, và không đồng nào nhúc nhích', async () => {
+  ledger({
+    u1: { name: 'Thọ', gold: 120_000, games: 1, first: 1, last: 0, claimed: dayIn(), ads: 0 },
+    u2: { name: 'Lan Anh', gold: 5_000, games: 1, first: 0, last: 1, claimed: dayIn(), ads: 0 },
+  });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'một màn hình');
+
+    // Ba lời từ chối, ba lý do khác nhau. Con số đi vào đây tới từ một trang ai cũng sửa được,
+    // nên cả ba đều được kiểm lại ở phía bot chứ không chỉ ở chỗ cái nút sáng hay tối.
+    // Chờ **một lần đẩy nữa** rồi mới đọc, chứ không chờ tới khi câu ấy hiện ra. Hai lời từ
+    // chối ở đây trùng chữ nhau, nên đọc thẳng cái says là đọc lại được đúng cái push của lần
+    // trước và cái test xanh mà chẳng kiểm gì cả.
+    const to = (userId) => app.pushes.filter((one) => one.to === userId).length;
+    const refused = async (action, saying) => {
+      const before = to('u1');
+      app.does('u1', action);
+      await app.until(() => to('u1') > before, `một lần đẩy nữa sau ${JSON.stringify(action)}`);
+      assert.ok((app.mine('u1').says ?? '').includes(saying),
+        `chờ lời từ chối "${saying}", thấy "${app.mine('u1').says}"`);
+      assert.equal(app.mine('u1').gold, 120_000, 'ví không được động tới');
+      assert.equal(app.mine('u1').meritMine, 0, 'và không ai được công đức vì một lần bị từ chối');
+    };
+
+    await refused({ give: 50_000 }, 'Phát ít nhất 100.000 vàng');
+    await refused({ give: 500_000 }, 'Bạn chỉ có 120.000 vàng');
+    await refused({ give: 'nhiều' }, 'Phát ít nhất 100.000 vàng');
+    await refused({ give: -100_000 }, 'Phát ít nhất 100.000 vàng');
+  });
+});
+
+test('máy không có tên trong sổ, nên không có phần trong món quà', async () => {
+  // Cái bẫy mà tính năng này mới dựng ra: từ trước tới nay không ai duyệt **cả sổ** một lượt,
+  // nên một cái ghế máy lỡ được ghi vào sổ cũng chẳng ai thấy. Bây giờ thì thấy — nó ăn mất một
+  // phần quà, và vàng ấy đi vào một cái ví không có người nào ngồi sau.
+  ledger({
+    u1: { name: 'Thọ', gold: 500_000, games: 0, first: 0, last: 0, claimed: dayIn(), ads: 0 },
+    u2: { name: 'Lan Anh', gold: 0, games: 0, first: 0, last: 0, claimed: dayIn(), ads: 0 },
+  });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'một màn hình');
+
+    // Một bàn với ba cái máy, chơi hết, trả tiền xong — tức là đã đi qua đúng chỗ ghi sổ.
+    app.does('u1', { solo: 4 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'một ván');
+    await playOut(app, ['u1']);
+    app.does('u1', { leave: true });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'choosing', 'về sảnh');
+
+    const purse = app.mine('u1').gold;
+    app.does('u1', { give: 100_000 });
+    await app.until(() => app.mine('u1').gold === purse - 100_000, 'món quà rời ví');
+
+    const [gift] = app.mine('u1').alms;
+    assert.equal(gift.many, 1, 'chỉ một người thật trong sổ, ba cái máy không tính');
+    assert.equal(gift.gold, 100_000);
+  });
+});
+
+test('một mình trong sổ thì không có ai để phát cho', async () => {
+  ledger({
+    u1: { name: 'Thọ', gold: 300_000, games: 1, first: 1, last: 0, claimed: dayIn(), ads: 0 },
+  });
+  await withBot(async (app) => {
+    app.asks('u1');
+    await app.until(() => app.mine('u1'), 'một màn hình');
+
+    app.does('u1', { give: 100_000 });
+    await app.until(() => (app.mine('u1').says ?? '').includes('Chưa có ai khác trong sổ'),
+      'lời từ chối');
+    assert.equal(app.mine('u1').gold, 300_000, 'và tiền ở nguyên trong ví');
+  }, { c1: ['u1'] });
+});
+
 test('one person is one purse, whichever group they walk into', async () => {
   // Said in as many words. A ledger keyed by anything but the person — the room, the screen,
   // the session — would give somebody a different pile of gold in every group they are in, and
