@@ -1346,8 +1346,17 @@ export async function run(token, { signal, api = API } = {}) {
         screen.displayName = who.displayName;
         screen.touched = Date.now();
         await pushTo(screen);
+        console.log(`dùng lại phiên ${screen.sessionId} cho ${who.displayName}`
+          + ` · bản v${screen.widgetVersion ?? '?'}`);
         return screen;
       }
+
+      // Không dùng lại được, và **nói ra vì sao**. Hai lý do khác hẳn nhau: phiên chết rồi, hay
+      // phiên còn sống nhưng ghim vào một bộ cũ. Cái thứ hai mới là thứ làm người ta thấy một
+      // cái khung trắng — bộ cũ có thể là bộ đang hỏng — và cho tới giờ nó không để lại dấu vết
+      // nào cả.
+      console.log(`không dùng lại phiên ${screen.sessionId} cho ${who.displayName}: `
+        + (shown ? `ghim bản v${screen.widgetVersion ?? '?'}, nay đã là v${latest}` : 'phiên đã chết'));
     }
 
     const wasAt = screen ? screen.gameId : null;
@@ -1363,6 +1372,9 @@ export async function run(token, { signal, api = API } = {}) {
     }).catch(() => null);
 
     if (!session) {
+      // Và ghi xuống. Không mở được phiên là chuyện đủ lớn để có một dòng: người dùng thấy một
+      // câu trong phòng, còn người đi tìm lỗi thì trước nay chẳng thấy gì.
+      console.error(`không mở được phiên cho ${who.displayName} ở ${conversationId}`);
       // Said to them and to nobody else. Somebody who typed the bot's name and got silence has
       // no way to tell a full room from a bot that is down — and with the mention itself
       // leaving no line, silence is all there would be.
@@ -1384,7 +1396,15 @@ export async function run(token, { signal, api = API } = {}) {
     openBy.set(who.userId, screen.sessionId);
 
     await pushTo(screen);
-    await call('showSession', { sessionId: screen.sessionId, to: who.userId }).catch(() => {});
+    console.log(`phiên mới ${screen.sessionId} cho ${who.displayName} · bản v${latest ?? '?'}`);
+
+    // Và nếu app không chịu mở cái khung ra thì cũng phải có một dòng. Chỗ này từng nuốt lỗi
+    // hoàn toàn — mà "app không mở được khung" với "khung mở ra mà trang không chạy" là hai
+    // bệnh khác nhau, chữa ở hai nơi khác nhau.
+    await call('showSession', { sessionId: screen.sessionId, to: who.userId })
+      .catch((problem) => {
+        console.error(`không mở được khung cho ${who.displayName}: ${String(problem)}`);
+      });
     return screen;
   }
 
