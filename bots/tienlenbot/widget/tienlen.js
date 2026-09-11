@@ -3396,3 +3396,19 @@ for (const wait of [0, 80, 240, 800, 1600]) {
     z.ready();
   }, wait);
 }
+
+/**
+ * Một tiếng báo về cho bot: **trang này đã chạy**.
+ *
+ * Cho tới hôm nay, chuyện đó hoàn toàn vô hình. Một cái khung trắng có thể là trang chết ở dòng
+ * đầu, có thể là trang chạy ngon mà không ai đẩy trạng thái vào, có thể là app chưa dựng nổi cái
+ * khung — ba nguyên nhân khác hẳn nhau, cùng một màu trắng, và không có lấy một dòng log nào để
+ * phân biệt. Cả một ngày truy lỗi vừa rồi mất phần lớn thời gian ở đúng chỗ mù ấy.
+ *
+ * Một dòng ở đây chia đôi được bài toán: bot ghi lại "chạy rồi, bản số mấy" thì mọi thứ từ đó
+ * trở ra là chuyện của trạng thái và của app; bot im lặng thì trang chưa từng chạy, và phải đi
+ * tìm ở chỗ nạp file.
+ *
+ * Gửi một lần, không chờ ai trả lời, và bot không trả lời gì cả — nó chỉ ghi xuống.
+ */
+z.send({ boot: 1 });

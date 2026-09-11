@@ -1519,6 +1519,16 @@ export async function run(token, { signal, api = API } = {}) {
     const game = screen.gameId ? games.get(screen.gameId) : null;
     if (screen.gameId && !game) screen.gameId = null;
 
+    // Trang vừa chạy xong và báo về. Ghi xuống rồi thôi — không đẩy gì, không trả lời gì.
+    //
+    // Đây là thứ duy nhất phân biệt được ba nguyên nhân cùng cho ra một cái khung trắng: trang
+    // chết lúc nạp, trang chạy mà không có trạng thái, hay app chưa dựng nổi cái khung. Kèm số
+    // bản, vì "máy anh ấy đang chạy bản nào" là câu hỏi đầu tiên mỗi lần có người báo trắng.
+    if (action.boot) {
+      console.log(`widget chạy được cho ${who.displayName} · bản v${screen.widgetVersion ?? '?'}`);
+      return;
+    }
+
     // The day's gold. Refused when it has already been taken today, whatever the page thinks:
     // the button can be pressed twice before the first push lands, and a widget is a file
     // anybody can edit besides.
