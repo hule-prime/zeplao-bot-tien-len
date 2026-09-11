@@ -399,6 +399,27 @@ every retry uses a **fresh random cache key**, because a fixed one can be frozen
 was being written, `tienlen.js?r=1` became a permanent 404 at one edge, from a single click at
 the wrong moment.
 
+### Every browser, and a floor written down
+
+Three static rules keep the page from dying on somebody else's browser — the failure that never
+shows up on the machine it was written on, because a `SyntaxError` at parse time is not a broken
+feature, it is a page that never runs a line:
+
+- **The two inline blocks in `index.html` stay ES5.** They run before everything and are the only
+  code there is until a file loads.
+- **The bundle uses nothing newer than `??` (Safari 13.1, March 2020)** — which is the newest
+  thing it actually reaches for today. That puts the floor at Safari 13.1, Chrome 80, Firefox 72,
+  Edge 80. Raising it means editing the test, which is the point: a floor should move by decision,
+  not by habit.
+- **No two files may claim the same bare class name.** `board.js` called its legal-move marker
+  `.dot`; so did the daily-reward badge on the Chơi tab — and the badge inherited `width: 26%`
+  from the chess rule, resolved against the whole 390px frame, and became a 101px gold bar across
+  a tab nobody was standing on.
+
+What is verified by actually running a browser is Chrome, through `widget-selftest.mjs`. Safari
+can be added to that the moment "Allow remote automation" is switched on in its Developer
+settings; Firefox needs `geckodriver`.
+
 ## Tests
 
 ```bash

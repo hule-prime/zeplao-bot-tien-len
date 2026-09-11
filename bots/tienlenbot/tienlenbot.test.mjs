@@ -1608,6 +1608,54 @@ test('bàn cờ đo ra cỡ, chứ không nhờ CSS tự lo', () => {
   }
 });
 
+test('cả bộ trang không dùng gì mới hơn đầu 2020', () => {
+  /*
+   * Luật thứ năm: **một cái sàn trình duyệt, viết ra thành con số**.
+   *
+   * Khác với đoạn mồi ở dưới — chỗ ấy phải ES5 vì nó chạy trước mọi thứ — sáu file kia được
+   * dùng cú pháp hiện đại thoải mái. Nhưng "hiện đại" mà không có sàn thì là một cái sàn trôi:
+   * người viết có trình duyệt mới, nên cú pháp nào cũng chạy trên máy họ, và cái giá chỉ hiện
+   * ra ở máy người khác — dưới dạng `SyntaxError` lúc phân tích, tức là **cả file không chạy một
+   * dòng nào**, tức là lại một cái khung trắng.
+   *
+   * Sàn đang là **`??` — Safari 13.1, tháng 3/2020**, và đó là thứ mới nhất cả bộ đụng tới.
+   * Nghĩa là mọi trình duyệt từ 2020 trở đi chạy được: Safari 13.1, Chrome 80, Firefox 72, Edge
+   * 80. Muốn dùng thứ mới hơn thì phải sửa cái test này — và đó chính là mục đích: nâng sàn là
+   * một quyết định, không phải một thói quen.
+   *
+   * Soi sau khi bỏ chú thích và chuỗi: mấy dòng văn xuôi ở đây đầy dấu ngoặc và ký hiệu, mà một
+   * cái test đỏ vì một câu tiếng Việt là một cái test người ta tắt đi.
+   */
+  const bare = (code) => code
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1 ')
+    .replace(/`(?:[^`\\]|\\.)*`/g, '``')
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""');
+
+  // Mọi thứ tới **sau** cái sàn. Kèm năm, vì một cái tên API không tự nói nó đắt bao nhiêu.
+  const NEWER = [
+    [/\?\?=|\|\|=|&&=/, '??= ||= &&= (Safari 14 · cuối 2020)'],
+    [/\(\?<[=!]/, 'regex lookbehind (Safari 16.4 · 2023)'],
+    [/\.at\(/, '.at() (Safari 15.4 · 2022)'],
+    [/\btoSorted\(|\btoReversed\(|\bwith\(/, 'toSorted/toReversed/with (2023)'],
+    [/Object\.hasOwn|\bfindLast(?:Index)?\(|structuredClone/, 'API 2022+'],
+    [/^\s*await\s/m, 'top-level await (Safari 15 · 2021)'],
+    [/\bstatic\s*\{/, 'static block (2022)'],
+    [/\bthis\.#|\s#[a-z]\w*\s*[=;(]/, 'trường riêng tư của class (Safari 14.1 · 2021)'],
+  ];
+
+  const late = [];
+  for (const [name, src] of widgetScripts()) {
+    const clean = bare(src);
+    for (const [re, what] of NEWER) if (re.test(clean)) late.push(`${name}: ${what}`);
+  }
+
+  assert.deepEqual(late, [],
+    'trang đang đòi trình duyệt mới hơn cái sàn đã hẹn (?? — Safari 13.1, 3/2020):\n  '
+    + late.join('\n  '));
+});
+
 test('đoạn mồi trong index.html phải là ES5 thuần', () => {
   /*
    * Luật thứ tư, và là luật rẻ nhất trong cả bốn.
