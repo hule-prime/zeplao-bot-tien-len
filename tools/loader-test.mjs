@@ -7,7 +7,7 @@
 // file không tới nơi thì chuyện gì xảy ra**. Câu trả lời cũ là "khung trắng, im lặng, vĩnh
 // viễn", vì bảy file nạp nối đuôi nhau và cái dây ấy chỉ nối tiếp ở `onload`.
 //
-// Năm cảnh, và cả năm đều đã xảy ra thật ở đâu đó:
+// Sáu cảnh, và cả sáu đều đã xảy ra thật ở đâu đó:
 //
 //   1. Một file 404 ở URL gốc rồi lành khi khoá cache đổi — đúng hình dạng của một edge CDN
 //      đang giữ bản hỏng. File widget được phục vụ kèm `immutable` và hạn một năm, nên một
@@ -15,8 +15,11 @@
 //   2. Một file **không thiết yếu** chết hẳn: bàn phải vẫn mở được, chỉ xấu đi.
 //   3. Một file **sống còn** chết hẳn: phải hiện ra chữ, không được để trắng.
 //   4. Một file trả **200 với thân rỗng** — kiểu hỏng mà `onerror` không bao giờ kêu.
-//   5. Một file **không bao giờ trả lời**. Kiểu này còn im hơn nữa: không `onload`, không
-//      `onerror`, dây nạp đứng chờ vô hạn. Bắt được lần đầu ở chính bước tự kiểm của deploy.
+//   5. Một file **không thiết yếu không bao giờ trả lời**: không `onload`, không `onerror`, dây
+//      nạp đứng chờ vô hạn. Phải bỏ lại mà đi tiếp — và **không được tạo thẻ thứ hai** cho nó,
+//      vì cái thẻ cũ vẫn sống và file sẽ chạy hai lần.
+//   6. Một file **sống còn treo**: không bỏ qua được, nên trang phải nạp lại chính mình một
+//      lần; treo tiếp thì nói ra thành chữ.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
@@ -100,7 +103,7 @@ function serve({ breaks = '', empty = false, always = false, hang = false } = {}
   });
 }
 
-// ---- một cái trình duyệt, dùng cho cả năm cảnh --------------------------------------------------
+// ---- một cái trình duyệt, dùng cho cả sáu cảnh --------------------------------------------------
 
 const profile = mkdtempSync(join(tmpdir(), 'loader-test-'));
 const port = 9700 + Math.floor(Math.random() * 200);
@@ -157,6 +160,8 @@ await call('Page.enable');
 await call('Page.addScriptToEvaluateOnNewDocument', {
   source: `
     window.__calls = [];
+    window.__blew = [];
+    window.addEventListener('error', function (e) { window.__blew.push(String(e.message)); });
     window.addEventListener('message', function (event) {
       var data = event.data;
       if (!data || data.zeplao !== 'call') return;
@@ -176,9 +181,13 @@ async function scene(what, fault, expect) {
   await call('Page.navigate', { url: 'about:blank' });
   await call('Page.navigate', { url: at });
   // Đủ lâu cho ba lần thử lại cộng đồng hồ chống treo của trang.
-  await nap(16_000);
+  await nap(18_000);
 
   const calls = (await inPage('window.__calls')) ?? [];
+  // Một file chạy hai lần là `SyntaxError: ... has already been declared`. Bộ thử phải nhìn
+  // thấy nó, vì đó chính là cái bẫy của bản vá chống treo đầu tiên.
+  const twice = (await inPage(
+    `(window.__blew || []).filter((one) => /already been declared/.test(one)).length`)) ?? 0;
   const drawn = (await inPage(
     `document.body ? document.body.innerText.replace(/\\s+/g, ' ').trim() : ''`)) ?? '';
   // `closeAllConnections` trước, rồi mới đóng.
@@ -189,7 +198,8 @@ async function scene(what, fault, expect) {
   server.closeAllConnections();
   await new Promise((done) => server.close(done));
 
-  const ok = expect(calls, drawn);
+  const ok = expect(calls, drawn) && !twice;
+  if (twice) console.log(`      ${twice} file chạy hai lần — đã khai trùng tên`);
   console.log(`  ${ok ? '✓' : '✗'} ${what}`);
   if (!ok) console.log(`      gọi về: ${calls.join(' ') || '(không)'}\n      màn hình: ${drawn.slice(0, 90) || '(trắng)'}`);
   return ok;
@@ -210,10 +220,12 @@ const all = [
     { breaks: 'tienlen.js', always: true }, said('tienlen.js')),
   await scene('file trả 200 rỗng — thứ onerror không bao giờ kêu — cũng phải bắt được',
     { breaks: 'tienlen.js', empty: true }, opened),
-  await scene('file không bao giờ trả lời thì bỏ lại, xin bằng khoá khác, và bàn vẫn mở',
-    { breaks: 'board.js', hang: true }, opened),
+  await scene('file phụ treo thì bỏ lại mà đi tiếp, và không chạy hai lần',
+    { breaks: 'board.js', hang: true, always: true }, (calls, drawn) => opened(calls, drawn)),
+  await scene('file sống còn treo thì nạp lại trang, rồi mới chịu nói là hỏng',
+    { breaks: 'tienlen.js', hang: true, always: true }, said('tienlen.js')),
 ];
 
 leave(all.every(Boolean) ? 0 : 1,
-  all.every(Boolean) ? '  cả năm cảnh đều không dẫn tới một cái khung trắng im lặng'
+  all.every(Boolean) ? '  cả sáu cảnh đều không dẫn tới một cái khung trắng im lặng'
     : 'CÓ CẢNH DẪN TỚI KHUNG TRẮNG');

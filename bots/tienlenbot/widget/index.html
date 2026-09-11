@@ -252,19 +252,31 @@
 
     /*
      * Và **hỏng không phải kiểu duy nhất**: một request có thể chỉ đơn giản là **không bao giờ
-     * trả lời**.
+     * trả lời**. Treo thì `onload` không kêu mà `onerror` cũng không, nên dây nạp đứng im vô
+     * hạn — vẫn đúng cái khung trắng ấy.
      *
-     * Treo thì `onload` không kêu mà `onerror` cũng không — dây nạp đứng im vô hạn, và người
-     * dùng lại thấy đúng cái khung trắng ấy. Bắt được lần đầu ở chính bước tự kiểm của deploy:
-     * `zeplao.js` nạp xong, rồi sáu file sau không có lấy một cái thẻ script nào được tạo ra,
-     * vì cái trước nó vẫn đang chờ một câu trả lời không tới. Cùng một ngày, một lần deploy cũng
-     * kẹt mười hai phút ở một `curl` không có hạn giờ — cùng một bài học, hai tầng khác nhau.
+     * Nhưng **một file treo thì không được xin lại bằng một cái thẻ thứ hai**, và đây là bài học
+     * đắt nhất trong cả cái vòng nạp này. Bản đầu của chỗ này làm đúng thế: quá ba giây thì bỏ
+     * cái đang treo, tạo thẻ mới. Rồi cái thẻ cũ về đích — và file chạy **hai lần**. Một file có
+     * `const` ở tầng ngoài cùng chạy hai lần là `SyntaxError: Identifier ... has already been
+     * declared`, tức là chết còn chắc hơn lúc nó treo. Bước tự kiểm của deploy bắt được ngay ở
+     * bản upload kế tiếp.
      *
-     * Nên mỗi file có một cái đồng hồ. Quá ba giây mà chưa xong thì coi như hỏng: bỏ cái đang
-     * treo đó lại, xin lại bằng một khoá cache khác. Ba giây là chọn cho một cái khung đang mở
-     * trong một cuộc trò chuyện — chờ lâu hơn thế thì người ta đã đóng đi rồi.
+     * Nên treo thì xử theo việc, không xử theo phản xạ:
+     *
+     *   - **File không thiết yếu**: đi tiếp luôn, không đụng gì tới cái đang treo. Nó về muộn
+     *     thì cũng chỉ chạy đúng một lần, và mấy file ấy chỉ khai hàm chứ không cần thứ tự.
+     *   - **File sống còn**: không bỏ qua được, mà cũng không được nhân đôi — nên **nạp lại cả
+     *     trang** một lần, với một khoá khác ở đuôi. Cả trang nạp lại thì không có cái thẻ cũ
+     *     nào còn sống để mà chạy lần thứ hai. Lần thứ hai vẫn treo thì thôi, nói ra thành chữ.
      */
     var STALLED_MS = 3000;
+
+    function reloadOnce(name) {
+      if (/[?&]w=/.test(window.location.search)) { stuck(name); return; }
+      var mark = (window.location.search ? window.location.search + '&' : '?') + 'w=' + Date.now();
+      window.location.replace(window.location.pathname + mark);
+    }
 
     function load(i, round) {
       if (i >= files.length) return;
@@ -274,7 +286,8 @@
       var settled = false;
       var clock = null;
 
-      // Hỏng, treo, hay nạp xong mà rỗng ruột — ba đường vào cùng một chỗ, và chỉ đi được một lần.
+      // Hỏng hẳn, hay nạp xong mà rỗng ruột. Cả hai đều an toàn để xin lại bằng thẻ mới: cái
+      // trước hoặc chưa chạy, hoặc chạy rồi mà trong ruột không có gì.
       var failed = function () {
         if (settled) return;
         settled = true;
@@ -282,6 +295,15 @@
         if (round < 3) { setTimeout(function () { load(i, round + 1); }, 200 * (round + 1)); return; }
         if (!NEEDED[name]) { load(i + 1, 0); return; }
         stuck(name);
+      };
+
+      // Treo. Cái thẻ cũ vẫn còn sống, nên tuyệt đối không tạo thẻ thứ hai cho cùng file.
+      // Treo. Cái thẻ cũ vẫn còn sống, nên tuyệt đối không tạo thẻ thứ hai cho cùng file.
+      var stalled = function () {
+        if (settled) return;
+        settled = true;
+        if (!NEEDED[name]) { load(i + 1, 0); return; }
+        reloadOnce(name);
       };
 
       script.src = window.__tienlenRetry(name, round);
@@ -293,7 +315,7 @@
         load(i + 1, 0);
       };
       script.onerror = failed;
-      clock = setTimeout(failed, STALLED_MS);
+      clock = setTimeout(stalled, STALLED_MS);
 
       document.body.appendChild(script);
     }

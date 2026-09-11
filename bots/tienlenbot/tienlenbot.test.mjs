@@ -1608,6 +1608,55 @@ test('bàn cờ đo ra cỡ, chứ không nhờ CSS tự lo', () => {
   }
 });
 
+test('đoạn mồi trong index.html phải là ES5 thuần', () => {
+  /*
+   * Luật thứ tư, và là luật rẻ nhất trong cả bốn.
+   *
+   * Hai khối `<script>` viết thẳng trong `index.html` chạy **trước tất cả**: một cái tính đường
+   * dẫn của bộ file, một cái nạp bảy file kia. Chúng không phải là code chạy sớm — chúng là code
+   * *duy nhất* cho tới khi có file nào nạp được. Một cú pháp mà trình duyệt không hiểu ở đây
+   * không làm hỏng một tính năng: nó là `SyntaxError` lúc phân tích, tức là **cả trang không
+   * chạy một dòng nào**, trên đúng cái trình duyệt ấy và chỉ trên nó.
+   *
+   * Mà đó lại là thứ không ai thấy khi thử: máy người viết có trình duyệt mới. Người thấy là
+   * người dùng, và cái họ thấy vẫn là một khung trắng câm.
+   *
+   * Nên hai khối này ở lại ES5 — `var`, `function`, nối chuỗi bằng dấu cộng. Mấy file còn lại
+   * muốn hiện đại thế nào cũng được: lúc chúng chạy thì đã có một cái vòng nạp biết kêu khi
+   * hỏng, và biết nói ra thành chữ.
+   */
+  const html = readFileSync(new URL('./widget/index.html', import.meta.url), 'utf8');
+  const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((one) => one[1]);
+  assert.equal(blocks.length, 2, `index.html có ${blocks.length} khối mồi, chờ 2`);
+
+  // Bỏ chú thích và chuỗi trước khi soi. Mấy dòng văn xuôi ở đây đầy dấu ngược và dấu ba chấm,
+  // và một cái test đỏ vì một câu tiếng Việt là một cái test người ta tắt đi.
+  const bare = (code) => code
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1 ')
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""');
+
+  const MODERN = [
+    [/\b(?:const|let)\s/, 'const/let'],
+    [/=>/, 'hàm mũi tên'],
+    [/`/, 'template literal'],
+    [/\?\?/, '??'],
+    [/\?\./, '?.'],
+    [/\.\.\./, 'spread'],
+    [/\bclass\s+[A-Za-z_$]/, 'class'],
+    [/\b(?:async|await)\b/, 'async/await'],
+  ];
+
+  blocks.forEach((code, no) => {
+    const clean = bare(code);
+    const found = MODERN.filter(([re]) => re.test(clean)).map(([, name]) => name);
+    assert.deepEqual(found, [],
+      `khối mồi ${no + 1} của index.html dùng ${found.join(', ')} — `
+      + 'trình duyệt nào không hiểu cú pháp đó thì không chạy được một dòng nào của trang');
+  });
+});
+
 test('không hai thứ khác nhau của trang mang cùng một tên class trần', () => {
   /*
    * Luật thứ ba, và lại mua bằng một cái lỗi ra tới tay người chơi.
