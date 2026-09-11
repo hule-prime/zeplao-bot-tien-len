@@ -166,6 +166,22 @@ function standIn(rooms = { c1: ['u1', 'u2'] }) {
     return null;
   };
 
+  /**
+   * Chờ một lúc rồi trả lời **có hay không**, thay vì đỏ.
+   *
+   * `until` là để canh: hết giờ thì nó đỏ, và nó kể ra đang thấy gì — đúng việc của nó. Nhưng có
+   * những chuyện mà "chưa xảy ra" là một câu trả lời hợp lệ và có đường đi tiếp — chia phải một
+   * ván tới trắng chẳng hạn — và ở đó, đỏ sau hai mươi lăm giây là sai cả về kết luận lẫn về giá
+   * phải trả để biết.
+   */
+  app.maybe = async (what, ms = 2000) => {
+    for (let waited = 0; waited < ms; waited += 10) {
+      if (what()) return true;
+      await nap(10);
+    }
+    return !!what();
+  };
+
   app.say = (update) => { app.updates.push({ id: ++app.next, ...update }); };
 
   /// Everything the app was ever told, kept — the ring the real server keeps per bot.
@@ -342,17 +358,98 @@ async function oneMove(app, who) {
  *
  * Cái máy đo ở chỗ chờ là thứ chỉ ra được — nó in `pha=over` ngay dòng đầu.
  */
+/**
+ * Đợi bàn chia xong một ván **đánh được**, và trả về cái ví của từng người lúc ấy.
+ *
+ * Trả về cái ví, vì cái ván này có thể **không phải ván đầu**: chỗ này đốt qua mọi ván tới trắng,
+ * mà một ván tới trắng **có tiền thật đi qua** — `settlement` trừ mỗi người thua
+ * `blancheWorth × cược`. Rồi ván mới bắt đầu, `startGame` đặt `game.paidTo` và `game.paid` về
+ * rỗng, **còn cái ví thì giữ nguyên**.
+ *
+ * Nên `vốn + quà` không phải là cái mốc. Cái mốc là **cái ví ngay trước ván đang tính**, và chỉ
+ * chỗ này biết nó. Cùng lý do ấy, nó nói luôn **đã phải chia mấy ván**: có những cái test nói về
+ * *ván đầu của một cái bàn* — luật 3 bích chẳng hạn — và với chúng, "ván thứ hai" không phải là
+ * một ván hơi khác, nó là mất tiền đề. Hằng đẳng thức mà bot giữ là `ví = mốc + change`: `settle` đặt
+ * `one.change = already + moving` và `row.gold += moving` trong cùng một hàm không có `await`
+ * nào, nên hai vế không bao giờ lệch — miễn là lấy đúng mốc.
+ *
+ * Cùng họ với một cái đã sửa trong file này rồi: bản trước canh `change` bằng đúng một cược nên
+ * đỏ mỗi khi bài chia ra có tứ quý, và lời ghi lại lúc ấy là *"không phải chập chờn, là canh
+ * nhầm chỗ"*. Lần ấy sửa vế phải; đây là vế trái.
+ */
 async function dealt(app, who) {
   for (let tries = 0; tries < 20; tries++) {
     await app.until(() => who.every((id) => ['playing', 'over'].includes(app.mine(id).phase)),
       'the table to deal');
-    if (who.every((id) => app.mine(id).phase === 'playing')) return;
+    if (who.every((id) => app.mine(id).phase === 'playing')) {
+      return {
+        purse: Object.fromEntries(who.map((id) => [id, app.mine(id).gold])),
+        hands: tries + 1,
+      };
+    }
 
     // Tới trắng: ván xong trước khi ai kịp đánh. Xin ván khác.
     for (const id of who) app.does(id, { rematch: true });
     await nap(60);
   }
   assert.fail('the table kept dealing tới trắng');
+}
+
+/**
+ * Xin chia lại, và đợi tới khi có một ván **đánh được**. Trả về ai vừa về nhất ở ván trước nó.
+ *
+ * Một ván chia lại cũng có thể là **tới trắng**, y như ván đầu. Lúc ấy nó xong trước khi ai kịp
+ * đánh, `phase` nhảy thẳng sang `over`, và một vòng chờ `playing` sẽ đứng đó **tới hết giờ** —
+ * hai mươi lăm giây, rồi đỏ, và cái đỏ ấy không nói gì về thứ nó sinh ra để canh.
+ *
+ * Nó **không cần phân biệt** "chưa chia lại" với "chia rồi và tới trắng luôn": nhìn từ ngoài cả
+ * hai đều là `over`, và cả hai đều dẫn tới cùng một việc phải làm. Nên nó chỉ chờ ngắn rồi thử
+ * lại, thay vì đi tìm một tín hiệu để tách hai thứ không cần tách.
+ *
+ * Và nó trả về người về nhất, vì **đốt một ván là đổi người dẫn ván sau**. Giữ sẵn cái tên từ
+ * trước khi xin chia lại là giữ một cái tên đã cũ đúng vào lúc nó vừa đổi.
+ */
+async function redealt(app, who) {
+  let won = null;
+
+  for (let tries = 0; tries < 20; tries++) {
+    const seen = app.mine(who[0]) ?? {};
+
+    // Chỉ đọc người về nhất khi bàn **đang ở `over`**. Giữa chừng một ván thì `ranking` là một
+    // danh sách dở, và một cái tên đọc ra từ danh sách dở là một cái tên sai — mà nó sai một
+    // cách im lặng, vì nó vẫn là một cái tên có thật.
+    if (seen.phase === 'over') {
+      won = (seen.ranking ?? [])[0]?.id
+        ?? (seen.paid ?? []).find((one) => one.place === 'Nhất')?.userId
+        ?? null;
+    }
+
+    // Ván mới đã chia rồi — có thể nó đáp xuống trong lúc vòng trước đang chờ.
+    const at = app.pushes.length;
+    if (!who.every((id) => (app.mine(id) ?? {}).phase === 'playing')) {
+      for (const id of who) app.does(id, { rematch: true });
+      await app.maybe(() => who.every((id) => (app.mine(id) ?? {}).phase === 'playing'), 3000);
+    }
+    if (!who.every((id) => (app.mine(id) ?? {}).phase === 'playing')) continue;
+
+    /**
+     * Cái push **đầu tiên** của ván mới, không phải cái mới nhất.
+     *
+     * Máy nghĩ **một mili giây** trong bộ test (`TIENLEN_THINK_MS=1`). Nên nếu người được dẫn là
+     * một con máy thì tới lúc đọc `app.mine()`, nó đã đánh xong và lượt đã trôi qua — và câu
+     * "ghế về nhất ván trước có được đi đầu không" trả lời sai, một cách hoàn toàn ngẫu nhiên
+     * theo việc cái push nào kịp về trước.
+     *
+     * *Ai được dẫn* là một sự thật chỉ đúng ở **đúng một khung hình**, nên phải đọc đúng khung
+     * hình ấy. `app.pushes` giữ cả dãy, nên nó có sẵn ở đó.
+     */
+    const first = app.pushes.slice(at)
+      .find((one) => one.to === who[0] && one.state.phase === 'playing')?.state
+      ?? app.mine(who[0]);
+
+    return { won, first };
+  }
+  assert.fail('bàn chia tới trắng mãi, hai mươi ván liền');
 }
 
 async function playOut(app, who) {
@@ -387,6 +484,7 @@ test('a table against three machines is dealt, played, placed and paid', async (
     await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a hand');
 
     const dealt = app.mine('u1');
+    const purse = dealt.gold;          // cái mốc, đo lúc chia chứ không giả định
     assert.equal(dealt.seats.length, 4);
     assert.equal(dealt.seats.filter((one) => one.bot).length, 3);
     assert.equal(dealt.me.hand.length, 13);
@@ -404,8 +502,7 @@ test('a table against three machines is dealt, played, placed and paid', async (
     assert.equal(paid.userId, 'u1');
     assert.ok([BOT_STAKE, BOT_STAKE / 2, -BOT_STAKE / 2, -BOT_STAKE].includes(paid.change),
       `paid ${paid.change}`);
-    assert.equal(over.gold, STARTING_GOLD + DAILY_GOLD + paid.change,
-      'and the ledger says the same');
+    assert.equal(over.gold, purse + paid.change, 'and the ledger says the same');
   });
 });
 
@@ -874,7 +971,9 @@ test('coming first is paid at once, and leaving after it is not walking out', as
     app.does('u2', { join: table });
     await app.until(() => (app.mine('u2') ?? {}).phase === 'lobby', 'u2 seated');
     app.does('u3', { join: table });
-    await dealt(app, ['u1', 'u2', 'u3']);
+    // Mốc là cái ví lúc ván này được chia, không phải vốn + quà: `dealt` có thể đã đốt qua một
+    // ván tới trắng, và một ván tới trắng lấy tiền thật.
+    const { purse } = await dealt(app, ['u1', 'u2', 'u3']);
 
     // Play until somebody is out of cards with the table still going. At three seats that is
     // the first two people to finish, so it always happens.
@@ -896,13 +995,13 @@ test('coming first is paid at once, and leaving after it is not walking out', as
     // cú chặt tứ quý ở mức cược này là tám nghìn. Cái test từng canh `change` bằng đúng một
     // cược, nên nó đỏ mỗi khi bài chia ra có tứ quý: không phải chập chờn, là canh nhầm chỗ.
     assert.equal(paid.placing, 1000, 'a stake, off whoever comes last');
-    assert.equal(won.gold, STARTING_GOLD + DAILY_GOLD + paid.change,
+    assert.equal(won.gold, purse[first] + paid.change,
       'and the purse already says so, chặt và thối tính cả vào');
 
     // And now they can put it down. This is not forfeiting.
     app.does(first, { leave: true });
     await app.until(() => app.mine(first).phase === 'choosing', 'back to the lobby');
-    assert.equal(app.mine(first).gold, STARTING_GOLD + DAILY_GOLD + 1000,
+    assert.equal(app.mine(first).gold, purse[first] + 1000,
       'and are not charged for leaving');
 
     // The other two play it out, and the place stands.
@@ -1563,12 +1662,26 @@ test('the three of spades opens the first hand of a table and nothing after it',
     await app.until(() => app.mine('u2'), 'a screen in c2');
     await claim(app, 'u2');
 
-    app.does('u1', { open: 2, stake: 1000 });
-    await app.until(() => (app.mine('u1') ?? {}).phase === 'lobby', 'a table for two');
+    // Cái test này nói về **ván đầu của một cái bàn**, nên cái ván nó nhìn phải đúng là ván đầu.
+    //
+    // Chia phải tới trắng thì `dealt` đốt ván ấy đi và trả về ván thứ hai — ở đó `opensWith` là
+    // `null` một cách hoàn toàn đúng luật, và cái đỏ sinh ra từ đó không nói gì về thứ nó canh.
+    // Nới câu hỏi ra cho vừa cái bàn hỏng là bỏ mất chính thứ nó sinh ra để bắt, nên cách khác:
+    // bỏ bàn ấy đi, mở bàn khác, cho tới khi có một ván đầu thật.
+    for (let tries = 1; ; tries++) {
+      app.does('u1', { open: 2, stake: 1000 });
+      await app.until(() => (app.mine('u1') ?? {}).phase === 'lobby', 'a table for two');
+      await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the table on u2\'s list');
+      app.does('u2', { join: app.mine('u2').rooms[0].id });
 
-    await app.until(() => (app.mine('u2').rooms ?? []).length === 1, 'the table on u2\'s list');
-    app.does('u2', { join: app.mine('u2').rooms[0].id });
-    await dealt(app, ['u1', 'u2']);
+      if ((await dealt(app, ['u1', 'u2'])).hands === 1) break;
+
+      assert.ok(tries < 10, 'mười bàn liền chia tới trắng ngay ván đầu');
+      for (const id of ['u1', 'u2']) app.does(id, { leave: true });
+      await app.until(() => ['choosing', 'over'].includes(app.mine('u1').phase), 'về sảnh');
+      app.does('u1', { leave: true });
+      await app.until(() => app.mine('u1').phase === 'choosing', 'về sảnh hẳn');
+    }
 
     const first = app.mine('u1');
     assert.notEqual(first.opensWith, null, 'ván đầu thì có lá bắt buộc');
@@ -1577,16 +1690,12 @@ test('the three of spades opens the first hand of a table and nothing after it',
 
     await playOut(app, ['u1', 'u2']);
 
-    const over = app.mine('u1');
-    const won = over.paid.find((one) => one.place === 'Nhất').userId;
-
-    app.does('u1', { rematch: true });
-    app.does('u2', { rematch: true });
-    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'dealt again');
-
-    const again = app.mine('u1');
+    // Ván chia lại có thể là tới trắng, y như ván đầu — nên xin cho tới khi có ván đánh được,
+    // và hỏi lại ai vừa về nhất, vì đốt một ván là đổi người dẫn ván sau.
+    const { won, first: again } = await redealt(app, ['u1', 'u2']);
     assert.equal(again.opensWith, null, 'ván sau không bắt lá nào cả');
-    assert.equal(again.seats[again.turn].id, won, 'người về nhất ván trước được dẫn');
+    assert.equal(again.seats[again.turn].id, won,
+      `người về nhất ván trước được dẫn — đợi ${won}, được ${again.seats[again.turn]?.id}`);
   }, { c1: ['u1'], c2: ['u2'] });
 });
 
@@ -1640,6 +1749,7 @@ test('a phỏm table is dealt, played, counted and paid', async () => {
     await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'a phỏm table');
 
     const dealt = app.mine('u1');
+    const purse = dealt.gold;          // cái mốc, đo lúc chia chứ không giả định
     assert.equal(dealt.kind, 'phom');
     assert.equal(dealt.seats.length, 4);
     assert.equal(dealt.me.hand.length, 10, 'người mở bàn cầm cái, mười lá');
@@ -1664,7 +1774,7 @@ test('a phỏm table is dealt, played, counted and paid', async () => {
 
     // Vàng đổi đúng bằng cái nó nói là đã đổi.
     const paid = over.paid[0];
-    assert.equal(over.gold, STARTING_GOLD + DAILY_GOLD + paid.change);
+    assert.equal(over.gold, purse + paid.change);
   }, { c1: ['u1'] });
 });
 
@@ -1761,14 +1871,9 @@ test('a phỏm rematch is opened by whoever won, not by whoever opened the table
     assert.equal(first.me.hand.length, 10, 'và cầm mười lá');
 
     await playPhom(app, ['u1', 'u2']);
-    const over = app.mine('u1');
-    const won = over.paid.find((one) => one.place === 'Nhất').userId;
 
-    app.does('u1', { rematch: true });
-    app.does('u2', { rematch: true });
-    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'dealt again');
-
-    const again = app.mine('u1');
+    // Y như bên tiến lên: ván chia lại có thể ù ngay, và lúc ấy chờ `playing` là chờ mãi.
+    const { won, first: again } = await redealt(app, ['u1', 'u2']);
     assert.equal(again.seats[again.turn].id, won, 'ván sau thì người về nhất cầm cái');
     assert.equal(again.seats.find((one) => one.id === won).cards, 10,
       'và người ấy là người cầm mười lá');
@@ -1792,15 +1897,11 @@ test('losing to the machines does not hand you the lead again', async () => {
     const over = app.mine('u1');
     assert.equal(over.phase, 'over');
     assert.equal(over.ranking.length, 4);
-    const won = over.ranking[0].id;
-
-    app.does('u1', { rematch: true });
-    await app.until(() => (app.mine('u1') ?? {}).phase === 'playing', 'dealt again');
-
-    const again = app.mine('u1');
+    const { won, first: again } = await redealt(app, ['u1']);
     assert.equal(again.opensWith, null, 'ván sau không bắt 3 bích');
     assert.equal(again.seats[again.turn].id, won,
-      'ghế về nhất ván trước phải là ghế đi đầu, kể cả khi đó là máy');
+      `ghế về nhất ván trước phải là ghế đi đầu, kể cả khi đó là máy — `
+      + `đợi ${won}, được ${again.seats[again.turn]?.id}`);
 
     // Và khi người chơi *không* về nhất thì họ không được đi đầu.
     if (won !== 'u1') {

@@ -3387,12 +3387,68 @@ say('Đang mở bàn…');
 // phủ kín ba con xúc xắc, mà một hình tròn phủ được một hàng ngang thì cao đúng bằng chiều rộng
 // của hàng ấy. Ba mươi pixel là chỗ cho việc đó và không hơn — cái khung này nổi lên trên một
 // cuộc trò chuyện, và mỗi pixel nó lấy là một pixel của cuộc trò chuyện ấy.
+
+/// Cỡ trên điện thoại, và là cái gốc.
+///
+/// Cả `style.css` được canh tay theo đúng hai con số này. Đổi chúng là đổi cái bàn, nên chúng
+/// không đổi — cái đổi là con số bên dưới.
+const PHONE = { w: 390, h: 570 };
+
+/// Và cỡ trên web: to hơn một nửa, đúng cả hai chiều.
+///
+/// Câu ở trên — *mỗi pixel nó lấy là một pixel của cuộc trò chuyện* — là một câu về **cái điện
+/// thoại**. Trên màn hình máy tính thì nó lộn ngược: chỗ thì thừa ra hàng nghìn pixel, mà cái
+/// bàn ngồi lọt thỏm giữa màn hình đúng bằng một cái điện thoại ai đó dán lên đấy.
+///
+/// Đây là **khung to ra, không phải chữ to ra**. Cả cái trang này đo bằng `getBoundingClientRect`
+/// rồi tự cắt cho vừa — cái đĩa nặn theo cái bát, ba con xúc xắc theo chiều cao bát thật được
+/// chia — nên cho nó nhiều chỗ hơn là mọi thứ ấy tự lớn theo. Cỡ chữ và cỡ lá bài thì nằm ở
+/// những con số pixel trong `style.css` và giữ nguyên; phóng to cả trang bằng `zoom` thì **hỏng
+/// đúng cái cơ chế đo ấy** — đo ra một con số đã nhân rồi, ghi ngược lại thành pixel, và nhân
+/// thêm lần nữa. Cái đĩa hụt vài pixel là cái đĩa hở góc, mà hở góc thì kết quả ló ra trước khi
+/// có ai kéo, và không có gì báo lỗi chuyện đó cả.
+const WEB = { w: 585, h: 855 };
+
+/**
+ * Có đang chạy trên web không.
+ *
+ * **Hỏi nền tảng trước.** Cái bắt tay `hello` mà host gửi về sau `ready` có mang theo
+ * `room.host` — `tools/widget-selftest.mjs` dựng lại đúng cái gói ấy với `host: 'web'`, vì đó là
+ * cái nó phải giả cho giống. Nếu `zeplao.js` có đưa nó ra thì đó là **câu trả lời của chính
+ * người biết**, và không có lý do gì đi đoán khi có người nói sẵn.
+ *
+ * **Chỉ đoán khi nó im.** `zeplao.js` là file nền tảng ghi vào lúc upload, không nằm trong kho
+ * này, nên không kiểm được từ đây là nó có đưa `room` ra hay không — và một câu lệnh viết theo
+ * một cái API mình chưa đọc là một câu lệnh sẽ im lặng trả về `undefined`. Lúc ấy hai câu dưới
+ * phải cùng đúng, và cả hai đều chọn theo hướng **đoán sai thì rơi về cỡ điện thoại**:
+ *
+ * - **Nằm trong một cái iframe.** Bản web dựng cái khung này bằng một host React và nói chuyện
+ *   với nó qua `postMessage` — chính là lý do cái `ready` ngay bên dưới được gọi năm lần. App
+ *   điện thoại không đi qua đường ấy.
+ * - **Và màn hình thật sự đủ rộng.** Một cái điện thoại mở trang web cũng nằm trong iframe, mà
+ *   585 pixel thì nó không có chỗ để đặt.
+ *
+ * `window.top` **so sánh** được kể cả khi khác nguồn gốc; chỉ đọc thuộc tính của nó mới ném lỗi.
+ * Bọc `try` vì đây là dòng chạy sớm nhất của cả trang, và một lỗi ở đây là một khung trắng.
+ */
+function webHost() {
+  try {
+    const told = z.room && z.room.host;
+    if (typeof told === 'string') return told === 'web';
+    return window.top !== window.self && window.screen.width >= 900;
+  } catch {
+    return false;
+  }
+}
+
+const want = webHost() ? WEB : PHONE;
+
 // Web desktop can load this cached frame before the React host has attached its message listener.
 // A missed first `ready` leaves the frame waiting for the initial state forever; mobile does not
 // use this postMessage path. Asking again is harmless and gives the host a few chances to hear.
 for (const wait of [0, 80, 240, 800, 1600]) {
   setTimeout(() => {
-    z.setSize(390, 570);
+    z.setSize(want.w, want.h);
     z.ready();
   }, wait);
 }

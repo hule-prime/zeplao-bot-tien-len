@@ -229,16 +229,20 @@ const HOME = `<!doctype html><meta charset="utf-8">
   h2 { margin:0; font-size:12px; font-weight:650; color:#8fb3a1; letter-spacing:.3px; }
   /* The bar the app draws above every widget, and the reason it draws it: a page can draw a
      convincing sign-in screen, so something outside it has to say whose page this is. */
-  .frame { width:390px; border-radius:14px; overflow:hidden; background:#072318;
+  .frame { width:585px; border-radius:14px; overflow:hidden; background:#072318;
            box-shadow:0 10px 30px rgba(0,0,0,.55); }
   .bar { height:34px; display:flex; align-items:center; gap:8px; padding:0 10px;
          background:#0d2c20; color:#cfe0d6; font-size:12px; font-weight:600; }
   .bar .dot { width:16px; height:16px; border-radius:50%; background:#e9c46a; }
   .bar .x { margin-left:auto; opacity:.5; }
-  /* The height the widget asks for with z.setSize. The real frame clamps that to something
+  /* The size the widget asks for with z.setSize. The real frame clamps that to something
      that always leaves its own title bar showing; here it is just the number — so it has to be
-     kept the same number, or this stand-in is showing a frame no phone would give. */
-  iframe { display:block; width:390px; height:570px; border:0; }
+     kept the same number, or this stand-in is showing a frame nothing would ever give.
+
+     Cỡ web, không phải cỡ điện thoại, vì chỗ này là web: nó chạy trong một trình duyệt trên
+     máy tính, bên trong một khung nhúng, nên onWeb trong tienlen.js trả lời đúng và cái trang
+     thật sẽ xin đúng 585x855. Hai con số này với hai con số WEB bên ấy phải đi cùng nhau. */
+  iframe { display:block; width:585px; height:855px; border:0; }
   aside { max-width:280px; color:#7f9a8c; font-size:12px; }
   code { color:#e9c46a; }
 </style>

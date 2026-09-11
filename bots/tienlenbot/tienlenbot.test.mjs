@@ -1310,7 +1310,11 @@ test('cái bát là thứ co lại khi cột hết chỗ, và không gì đượ
       Math.floor(Math.min((room / Math.SQRT2 - g) / 2, (h - below - g) / 2))));
   };
   const FIXED = 42 + 103 + 21 + 41;          // tab, chiếu, dòng luật, hàng chip
-  for (const frame of [460, 500, 540, 570, 620]) {
+  // 855 là cỡ **web**: cái khung trên máy tính to hơn cỡ điện thoại một nửa, đúng cả hai chiều
+  // (`WEB` trong `widget/tienlen.js`). Nó nằm trong danh sách này vì phép cắt ba con xúc xắc kẹp
+  // trần ở 58px, nên một cái bát cao gấp rưỡi **không** làm ba con to gấp rưỡi — và câu "cái đĩa
+  // có còn phủ kín ba con không" phải được hỏi lại ở đầu cao chứ không chỉ ở đầu thấp.
+  for (const frame of [460, 500, 540, 570, 620, 855]) {
     for (const says of [0, 33]) {
       const screen = frame - 15 - 38 - 40 - 21 - says;
       const bowl = Math.max(104, screen - FIXED);

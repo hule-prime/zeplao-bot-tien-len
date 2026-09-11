@@ -162,6 +162,34 @@ const BOARDS = { chess, xiangqi };
 /// Whether this table is one of the two boards.
 const isBoard = (game) => !!game && !!BOARDS[game.kind];
 
+/**
+ * Ghế nào không có ai đang cầm điện thoại.
+ *
+ * Hai câu hỏi khác hẳn nhau đã dùng chung một cái cờ suốt từ đầu, và chúng chỉ giống nhau chừng
+ * nào nhà chỉ có **một** loại quân để đặt vào ghế trống:
+ *
+ *   `bot`   — *có phải đồ đạc không?* Không ví, không được trả đồng nào, app không hề biết nó
+ *             tồn tại. Đây là con máy lấp ghế ở bàn "đấu với máy".
+ *   `house` — *nhà có đi nước hộ ghế này không?*
+ *
+ * Con máy thì cả hai đều đúng, nên một cờ là đủ, và nó đủ thật cho tới hôm nay. **Tay máy** —
+ * máy có ví, ngồi vào bàn chế độ người — thì hai câu ấy **ngược nhau**: nó là người (có ví, đặt
+ * cược thật, chặt được và bị chặt, phải đền, lên bảng vàng) mà chương trình đi nước cho nó.
+ *
+ * Chỗ này trả lời đúng câu thứ hai, và **không bao giờ được dùng để trả lời câu thứ nhất**. Mọi
+ * phép tính tiền — `settlement`, `chop`, `reckon`, `phomChargeEat`, và cái đếm người ở `rematch`
+ * — vẫn hỏi `bot` như cũ. Đó là cả lý do thêm một loại người chơi vào bàn không phải sửa một
+ * dòng nào trong số ấy: một tay máy đi qua chúng y như một người, vì với chúng nó **là** một
+ * người.
+ *
+ * Xem [docs/ke-hoach-tay-may.md](../../docs/ke-hoach-tay-may.md) mục 1.
+ */
+export const driven = (one) => !!one && !!(one.bot || one.house);
+
+/// Ai đang cầm cái màn hình này. Một phiên ở đây có đúng một người — chủ của nó — nên câu này
+/// luôn có đúng một câu trả lời, và mọi cửa vào bàn đều hỏi nó cùng một kiểu.
+const whoOf = (screen) => ({ userId: screen.userId, displayName: screen.displayName });
+
 /// Tên trò, bằng tiếng người ta gọi. Một chỗ, vì nó đi vào lời chào, lời mời trong phòng, và
 /// danh sách bàn — ba chỗ mà lệch nhau thì đọc ra là ba trò khác nhau.
 export const GAME_NAMES = {
@@ -1431,7 +1459,7 @@ export async function run(token, { signal, api = API } = {}) {
         await pushTo(screen);
         return answer(callbackId, SAY.watching);
       }
-      return answer(callbackId, await sitDown(game, screen));
+      return answer(callbackId, await sitDown(game, whoOf(screen), screen));
     }
 
     return answer(callbackId);
@@ -1440,17 +1468,24 @@ export async function run(token, { signal, api = API } = {}) {
   /**
    * Puts somebody in a free seat, or says why not.
    *
-   * Reached three ways — the button in the room, the list of open tables on somebody's own
-   * screen, and the same list in another group entirely — and they must not diverge, because
-   * the refusals are the part people actually meet. Returns what to tell them, or nothing when
-   * it simply worked.
+   * Reached four ways — the button in the room, the list of open tables on somebody's own
+   * screen, the same list in another group entirely, and a tay máy deciding to sit down — and
+   * they must not diverge, because the refusals are the part people actually meet. Returns what
+   * to tell them, or nothing when it simply worked.
+   *
+   * **Người vào, màn hình là chuyện phụ.** `who` là ai ngồi xuống; `screen` là cái khung của họ
+   * nếu họ có một cái. Một tay máy không có khung nào cả — nó không có phiên, app không hề biết
+   * nó tồn tại — nên nó đi vào đây với `screen` rỗng và **mọi lời từ chối bên dưới vẫn áp cho
+   * nó y như người**: đang ngồi bàn khác, không đủ tiền, bàn đầy, bàn đã vào ván.
+   *
+   * Viết một bản thứ hai cho tay máy là viết một bản sẽ quên mất một trong bốn câu ấy, và ba cái
+   * quên ấy lần lượt là: một tay máy ngồi hai bàn, một tay máy đánh bằng vàng nó không có, và
+   * một cái bàn năm ghế.
    */
-  async function sitDown(game, screen) {
-    const who = { userId: screen.userId, displayName: screen.displayName };
-
+  async function sitDown(game, who, screen = null) {
     if (seatOf(game, who.userId) !== null) {
-      screen.gameId = game.id;
-      await pushTo(screen);
+      if (screen) screen.gameId = game.id;
+      await redraw(screen);
       return null;
     }
 
@@ -1460,8 +1495,8 @@ export async function run(token, { signal, api = API } = {}) {
 
     if (game.state !== 'lobby' && !midRound) {
       // Not a refusal so much as a redirection: a table that has started is a table to watch.
-      screen.gameId = game.id;
-      await pushTo(screen);
+      if (screen) screen.gameId = game.id;
+      await redraw(screen);
       return game.state === 'playing' ? SAY.startedAlready : SAY.noGame;
     }
 
@@ -1471,8 +1506,8 @@ export async function run(token, { signal, api = API } = {}) {
     // and whichever table they are not looking at is the one that stops.
     const busy = seatedAt(who.userId);
     if (busy) {
-      screen.gameId = busy.id;
-      await pushTo(screen);
+      if (screen) screen.gameId = busy.id;
+      await redraw(screen);
       return SAY.busy;
     }
 
@@ -1484,9 +1519,17 @@ export async function run(token, { signal, api = API } = {}) {
     // changes when they walk into another group; the seat is a fact about the table. It was on
     // here for a while, written in three places and read in none — which is exactly the field
     // that goes stale and is then believed.
-    game.seats.push({ userId: who.userId, displayName: who.displayName, bot: false });
+    game.seats.push({
+      userId: who.userId,
+      displayName: who.displayName,
+      bot: false,
+      // Nhà có đi nước hộ ghế này không. Ghi xuống **ghế** chứ không tra lại sổ mỗi lượt: ai đi
+      // nước cho một cái ghế là một sự thật về cái bàn, và một sự thật về cái bàn thì nằm ở cái
+      // bàn. Hôm nay không có gì đặt nó, nên mọi ghế đều `false` và không có gì đổi.
+      house: !!who.house,
+    });
     game.touched = Date.now();
-    screen.gameId = game.id;
+    if (screen) screen.gameId = game.id;
 
     // A full table deals itself. Waiting for the host to press a button once the last seat is
     // taken is four people looking at each other — and the host may be the one who wandered off.
@@ -1626,7 +1669,7 @@ export async function run(token, { signal, api = API } = {}) {
     if (action.join) {
       const wanted = games.get(String(action.join));
       if (!wanted) return;
-      const refusal = await sitDown(wanted, screen);
+      const refusal = await sitDown(wanted, whoOf(screen), screen);
       if (refusal) await pushTo(screen, { says: refusal });
       return;
     }
@@ -1800,7 +1843,7 @@ export async function run(token, { signal, api = API } = {}) {
         return;
       }
 
-      if (action.bets) return setBets(game, screen, action.bets, action.at);
+      if (action.bets) return setBets(game, whoOf(screen), action.bets, action.at, screen);
 
       // Thrown when somebody says so rather than only when the clock runs out — sitting through
       // twenty-five seconds of nothing because nobody else is betting is not a game.
@@ -1833,7 +1876,7 @@ export async function run(token, { signal, api = API } = {}) {
     const seat = seatOf(game, who.userId);
 
     if (action.leave) {
-      await standUp(game, screen, seat);
+      await standUp(game, whoOf(screen), seat, screen);
       return;
     }
 
@@ -1980,13 +2023,17 @@ export async function run(token, { signal, api = API } = {}) {
    * Standing up mid-game is coming last, and being paid for it. Otherwise the way never to lose
    * gold is to leave whenever the cards are bad, and a table where that works is a table of who
    * quits fastest.
+   *
+   * `screen` là tuỳ chọn, cùng lý do với `sitDown`: một **tay máy** đứng dậy cũng phải trả đúng
+   * cái giá ấy, mà nó thì không có cái khung nào để đưa về sảnh. Tiền thì không đổi một đồng —
+   * phần tính tiền bên dưới không hỏi tới màn hình lấy một lần.
    */
-  async function standUp(game, screen, seat) {
+  async function standUp(game, who, seat, screen = null) {
     // Only watching. Their frame goes back to their own lobby and nothing about the table
     // changes — a spectator putting a game down must not close it on four other people.
     if (seat === null) {
-      screen.gameId = null;
-      await pushTo(screen);
+      if (screen) screen.gameId = null;
+      await redraw(screen);
       return;
     }
 
@@ -2002,9 +2049,9 @@ export async function run(token, { signal, api = API } = {}) {
       // Noted only so a rematch does not sit waiting on somebody who has gone home. It is not
       // shown anywhere: they came first, and that is what their chair goes on saying.
       game.seats[seat].away = true;
-      game.ready.delete(screen.userId);
-      screen.gameId = null;
-      await pushTo(screen);
+      game.ready.delete(who.userId);
+      if (screen) screen.gameId = null;
+      await redraw(screen);
       await pushGame(game);
       return;
     }
@@ -2017,9 +2064,9 @@ export async function run(token, { signal, api = API } = {}) {
     if (isBoard(game) && game.state === 'playing') {
       game.left.add(seat);
       finishBoard(game, { over: 'resign', winner: game.sides[1 - seat] });
-      screen.gameId = null;
+      if (screen) screen.gameId = null;
       await pushGame(game);
-      await pushTo(screen);
+      await redraw(screen);
       return;
     }
 
@@ -2038,21 +2085,21 @@ export async function run(token, { signal, api = API } = {}) {
       }
       settle(game);
 
-      screen.gameId = null;
+      if (screen) screen.gameId = null;
       await pushGame(game);
-      await pushTo(screen);
+      await redraw(screen);
       await maybeBotTurn(game);
       return;
     }
 
     // Somebody who sat down at a table and changed their mind. The table stays and the seat
     // opens again — it is not theirs to close.
-    if (game.state === 'lobby' && game.host.userId !== screen.userId) {
+    if (game.state === 'lobby' && game.host.userId !== who.userId) {
       game.seats.splice(seat, 1);
       game.touched = Date.now();
-      screen.gameId = null;
+      if (screen) screen.gameId = null;
       await pushGame(game);
-      await pushTo(screen);
+      await redraw(screen);
       await pushLobbies();
       return;
     }
@@ -2372,7 +2419,7 @@ export async function run(token, { signal, api = API } = {}) {
       for (;;) {
         if (game.state !== 'playing') return;
         const seat = seatToPlay(game);
-        if (seat === null || !game.seats[seat]?.bot) return;
+        if (seat === null || !driven(game.seats[seat])) return;
 
         await wait(BOARD_THINK_MS);
         if (game.state !== 'playing' || seatToPlay(game) !== seat) return;
@@ -2572,12 +2619,12 @@ export async function run(token, { signal, api = API } = {}) {
    * Sending the totals has no order to get wrong. `at` counts up on the page so a reply that
    * overtakes a later one is ignored rather than undoing it.
    */
-  async function setBets(game, screen, asked, at) {
+  async function setBets(game, who, asked, at, screen = null) {
     if (game.state !== 'betting') return;
 
     const when = Number(at);
     if (!Number.isFinite(when)) return;
-    if (when <= (game.betAt[screen.userId] ?? 0)) return;
+    if (when <= (game.betAt[who.userId] ?? 0)) return;
 
     // Everything here came from a page anybody can edit — the doors included. A tài xỉu board
     // arriving with `cua` on it is a page that is not the page this bot ships.
@@ -2595,14 +2642,14 @@ export async function run(token, { signal, api = API } = {}) {
 
     // Never more on the board than there is in the purse. The stake is not taken until the dice
     // land, so this is the only thing standing between a board and a debt.
-    const row = rowFor(screen.userId, screen.displayName);
+    const row = rowFor(who.userId, who.displayName);
     if (total > row.gold) {
-      await pushTo(screen, { says: SAY.overBet(row.gold) });
+      await redraw(screen, { says: SAY.overBet(row.gold) });
       return;
     }
 
-    game.bets[screen.userId] = bets;
-    game.betAt[screen.userId] = when;
+    game.bets[who.userId] = bets;
+    game.betAt[who.userId] = when;
     game.touched = Date.now();
     await pushGame(game);
   }
@@ -2728,7 +2775,7 @@ export async function run(token, { signal, api = API } = {}) {
       for (;;) {
         if (game.state !== 'playing') return;
         const seat = game.turn;
-        if (seat === null || !game.seats[seat]?.bot) return;
+        if (seat === null || !driven(game.seats[seat])) return;
 
         if (game.kind === 'phom') {
           await wait(PHOM_THINK_MS);
@@ -3295,6 +3342,25 @@ export async function run(token, { signal, api = API } = {}) {
     return true;
   }
 
+  /**
+   * Vẽ lại một cái màn hình, nếu có màn hình để mà vẽ.
+   *
+   * Một **tay máy** ngồi ở bàn không có cái khung nào cả: nó không có phiên, app không hề biết
+   * nó tồn tại, và mọi vòng đẩy trạng thái ở đây đều duyệt `screens` nên nó vốn đã tự động bị bỏ
+   * qua. Chỗ duy nhất phải nói ra chuyện ấy là những nơi gọi thẳng `pushTo` cho **một** người —
+   * và đó là ba cửa vào bàn.
+   *
+   * Một hàm chứ không phải một cái `if` chép đi chép lại chín chỗ: chín cái `if` là chín chỗ để
+   * quên đúng một cái.
+   *
+   * Khai báo bằng `function` chứ không phải `const`, như mọi thứ ở tầng này. Một `const` nằm
+   * dưới cái vòng lặp không bao giờ kết thúc thì ở trong vùng chết suốt đời tiến trình.
+   */
+  async function redraw(screen, extra = {}) {
+    if (!screen) return;
+    await pushTo(screen, extra);
+  }
+
   /// Everybody looking at this table — the people at it, and anybody watching.
   async function pushGame(game) {
     await Promise.all([...screens.values()]
@@ -3372,7 +3438,7 @@ export async function run(token, { signal, api = API } = {}) {
 
         const waiting = seatToPlay(game);
         if (waiting === null) continue;
-        if (game.seats[waiting].bot) {
+        if (driven(game.seats[waiting])) {
           if (idle > BOARD_THINK_MS * 4) await boardBotTurn(game);
           continue;
         }
@@ -3392,7 +3458,7 @@ export async function run(token, { signal, api = API } = {}) {
 
         // A machine whose beat was lost — the process was busy, a push failed, an await landed
         // after the table had moved. Started again rather than waited on.
-        if (game.seats[seat].bot) {
+        if (driven(game.seats[seat])) {
           if (idle > THINK_MS * 3) await maybeBotTurn(game);
           continue;
         }

@@ -183,6 +183,42 @@ trong đó là do quyết định chứ không phải xếp bừa rồi mong nó
   được **báo** chứ không được đưa một cái nút xám. Nút xám ghi "đang đợi" là thứ người ta bấm cho
   tới lúc bỏ cuộc.
 
+### Trên web thì cái khung to hơn một nửa
+
+390×570 trên điện thoại, **585×855 trên web** — `PHONE` và `WEB` ở cuối `widget/tienlen.js`.
+
+Câu ở đầu mục này — *khung không bao giờ chiếm cả màn hình* — là một câu về **cái điện thoại**,
+và ở đó nó đúng: cái khung nổi lên trên một cuộc trò chuyện, mỗi pixel nó lấy là một pixel của
+cuộc trò chuyện ấy. Trên màn hình máy tính thì nó lộn ngược. Chỗ thừa ra hàng nghìn pixel, mà cái
+bàn ngồi lọt thỏm ở giữa đúng bằng một cái điện thoại ai đó dán lên đấy.
+
+Ba điều đáng nhớ về chỗ này:
+
+**Khung to ra, chữ không to ra.** Cả cái trang này đo bằng `getBoundingClientRect` rồi tự cắt cho
+vừa — cái đĩa nặn theo cái bát, ba con xúc xắc theo chiều cao bát thật được chia — nên cho nó
+nhiều chỗ hơn là những thứ ấy tự lớn theo. Cỡ chữ và cỡ lá bài nằm ở những con số pixel trong
+`style.css` và **giữ nguyên**.
+
+**Không phóng to bằng `zoom`, và đó là một quyết định chứ không phải một sự lười.** `zoom` làm
+`getBoundingClientRect` trả về con số **đã nhân rồi**; đám mã trên lấy con số ấy ghi ngược lại
+thành pixel, và nó bị nhân thêm lần nữa. Cái đĩa hụt vài pixel là cái đĩa hở góc, mà hở góc thì
+kết quả ló ra trước khi có ai kéo — và **không có gì báo lỗi chuyện đó cả**. Muốn phóng to cả
+trang thì phải chia lại mọi phép đo cho hệ số phóng, ở cả mười hai chỗ đang đo; đó là một việc
+làm được, nhưng nó là một việc khác.
+
+**Câu "có phải web không" hỏi nền tảng trước, đoán sau.** Gói `hello` host gửi về sau `ready` có
+mang `room.host` — `tools/widget-selftest.mjs` dựng lại đúng gói ấy với `host: 'web'`. Nhưng
+`zeplao.js` là file nền tảng ghi vào lúc upload, không nằm trong kho này, nên **không kiểm được
+từ đây** là nó có đưa `room` ra hay không. Nên: tin nó nếu nó nói, còn nó im thì đo — nằm trong
+một khung nhúng, **và** màn hình đủ rộng. Cả hai vế đều chọn theo hướng đoán sai thì rơi về cỡ
+điện thoại, vì một cái điện thoại bị ép 585 pixel là một cái bàn tràn khỏi màn hình, còn một cái
+máy tính bị rơi về 390 chỉ là cái nó vốn đang có.
+
+Cỡ web nằm trong cái test canh phép cắt xúc xắc (`tienlenbot.test.mjs`, dãy chiều cao khung), vì
+phép cắt kẹp trần ở 58px: một cái bát cao gấp rưỡi **không** làm ba con to gấp rưỡi, nên câu "cái
+đĩa có còn phủ kín ba con không" phải được hỏi lại ở đầu cao chứ không chỉ ở đầu thấp. Và
+`tools/play.mjs` — vốn *là* web — dựng khung đúng hai con số ấy.
+
 ## 6. Tiền của một ván tiến lên
 
 Trước đây tiền chỉ đến từ thứ hạng. Chặt heo không được gì, ôm heo tới cuối không mất gì — tức
@@ -897,6 +933,87 @@ Bắt được lần đầu khi `board.js` khai một `let picked` cho ô cờ �
 một `picked` cho mấy lá bài đang nhấc lên. Sáu file thì mắt không canh nổi, nên có test canh.
 
 ---
+
+## 14. Máy đồ đạc và máy có ví
+
+Cái này chưa dùng tới. Nó là **cái khe** mở sẵn cho nhóm tay máy — máy có ví, ngồi vào bàn chế độ
+người, đặt cược thật — mà kế hoạch nằm ở [ke-hoach-tay-may.md](ke-hoach-tay-may.md). Viết ra đây
+vì nó đã đổi một thứ ở tầng dưới cùng của cái bàn, và người sau đọc code sẽ gặp nó trước khi gặp
+bản kế hoạch.
+
+### Một cái cờ trả lời hai câu hỏi
+
+Từ đầu tới giờ mỗi cái ghế có đúng một cái cờ, `bot`, và nó trả lời **hai** câu khác hẳn nhau:
+
+1. *Có phải đồ đạc không?* — không ví, không được trả đồng nào, app không hề biết nó tồn tại.
+2. *Ai đi nước cho ghế này?*
+
+Con máy lấp ghế trống ở bàn "đấu với máy" thì hai câu ấy cùng một đáp án, nên một cờ là đủ, và nó
+đủ thật suốt từ đầu. **Tay máy thì hai đáp án ngược nhau**: nó là người — có ví, đặt cược thật,
+chặt được và bị chặt, phải đền, lên bảng vàng — mà chương trình đi nước cho nó.
+
+Nên tách làm hai, và tách theo đúng cái hướng làm ít việc nhất:
+
+| Cờ | Câu nó trả lời | máy | tay máy | người |
+| --- | --- | --- | --- | --- |
+| `bot` | Có phải đồ đạc không? | ✅ | ❌ | ❌ |
+| `house` | Nhà có đi nước hộ ghế này không? | ✅ | ✅ | ❌ |
+
+```js
+export const driven = (one) => !!one && !!(one.bot || one.house);
+```
+
+### Vì sao `bot` không được đụng tới
+
+Đây là chỗ đáng đọc kỹ nhất trong mục này.
+
+`bot` **giữ nguyên nghĩa cũ** ở cả mười mấy chỗ đang đọc nó, nên toàn bộ máy tính tiền chạy đúng
+mà không phải sửa một dòng nào:
+
+| Chỗ | Nó làm gì với một tay máy |
+| --- | --- |
+| `settlement` | Một người + ba tay máy là **bàn bốn người**: chia theo thang bậc bốn chỗ, đánh đúng mức cược của phòng. Không rơi vào nhánh `alone` — tức là không bị kéo về đánh nhà cái ở `BOT_STAKE` |
+| `chop` | Chặt heo, chặt bom, ăn tiền thật, cả hai chiều |
+| `reckon` | Thối, cóng, đền — áp y như người |
+| `phomChargeEat` | Ăn lá, ăn chốt, móm — y như thế |
+| `rematch` | Tay máy được **đếm** là người phải bấm "ván nữa" |
+
+Hàng cuối là cái bẫy, và nó là bẫy *bắt buộc phải gỡ* chứ không phải bẫy tránh được: `rematch`
+đếm `!one.bot && !one.away`, nên một tay máy **không** bấm "ván nữa" là một cái bàn treo tới lúc
+bị quét, và người thật ngồi nhìn màn hình "đang đợi" mà không đợi ai cả. Ai làm chặng tiếp theo
+phải làm phần bấm hộ, không được coi nó là đồ trang trí.
+
+### Bốn dòng đã đổi
+
+Đúng bốn chỗ, tất cả đều hỏi câu thứ hai và tất cả đều thành `driven(...)`:
+`maybeBotTurn`, `boardBotTurn`, và hai nhánh của `sweep` — nhánh bài và nhánh cờ.
+
+> **Luật:** `bot` trả lời "có ví không", `house` trả lời "ai đi nước". Hai câu ấy không bao giờ
+> được nhập lại làm một lần nữa. Thấy một chỗ mới hỏi `.bot` thì phải hỏi lại xem nó đang muốn
+> biết cái gì — nếu là "ai đi nước" thì nó phải là `driven`.
+
+### Ba cửa vào bàn nhận **người**, màn hình là chuyện phụ
+
+`sitDown`, `standUp` và `setBets` trước đây nhận một `screen` rồi tự moi `userId` ra từ đó. Giờ
+chúng nhận `who` — ai đang làm việc này — và một `screen` **tuỳ chọn**.
+
+Lý do không phải là cho gọn. Tay máy không có phiên, không có widget, không có màn hình: app
+không hề biết nó tồn tại. Mọi vòng đẩy trạng thái ở đây đều duyệt `screens` nên nó vốn đã tự động
+bị bỏ qua; chỗ duy nhất phải nói ra chuyện ấy là những nơi gọi thẳng `pushTo` cho **một** người,
+và đó đúng là ba cửa này. Chúng dùng chung một hàm `redraw(screen)` — vẽ lại nếu có cái để vẽ —
+chứ không phải chín cái `if` chép đi chép lại, vì chín cái `if` là chín chỗ để quên đúng một cái.
+
+`sitDown` đã có sẵn một dòng comment từ trước nói rằng nó *"reached three ways ... and they must
+not diverge, because the refusals are the part people actually meet"*. Giờ là **bốn**, và đó là
+cả lý do không viết một bản thứ hai cho tay máy: một bản sao sẽ quên mất một trong bốn lời từ
+chối, và ba cái quên ấy lần lượt là một tay máy ngồi hai bàn, một tay máy đánh bằng vàng nó không
+có, và một cái bàn năm ghế.
+
+### Cái này **chưa** làm gì cả
+
+Không có chỗ nào đặt `house: true`. Không có tay máy nào tồn tại. Mọi ghế vẫn `house: false`, nên
+`driven` trả lời y hệt `bot` và cả con bot chạy y như hôm qua — có chủ ý: nếu chặng sau phải lùi
+lại thì phần này vẫn ở lại được, vì nó chỉ làm code nói đúng hơn cái nó vốn làm.
 
 ## Những chỗ từng sai
 
