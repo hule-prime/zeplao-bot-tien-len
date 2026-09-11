@@ -391,7 +391,10 @@ the good copy. That is the whole shape of the bug: only some players, forever, a
 after a widget upload, and never reproducible from the machine that deployed it.
 
 The whole hunt, the evidence, and what has to change on the platform side is written up for
-the kuku team in [docs/loi-khung-trang.md](docs/loi-khung-trang.md).
+the kuku team in [docs/loi-khung-trang.md](docs/loi-khung-trang.md) — and its sequel, a second
+cause of the same white frame, in [docs/widget-404-ba-may.md](docs/widget-404-ba-may.md): the
+bundle is unpacked onto the local disk of whichever of the three machines took the upload, so
+after every widget upload about two thirds of players are served a 404.
 
 The fix belongs on the server: **cache headers must depend on the status.** `200` may be
 immutable for a year; `404` and `5xx` must be `no-store`. Until then the page defends itself —
