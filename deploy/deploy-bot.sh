@@ -156,7 +156,7 @@ if [ -d "$ROOT/bots/$BOT/widget" ]; then
   WIDGET_API=${ZEPLAO_WIDGET_API:-https://kuku.vn/api/bot}
   ZIP=$(mktemp -t widget-XXXXXX).zip
   ( cd "$ROOT/bots/$BOT/widget" && zip -qr "$ZIP" . )
-  WIDGET_JSON=$(curl -sS -X POST "$WIDGET_API/setWidget" \
+  WIDGET_JSON=$(curl -sS --connect-timeout 10 --max-time 180 -X POST "$WIDGET_API/setWidget" \
     -H "Authorization: Bearer $TOKEN" \
     -H 'Content-Type: application/zip' \
     --data-binary "@$ZIP")
@@ -172,7 +172,7 @@ if [ -d "$ROOT/bots/$BOT/widget" ]; then
       process.stdout.write(String(widget.version));
     });
   ' <<<"$WIDGET_JSON")
-  BOT_ID=$(curl -sS "$WIDGET_API/getMe" -H "Authorization: Bearer $TOKEN" \
+  BOT_ID=$(curl -sS --connect-timeout 10 --max-time 30 "$WIDGET_API/getMe" -H "Authorization: Bearer $TOKEN" \
     | node -e '
       const chunks = [];
       process.stdin.on("data", (chunk) => chunks.push(chunk));
@@ -198,7 +198,14 @@ if [ -d "$ROOT/bots/$BOT/widget" ]; then
         else
           url="$host/api/widgets/$BOT_ID/$WIDGET_VERSION/$file"
         fi
+        # `--max-time` chứ không phải để mặc.
+        #
+        # Một lần deploy đã kẹt mười hai phút ở đúng dòng này: một kết nối treo, curl không có
+        # hạn giờ nên ngồi đợi mãi, và cả bản deploy đứng im ở giữa — widget mới đã lên mà bot
+        # thì chưa restart, tức là đúng cái trạng thái lệch nhất có thể. Chậm thì thử lại được,
+        # treo thì không.
         code=$(curl -L -sS -o /dev/null -w '%{http_code}' \
+          --connect-timeout 10 --max-time 25 --retry 2 --retry-delay 2 \
           -H 'Cache-Control: no-cache' \
           -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0' \
           "$url")
