@@ -860,6 +860,9 @@ export async function run(token, { signal, api = API } = {}) {
   /// cùng một con ngồi xuống hai cái bàn.
   let housing = false;
 
+  /// Một lần vẽ lại sảnh đang được hẹn. Xem `pushLobbiesSoon`.
+  let lobbySoon = null;
+
   /**
    * Làm một việc ở bàn, **và đừng đợi cái bàn ấy chơi xong**.
    *
@@ -2258,7 +2261,9 @@ export async function run(token, { signal, api = API } = {}) {
     for (const screen of screens.values()) {
       if (screen.gameId === game.id) screen.gameId = null;
     }
-    await pushLobbies();
+    // Gộp: một cái bàn tan là chuyện của người khác, và lúc nhóm tay máy chạy thì mấy chục cái
+    // bàn tan mỗi phút.
+    pushLobbiesSoon();
   }
 
   /// Sits a machine in every empty seat.
@@ -3564,6 +3569,34 @@ export async function run(token, { signal, api = API } = {}) {
     await pushTo(screen, extra);
   }
 
+  /**
+   * Vẽ lại sảnh, **gộp lại**, tối đa một lần mỗi quãng.
+   *
+   * `pushLobbies` gửi một `pushState` cho **mỗi** màn hình đang ở sảnh, và mỗi lệnh ấy là một
+   * chuyến đi tới API. Chuyện đó xưa nay không đáng nói: sảnh chỉ đổi khi có người mở hay đóng
+   * một cái bàn, tức là mấy phút một lần.
+   *
+   * Nhóm tay máy làm nó đổi **liên tục** — mở bàn, ngồi xuống, bàn đầy rồi biến khỏi danh sách,
+   * đánh xong rồi bị quét đi — mấy chục lần mỗi phút. Nhân với số người đang ngồi ở sảnh, đó là
+   * một dòng request đều đặn gửi vào một cái API mà đo được là đang trả lời trong **hai tới năm
+   * giây**.
+   *
+   * Gộp lại thì cái danh sách vẫn đúng — nó chỉ đúng **muộn hơn một nhịp**, và một danh sách bàn
+   * trễ hai giây thì không ai đọc ra được là trễ. Cái người ta đọc ra được là một cái sảnh tự vẽ
+   * lại dưới tay mình.
+   *
+   * Dùng ở những chỗ sảnh đổi vì **người khác**; chỗ nào sảnh đổi vì chính người đang nhìn nó —
+   * họ vừa bấm một cái nút — thì vẫn vẽ thẳng, vì ở đó cái trễ là cái nút không phản hồi.
+   */
+  function pushLobbiesSoon() {
+    if (lobbySoon) return;
+    lobbySoon = setTimeout(() => {
+      lobbySoon = null;
+      pushLobbies().catch(() => {});
+    }, 2_000);
+    if (lobbySoon.unref) lobbySoon.unref();
+  }
+
   /// Everybody looking at this table — the people at it, and anybody watching.
   async function pushGame(game) {
     await Promise.all([...screens.values()]
@@ -3838,7 +3871,7 @@ export async function run(token, { signal, api = API } = {}) {
         const table = newGame(one, opening.size, opening.stake, opening.kind, null);
         console.log(`${one.displayName} mở bàn ${opening.kind} ${opening.size} ghế`
           + ` · ${gold(opening.stake)} · ${table.id}`);
-        await pushLobbies();
+        pushLobbiesSoon();
         break;
       }
     } catch (problem) {
