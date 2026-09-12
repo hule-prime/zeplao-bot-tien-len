@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync } from 'node:fs';
 
 const LEDGER = '/tmp/tienlen-flow-scores.json';
 process.env.TIENLEN_THINK_MS = '1';
@@ -49,6 +49,20 @@ process.env.TIENLEN_TX_BETTING_MS = '4000';
 process.env.TIENLEN_BOARD_THINK_MS = '1';
 process.env.TIENLEN_BOARD_TURN_MS = '2000';
 process.env.TIENLEN_SCORES = LEDGER;
+
+/**
+ * Nhóm tay máy **tắt** cho gần hết bộ này, và bật lại cho đúng mấy cái test về nó.
+ *
+ * Không phải để tránh né. Mỗi cái test dưới đây dựng một cái bàn rồi canh **đúng** những ai ngồi
+ * vào đó — và một nhóm hai mươi bốn con tự đi tìm bàn trống mà ngồi sẽ ngồi vào hết, làm mọi câu
+ * "bàn này có hai người" thành sai. Đó là hành vi đúng của nhóm, chỉ là không phải cái đang được
+ * canh ở đây.
+ *
+ * Bật được giữa chừng vì `regulars.mjs` đọc biến môi trường **lúc hỏi**, không phải lúc nạp.
+ */
+process.env.TIENLEN_HOUSE = '0';
+process.env.TIENLEN_HOUSE_MS = '60';
+process.env.TIENLEN_HOUSE_SPEED = '0.01';
 
 const {
   run, chooseMove, shapeOf, nameOf, STARTING_GOLD, DAILY_GOLD, BOT_STAKE, ADS_GOLD, dayIn,
@@ -452,8 +466,16 @@ async function redealt(app, who) {
   assert.fail('bàn chia tới trắng mãi, hai mươi ván liền');
 }
 
-async function playOut(app, who) {
-  for (let move = 0; move < 400; move++) {
+/**
+ * Đánh cho tới khi bàn xong.
+ *
+ * `tries` đưa vào được, vì ngân sách bốn trăm vòng là ngân sách của một cái bàn **toàn máy đồ
+ * đạc nghĩ một mili giây**. Một cái bàn có tay máy thì mỗi ghế nghĩ như người — ngắn lại cho vừa
+ * một cái test, nhưng vẫn là một quãng thật — nên bốn trăm vòng hết trước khi ván hết, và cái đỏ
+ * nó cho ra là "the table never finished", một câu nói về cái đồng hồ chứ không về cái bàn.
+ */
+async function playOut(app, who, tries = 400) {
+  for (let move = 0; move < tries; move++) {
     // Somebody who went back to the lobby is not waiting for anything, so "over" is not the
     // only way to be finished with a table.
     const stillAt = who.filter((id) => (app.mine(id) ?? {}).phase === 'playing');
@@ -2069,4 +2091,258 @@ test('a board hurried along by nobody still finishes', async () => {
       'the clock to move a piece');
     assert.ok(app.mine('u1').board, 'and the board is still a board');
   });
+});
+
+
+// ---- nhóm tay máy, cả đường dây ---------------------------------------------------------------
+//
+// Máy có ví, ngồi vào bàn chế độ người, cược thật. Cả mục này chạy con bot **thật** với nhóm bật
+// lên, vì không một câu nào dưới đây trả lời được từ một hàm thuần: chúng là về việc ai ngồi
+// xuống được, ai được trả tiền, ai được mở phiên, và ai có mặt trên bảng vàng.
+
+/// Bật nhóm cho một cái test, rồi trả lại như cũ dù test đỏ hay xanh.
+async function withHouse(many, run, { still = false } = {}) {
+  const keys = ['TIENLEN_HOUSE', 'TIENLEN_HOUSE_COUNT', 'TIENLEN_HOUSE_AWAKE',
+    'TIENLEN_HOUSE_TABLES', 'TIENLEN_HOUSE_WAITING'];
+  const was = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+
+  process.env.TIENLEN_HOUSE = '1';
+  process.env.TIENLEN_HOUSE_COUNT = String(many);
+  process.env.TIENLEN_HOUSE_AWAKE = String(many);
+  // **Đóng băng tại chỗ**: nhóm có dòng trong sổ, có ví, nhưng không mở bàn nào cả. Cho những
+  // câu hỏi không nói gì về việc chơi — một cái test đo hai lần cái ví của nhóm mà ở giữa có một
+  // ván vừa tính tiền là một cái test đỏ ngẫu nhiên, và một cái đỏ ngẫu nhiên còn tệ hơn không
+  // có test.
+  if (still) {
+    process.env.TIENLEN_HOUSE_TABLES = '0';
+    process.env.TIENLEN_HOUSE_WAITING = '0';
+  }
+
+  try {
+    return await run();
+  } finally {
+    process.env.TIENLEN_HOUSE = '0';
+    for (const key of keys.slice(1)) {
+      if (was[key] === undefined) delete process.env[key];
+      else process.env[key] = was[key];
+    }
+  }
+}
+
+/// Đợi cho tới khi nhóm đã có dòng trong **sổ trên đĩa**.
+///
+/// `saveScores` hoãn hai giây trước khi ghi — cố ý, để mười cái bàn xong cùng lúc ghi một lần —
+/// nên một cái test đọc file ngay sau khi bot khởi động sẽ đọc phải cuốn sổ trước lúc gieo.
+const seeded = (app) =>
+  app.until(() => Object.keys(ledgerRows()).some(isHouseId), 'nhóm được gieo vào sổ');
+
+/// Sổ vàng, đọc thẳng từ đĩa. Bảng vàng chỉ trả về hai mươi hàng đầu, mà cái phải cộng lại là
+/// **cả sổ** — một phép tổng trên hai mươi hàng đầu là một phép tổng không bắt được gì.
+function ledgerRows() {
+  return JSON.parse(readFileSync(LEDGER, 'utf8')).people;
+}
+
+/// Tổng vàng **cả sổ** — người thật và tay máy cộng lại.
+///
+/// Đọc từ đĩa chứ không từ bảng vàng: bảng chỉ trả hai mươi hàng đầu và lọc bỏ ai chưa đánh ván
+/// nào, nên một phép tổng trên nó là một phép tổng không bắt được gì. Con số này chỉ được đổi
+/// bởi ba cái vòi đã biết — vốn đầu, quà ngày, quảng cáo — và bởi hai cái bát. Một ván bài, dù
+/// có tay máy ngồi hay không, **không được đổi nó một đồng nào**.
+function totalGold() {
+  return Object.values(ledgerRows()).reduce((sum, row) => sum + row.gold, 0);
+}
+
+const isHouseId = (id) => String(id).startsWith('house:');
+
+test('tay máy ngồi vào bàn người thật mở, và ván ấy tính tiền như một bàn người', async () => {
+  // Đây là cả điểm của nhóm: một người mở bàn bốn ghế ở một nhóm chat vắng vẫn có người ngồi
+  // xuống cùng. Trước nhóm này thì cái bàn ấy đứng đó tới lúc bị quét.
+  ledger();
+  await withHouse(6, () => withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+
+    // Mốc lấy **sau khi nhóm đã được gieo xuống sổ**, không phải trước. `saveScores` hoãn hai
+    // giây — cố ý, để mười cái bàn xong cùng lúc ghi một lần — nên một phép tổng đọc sớm hơn thế
+    // là một phép tổng trên cuốn sổ trước lúc gieo, và cái nó bắt được là chính món tiền gieo
+    // chứ không phải một đồng nào bị in ra.
+    await seeded(app);
+    const before = totalGold();
+
+    app.does('u1', { open: 4, stake: 1000 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'lobby', 'a table for four');
+
+    // Nhóm tự tìm thấy nó và ngồi vào. Không ai bảo chúng cả — chúng đọc đúng cái danh sách bàn
+    // mở mà một người nhìn thấy trên màn hình của họ.
+    await app.until(() => (app.mine('u1').seats ?? []).length === 4, 'nhóm lấp đầy bàn');
+
+    const seats = app.mine('u1').seats;
+    assert.equal(seats.filter((one) => one.bot).length, 0,
+      'không một cái ghế nào là máy đồ đạc — đây là bàn chế độ người');
+    assert.equal(seats.filter((one) => isHouseId(one.id)).length, 3, 'ba tay máy');
+
+    await app.until(() => (app.mine('u1') ?? {}).phase !== 'lobby', 'bàn tự chia');
+    await playOut(app, ['u1'], 4_000);
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'over', 'ván xong');
+
+    // **Bàn bốn người, không phải bàn một người đấu nhà cái.** Đây là chỗ nghĩa của một cái bàn
+    // thật sự đổi khi tay máy ngồi vào: nếu chúng là `bot: true` thì `settlement` sẽ coi đây là
+    // bàn một người và trả ở mức cố định `BOT_STAKE`, bỏ qua mức cược của phòng.
+    const over = app.mine('u1');
+    assert.equal(over.paid.length, 4, 'cả bốn người đều được trả, không ai là đồ đạc');
+    assert.equal(over.stake, 1000);
+
+    // Và tiền chỉ **chạy quanh bàn**, không sinh ra từ đâu.
+    const moved = over.paid.reduce((sum, one) => sum + one.change, 0);
+    assert.equal(moved, 0, `cái bàn làm ra ${moved} vàng từ không khí`);
+
+    /**
+     * Rồi cả cuốn sổ, sau khi ván **đã được ghi xuống**.
+     *
+     * Hai chuyện phải đợi, và cả hai đều là thiết kế chứ không phải chậm trễ:
+     *
+     * - **Người về nhất được trả ngay lúc về nhất**, còn người thua trả khi họ về. Nên giữa
+     *   chừng một ván, cuốn sổ *đúng là* lệch — và đo đúng lúc ấy thì đọc ra thành "vàng sinh ra
+     *   từ không khí". Cột `games` chỉ nhích lên khi cả ván đã tính xong, nên nó là cái mốc nói
+     *   "ván này đã đóng sổ".
+     * - `saveScores` hoãn hai giây, nên cái file còn đi sau cái ví trong bộ nhớ thêm một quãng.
+     *
+     * Và nhóm bị **đóng băng** ở cái test này (`still`) — không mở bàn nào khác — vì một ván
+     * khác đang chạy ở đâu đó cũng lệch y như thế, và lúc ấy phép tổng trên cả cuốn sổ không trả
+     * lời được câu nào.
+     */
+    await app.until(() => (ledgerRows().u1?.games ?? 0) > 0, 'ván được ghi xuống sổ');
+    assert.equal(totalGold(), before,
+      'cả cuốn sổ không đổi một đồng nào ngoài số đã chạy quanh bàn');
+  }, { c1: ['u1'] }), { still: true });
+});
+
+test('tay máy không bao giờ được mở một phiên, và app không hề biết chúng tồn tại', async () => {
+  // Chúng không có widget, không có màn hình, không có phiên. Mọi vòng đẩy trạng thái duyệt
+  // `screens` nên chúng vốn đã bị bỏ qua — cái test này canh chiều ngược lại: không có chỗ nào
+  // **xin** app mở phiên cho một cái id mà app chưa từng nghe tới.
+  ledger();
+  await withHouse(6, () => withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { open: 4, stake: 1000 });
+    await app.until(() => (app.mine('u1').seats ?? []).length === 4, 'nhóm lấp đầy bàn');
+
+    const asked = [...app.sessions.values()].flatMap((one) => one.userIds ?? []);
+    assert.deepEqual(asked.filter(isHouseId), [], 'đã xin app mở phiên cho một tay máy');
+    assert.deepEqual(app.pushes.filter((one) => isHouseId(one.to)), [],
+      'đã đẩy trạng thái riêng cho một tay máy');
+  }, { c1: ['u1'] }));
+});
+
+test('tay máy không lấy quà ngày và không xem quảng cáo — nhóm không có vòi nào riêng', async () => {
+  // Đây là chỗ dễ in tiền nhất trong cả việc này, và nó im lặng: hai mươi bốn con nhân ba mươi
+  // nghìn là bảy trăm hai mươi nghìn vàng **mới** mỗi ngày, chảy thẳng vào tay ai đánh thắng
+  // chúng. Về cấu trúc thì đã không xảy ra được — hai đường ấy chỉ với tới qua `onWidgetAction`,
+  // mà hàm ấy cần một màn hình — nhưng "không với tới được" là thứ một lần refactor làm mất.
+  ledger();
+  await withHouse(6, () => withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { open: 4, stake: 1000 });
+    await app.until(() => (app.mine('u1').seats ?? []).length === 4, 'nhóm lấp đầy bàn');
+    await app.until(() => (app.mine('u1') ?? {}).phase !== 'lobby', 'bàn tự chia');
+
+    await seeded(app);
+    for (const [id, row] of Object.entries(ledgerRows())) {
+      if (!isHouseId(id)) continue;
+      assert.equal(row.claimed, '', `${row.name} đã lấy quà ngày`);
+      assert.equal(row.ads, 0, `${row.name} đã xem quảng cáo`);
+      assert.equal(row.gave, 0, `${row.name} đã phát công đức`);
+    }
+  }, { c1: ['u1'] }), { still: true });
+});
+
+test('công đức chia cho người, không chia cho máy', async () => {
+  // `giveAll` chia cho **cả sổ trừ chính mình**, nên hai mươi bốn dòng tay máy là hai mươi bốn
+  // suất ăn vào mỗi món quà của mỗi người thật. Không phải chuyện trung thực — chuyện máy vào
+  // chơi đã nói ra rồi — mà là chuyện kinh tế: công đức là đường duy nhất vàng đi từ ví người
+  // này sang ví người khác mà không qua một ván nào, và để một phần chảy vào pot của nhà là vàng
+  // người chơi rò sang nhà, không được lại gì.
+  //
+  // Sàn công đức là một trăm nghìn, mà vốn đầu cộng quà ngày mới được tám mươi — nên người phát
+  // phải được dựng sẵn một cái ví đủ, không thì thứ cái test này bắt được chỉ là lời từ chối.
+  ledger({ u1: { gold: 500_000 } });
+  await withHouse(6, () => withBot(async (app) => {
+    for (const [id, room] of [['u1', 'c1'], ['u2', 'c2']]) {
+      app.asks(id, room);
+      await app.until(() => app.mine(id), `a screen for ${id}`);
+      await claim(app, id);
+    }
+    await seeded(app);
+
+    const houseBefore = Object.entries(ledgerRows())
+      .filter(([id]) => isHouseId(id))
+      .reduce((sum, [, row]) => sum + row.gold, 0);
+    assert.ok(houseBefore > 0, 'nhóm phải đã được gieo trước khi hỏi câu này');
+
+    const had = app.mine('u2').gold;
+    app.does('u1', { give: 100_000 });
+    await app.until(() => app.mine('u2').gold > had, 'u2 nhận được phần của mình');
+
+    // Đợi món quà **xuống tới đĩa** rồi mới đọc. `saveScores` hoãn hai giây, nên đọc ngay là đọc
+    // cuốn sổ trước lúc phát — và cái đỏ nó cho ra nói về cái đồng hồ, không về món quà.
+    await app.until(() => ledgerRows().u1?.gave === 100_000, 'món quà xuống tới sổ');
+
+    const rows = ledgerRows();
+    const houseAfter = Object.entries(rows)
+      .filter(([id]) => isHouseId(id))
+      .reduce((sum, [, row]) => sum + row.gold, 0);
+    assert.equal(houseAfter, houseBefore, 'một phần món quà đã chảy vào pot của nhà');
+  }, { c1: ['u1'], c2: ['u2'] }), { still: true });
+});
+
+test('bảng vàng nói ra hàng nào là máy', async () => {
+  // Bảng vàng là thứ duy nhất trong cả cái sòng này người ta tin. Một cái tên máy đứng trên đó mà
+  // không nói nó là máy thì cái bảng ấy nói dối, dù bên ngoài có nói thật tới đâu.
+  ledger();
+  await withHouse(6, () => withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { open: 4, stake: 1000 });
+    await app.until(() => (app.mine('u1').seats ?? []).length === 4, 'nhóm lấp đầy bàn');
+    await app.until(() => (app.mine('u1') ?? {}).phase !== 'lobby', 'bàn tự chia');
+    await playOut(app, ['u1'], 4_000);
+
+    app.does('u1', { leave: true });
+    await app.until(() => app.mine('u1').phase === 'choosing', 'về sảnh');
+    // Bảng vàng đi kèm mọi lần đẩy màn hình sảnh, không phải sau một cái nút — nên chỉ cần về
+    // tới sảnh là nó có ở đó.
+    await app.until(() => Array.isArray(app.mine('u1').table)
+      && app.mine('u1').table.length > 0, 'bảng vàng');
+
+    const rows = app.mine('u1').table;
+    assert.ok(rows.some((one) => isHouseId(one.id)), 'nhóm đã đánh mà không có mặt trên bảng');
+    for (const one of rows) {
+      assert.equal(one.house, isHouseId(one.id),
+        `hàng "${one.name}" gắn nhãn sai: house=${one.house}`);
+    }
+  }, { c1: ['u1'] }));
+});
+
+test('tắt nhóm bằng một biến là tắt sạch — không dòng nào vào sổ, không ai ngồi xuống', async () => {
+  // Một thứ chạy tự động, đụng vào ví người thật, và chỉ tắt được bằng một lần deploy là một thứ
+  // không tắt được vào lúc ba giờ sáng — mà ba giờ sáng là lúc người ta cần tắt nó.
+  ledger();
+  await withBot(async (app) => {
+    app.asks('u1', 'c1');
+    await app.until(() => app.mine('u1'), 'a screen');
+    await claim(app, 'u1');
+    app.does('u1', { open: 4, stake: 1000 });
+    await app.until(() => (app.mine('u1') ?? {}).phase === 'lobby', 'a table');
+
+    await nap(600);
+    assert.equal(app.mine('u1').seats.length, 1, 'có con nào ngồi xuống trong lúc nhóm đang tắt');
+    assert.deepEqual(Object.keys(ledgerRows()).filter(isHouseId), [],
+      'có dòng tay máy trong sổ trong lúc nhóm đang tắt');
+  }, { c1: ['u1'] });
 });

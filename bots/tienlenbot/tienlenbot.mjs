@@ -72,6 +72,7 @@ export * from './rules/taixiu.mjs';
 export * as chess from './rules/chess.mjs';
 export * as xiangqi from './rules/xiangqi.mjs';
 export { BOARD_TURN_MS, BOARD_THINK_MS } from './rules/search.mjs';
+export * as house from './regulars.mjs';
 export * from './economy.mjs';
 
 import {
@@ -100,6 +101,7 @@ import {
 import * as chess from './rules/chess.mjs';
 import * as xiangqi from './rules/xiangqi.mjs';
 import { BOARD_TURN_MS, BOARD_THINK_MS } from './rules/search.mjs';
+import * as house from './regulars.mjs';
 import {
   STARTING_GOLD, DAILY_GOLD, BOT_STAKE, STAKES, MIN_STAKE, MAX_STAKE, asStake,
   ADS_MS, ADS_GOLD, ADS_PER_DAY, BROKE, payouts, dayIn, gold, settlement,
@@ -832,6 +834,53 @@ export async function run(token, { signal, api = API } = {}) {
   const screens = new Map();          // sessionId -> screen
   const openBy = new Map();           // userId -> sessionId
 
+  /// Con tay máy nào đang chờ bấm "ván nữa", và tới lúc nào thì bấm.
+  ///
+  /// **Phải bấm**, không phải tô vẽ: `rematch` đếm `!one.bot && !one.away`, nên một tay máy
+  /// không bấm là một cái bàn treo tới lúc bị quét — và người thật thì ngồi nhìn màn hình "đang
+  /// đợi" mà không đợi ai cả.
+  ///
+  /// Trên này chứ không dưới vòng lặp, cùng lý do với mọi thứ khác trên này: một `const` dưới đó
+  /// ở trong vùng chết suốt đời tiến trình. Có test canh, và nó đã bắt được hai lần trong một
+  /// buổi chiều.
+  const waiting = new Map();          // userId -> khi nào thì bấm
+
+  /// Con nào đã nhắm một cái bàn, và tới lúc nào thì ngồi xuống.
+  ///
+  /// **Hẹn giờ, không phải đợi.** Bản đầu `await` thẳng cái quãng ấy ngay trong vòng điều phối —
+  /// và vì quãng ấy là năm, mười giây (đúng như nó phải thế: một cái bàn vừa lên danh sách đã
+  /// đầy ngay là một cái bàn không ai *tìm thấy* nó cả), nên **một con đang cân nhắc khoá cả
+  /// nhóm lại**. Đo được: hai mươi lăm giây chỉ chạy được hai nhịp, và cái bàn bốn ghế không bao
+  /// giờ đủ người.
+  ///
+  /// Cùng một hình dạng với `waiting` ngay trên: ghi xuống ý định, rồi để một nhịp sau thi hành.
+  const sitting = new Map();          // userId -> { gameId, at }
+
+  /// Nhịp của nhóm đang chạy dở. Nó `await` ở mấy chỗ, và hai nhịp chồng lên nhau là hai lần
+  /// cùng một con ngồi xuống hai cái bàn.
+  let housing = false;
+
+  /**
+   * Làm một việc ở bàn, **và đừng đợi cái bàn ấy chơi xong**.
+   *
+   * `sitDown` gọi `startGame` khi ghế cuối được lấp, và `startGame` kết thúc bằng
+   * `await maybeBotTurn(game)` — cái vòng đi hộ mọi ghế do nhà cầm, liên tiếp, cho tới khi tới
+   * lượt một người thật. Ở một cái bàn **toàn tay máy** thì không bao giờ tới lượt ai cả: nó
+   * chơi trọn ván rồi mới trả về.
+   *
+   * Chuyện đó xưa nay vô hại, vì người gọi luôn là một người vừa bấm nút — và ở bàn của họ, lượt
+   * quay về tay họ sau một hai nước. Với nhóm tay máy thì nó thành ra vòng điều phối **đứng đợi
+   * hết một ván bài**: đo được bốn nhịp trong ba mươi lăm giây, cái bàn thứ hai không bao giờ
+   * được mở, và không con nào khác được ngồi xuống.
+   *
+   * Nên chỗ này thả tay ra. Không mất an toàn: mọi phép kiểm trong `sitDown` — đang ngồi bàn
+   * khác, không đủ tiền, bàn đầy — đều chạy thẳng một mạch trước cái `await` đầu tiên, nên hai
+   * con cùng ngồi trong một khung hình vẫn không thể thành một cái bàn năm ghế.
+   */
+  function letGo(work) {
+    Promise.resolve(work).catch((problem) => console.error(`nhóm tay máy: ${String(problem)}`));
+  }
+
   async function latestWidgetVersion() {
     try {
       const widget = await call('getWidget');
@@ -908,13 +957,26 @@ export async function run(token, { signal, api = API } = {}) {
     writeScores();
   }
 
-  /// Somebody's row, made the first time they are seen.
+  /**
+   * Somebody's row, made the first time they are seen.
+   *
+   * **Một dòng tay máy không bao giờ được đi qua đây để ra đời.** `rowFor` phát vốn ban đầu cho
+   * mọi id lạ nó gặp, nên hai mươi bốn tay máy gọi nó một lần là **7,2 triệu vàng ra đời** mà
+   * không ai bấm nút nào — một cái vòi mở ra ở chỗ không ai nghĩ là có vòi. Dòng của chúng được
+   * gieo bằng tay ở `seedHouse()`, trước khi bất cứ chỗ nào chạm tới `rowFor`, và cái `started`
+   * đã bật sẵn ở đó làm nhánh phát vốn bên dưới không bao giờ chạy cho chúng.
+   *
+   * Ở đây chỉ giữ đúng một câu: nếu vì lý do gì mà một id `house:` tới được đây mà chưa có dòng,
+   * thì nó ra đời với **ví rỗng** chứ không phải với vốn ban đầu. Thà một tay máy không ngồi
+   * xuống được còn hơn một cái vòi im lặng.
+   */
   function rowFor(userId, displayName) {
-    const row = scores.people[userId]
-      ?? {
-        name: '', gold: STARTING_GOLD, started: true, games: 0, first: 0, last: 0,
-        claimed: '', adsDay: '', ads: 0, gave: 0,
-      };
+    const fresh = house.isHouse(userId)
+      ? { name: '', gold: 0, started: true, games: 0, first: 0, last: 0,
+        claimed: '', adsDay: '', ads: 0, gave: 0, house: true }
+      : { name: '', gold: STARTING_GOLD, started: true, games: 0, first: 0, last: 0,
+        claimed: '', adsDay: '', ads: 0, gave: 0 };
+    const row = scores.people[userId] ?? fresh;
     if (displayName) row.name = displayName;
 
     // Rows written before there was anything to give away. Công đức is kept as **the gold
@@ -1083,7 +1145,12 @@ export async function run(token, { signal, api = API } = {}) {
       .filter(([, row]) => row.games > 0)
       // Gold, and what orders it when two people have the same. `games` decides who is on the
       // board at all, above, and is not sent — nothing draws it.
-      .map(([id, row]) => ({ id, name: row.name, gold: row.gold, first: row.first }))
+      // `house` đi kèm mỗi hàng, và trang vẽ một cái dấu cạnh tên. Đã truyền thông là máy sẽ
+      // vào chơi, nên không có gì phải giấu — nhưng một cái tên máy đứng trên bảng vàng mà
+      // **không** nói nó là máy thì cái bảng ấy nói dối, và bảng vàng là thứ duy nhất trong cả
+      // cái sòng này người ta tin.
+      .map(([id, row]) => ({ id, name: row.name, gold: row.gold, first: row.first,
+        house: !!row.house }))
       .sort((a, b) => b.gold - a.gold || b.first - a.first || a.name.localeCompare(b.name))
       .slice(0, TABLE_SIZE);
   }
@@ -1115,8 +1182,12 @@ export async function run(token, { signal, api = API } = {}) {
     // Cả sổ trừ chính mình. Ai từng mở widget một lần là có một dòng trong sổ, kể cả người chưa
     // đánh ván nào — bảng vàng lọc theo số ván đã chơi vì một bảng xếp hạng người chưa chơi là
     // vô nghĩa, còn một món quà thì không kén người nhận như thế.
+    // Cả sổ trừ chính mình **và trừ nhóm tay máy**. Không phải vì trung thực — chuyện máy vào
+    // chơi đã nói ra rồi — mà vì kinh tế: công đức là đường duy nhất vàng đi từ ví người này
+    // sang ví người khác mà không qua một ván nào, và để một phần của nó chảy vào pot của nhà
+    // là vàng người chơi rò sang nhà, không được lại gì. Công đức là để cho người.
     const others = Object.entries(scores.people)
-      .filter(([id]) => id !== who.userId)
+      .filter(([id, one]) => id !== who.userId && !one.house)
       .map(([id, one]) => ({ userId: id, gold: one.gold }));
     if (!others.length) return { refused: SAY.almsAlone };
 
@@ -1148,7 +1219,8 @@ export async function run(token, { signal, api = API } = {}) {
   function merit() {
     return Object.entries(scores.people)
       .filter(([, row]) => row.gave > 0)
-      .map(([id, row]) => ({ id, name: row.name, gave: row.gave, merit: meritOf(row.gave) }))
+      .map(([id, row]) => ({ id, name: row.name, gave: row.gave, merit: meritOf(row.gave),
+        house: !!row.house }))
       .sort((a, b) => b.gave - a.gave || a.name.localeCompare(b.name))
       .slice(0, TABLE_SIZE);
   }
@@ -1218,6 +1290,22 @@ export async function run(token, { signal, api = API } = {}) {
     if (owed.length) console.log(`gave ${owed.length} earlier player(s) their starting purse`);
   }
 
+  // Nhóm tay máy: gieo dòng sổ cho con nào chưa có, rồi nói ra cái pot đang là bao nhiêu.
+  //
+  // Một dòng log mỗi lần khởi động, và nó là dòng người vận hành đọc để biết nhà đang lỗ hay
+  // lãi. Pot teo nghĩa là người chơi đang thắng — một tín hiệu, không phải một cái lỗi — và nó
+  // **không tự nạp lại**, vì một cái pot tự nạp là một cái vòi đội mũ khác.
+  if (house.on() && house.count()) {
+    seedHouse();
+    capHouse();
+    const pot = potOf();
+    console.log(`nhóm tay máy: ${house.count()} con · pot ${gold(pot)}`
+      + ` · gieo ${gold(house.SEED_EACH * house.count())}`
+      + ` · ${pot >= house.FLOOR ? 'đang mở' : 'DƯỚI SÀN, cả nhóm ngồi ra'}`);
+  } else {
+    console.log('nhóm tay máy: tắt');
+  }
+
   const already = await call('getConversations').catch(() => []);
   if (Array.isArray(already)) {
     let fresh = 0;
@@ -1236,6 +1324,16 @@ export async function run(token, { signal, api = API } = {}) {
     sweep().catch((problem) => console.error(String(problem)));
   }, 5_000);
 
+  // Và nhịp của nhóm tay máy, trên đồng hồ riêng.
+  //
+  // Riêng vì hai việc khác nhau: `sweep` dọn bàn chết, chỗ này lo người ngồi xuống. Nhập lại thì
+  // cái nào chậm sẽ kéo cái kia — và cái chậm ở đây là cái có `await` trong một vòng lặp.
+  //
+  // Cũng armed **trên** vòng lặp vô tận, cùng lý do với `beat`: không có gì dưới đó được chạy.
+  const housed = setInterval(() => {
+    houseBeat().catch((problem) => console.error(String(problem)));
+  }, house.BEAT_MS);
+
   // Both above the loop, because there is nowhere below it to put them. The clock has to stop
   // when the bot does or the process will not exit, and a `clearInterval` written after the
   // loop is a statement after the loop.
@@ -1245,7 +1343,11 @@ export async function run(token, { signal, api = API } = {}) {
   // hand somebody won and how far through the updates this run got — and losing the second of
   // those is a deploy that replays an hour of updates at everybody.
   if (signal) {
-    signal.addEventListener('abort', () => { clearInterval(beat); flushScores(); }, { once: true });
+    signal.addEventListener('abort', () => {
+      clearInterval(beat);
+      clearInterval(housed);
+      flushScores();
+    }, { once: true });
   }
 
   /**
@@ -1523,10 +1625,19 @@ export async function run(token, { signal, api = API } = {}) {
       userId: who.userId,
       displayName: who.displayName,
       bot: false,
-      // Nhà có đi nước hộ ghế này không. Ghi xuống **ghế** chứ không tra lại sổ mỗi lượt: ai đi
-      // nước cho một cái ghế là một sự thật về cái bàn, và một sự thật về cái bàn thì nằm ở cái
-      // bàn. Hôm nay không có gì đặt nó, nên mọi ghế đều `false` và không có gì đổi.
+      // Nhà có đi nước hộ ghế này không, **và đi thế nào**.
+      //
+      // Ghi xuống **ghế** chứ không tra lại sổ mỗi lượt: ai đi nước cho một cái ghế là một sự
+      // thật về cái bàn, và một sự thật về cái bàn thì nằm ở cái bàn.
+      //
+      // Ba trường kia đi kèm, và chúng **bắt buộc**. Bản đầu chỉ chép `house` sang, nên mọi ghế
+      // tay máy ngồi xuống đều mất `level`, `pace`, `nerve` — thang bậc im lặng thành vô nghĩa
+      // (`TIERS[undefined]` rơi về mức tốt nhất cho tất cả), và `thinkFor` nhân với một `pace`
+      // không tồn tại nên trả về `NaN`. Thứ duy nhất kêu lên là một dòng cảnh báo của Node về
+      // `setTimeout` nhận `NaN`; không một cái test nào đỏ, và nhìn từ ngoài thì cái bàn vẫn
+      // chạy bình thường.
       house: !!who.house,
+      ...(who.house ? { level: who.level, pace: who.pace, nerve: who.nerve } : {}),
     });
     game.touched = Date.now();
     if (screen) screen.gameId = game.id;
@@ -1709,7 +1820,7 @@ export async function run(token, { signal, api = API } = {}) {
           return;
         }
 
-        const table = newGame(screen, 1, CHIPS[0], 'baucua');
+        const table = newGame(whoOf(screen), 1, CHIPS[0], 'baucua', screen.conversationId);
         table.solo = true;
         screen.gameId = table.id;
         openBets(table);
@@ -1746,7 +1857,7 @@ export async function run(token, { signal, api = API } = {}) {
           if (goldOf(who.userId) < BOT_STAKE) {
             return pushTo(screen, { says: SAY.tooPoor(BOT_STAKE) });
           }
-          const table = newGame(screen, 2, BOT_STAKE, kind);
+          const table = newGame(whoOf(screen), 2, BOT_STAKE, kind, screen.conversationId);
           table.solo = true;
           screen.gameId = table.id;
           fillMachines(table);
@@ -1758,7 +1869,7 @@ export async function run(token, { signal, api = API } = {}) {
         const stake = asStake(action.stake);
         if (goldOf(who.userId) < stake) return pushTo(screen, { says: SAY.tooPoor(stake) });
 
-        const table = newGame(screen, 2, stake, kind);
+        const table = newGame(whoOf(screen), 2, stake, kind, screen.conversationId);
         table.state = 'lobby';
         screen.gameId = table.id;
 
@@ -1786,7 +1897,7 @@ export async function run(token, { signal, api = API } = {}) {
       if (alone !== undefined) {
         if (goldOf(who.userId) < BOT_STAKE) return pushTo(screen, { says: SAY.tooPoor(BOT_STAKE) });
 
-        const table = newGame(screen, asked, BOT_STAKE, cards);
+        const table = newGame(whoOf(screen), asked, BOT_STAKE, cards, screen.conversationId);
         table.solo = true;
         screen.gameId = table.id;
         fillMachines(table);
@@ -1798,7 +1909,7 @@ export async function run(token, { signal, api = API } = {}) {
       const stake = asStake(action.stake);
       if (goldOf(who.userId) < stake) return pushTo(screen, { says: SAY.tooPoor(stake) });
 
-      const table = newGame(screen, asked, stake, cards);
+      const table = newGame(whoOf(screen), asked, stake, cards, screen.conversationId);
       table.state = 'lobby';
       screen.gameId = table.id;
 
@@ -1982,8 +2093,20 @@ export async function run(token, { signal, api = API } = {}) {
     }
   }
 
-  /// A table, before anybody is dealt anything.
-  function newGame(screen, size, stake, kind = 'tienlen') {
+  /**
+   * A table, before anybody is dealt anything.
+   *
+   * Nhận **người mở**, không nhận màn hình, cùng lý lẽ với ba cửa vào bàn: một tay máy mở bàn thì
+   * không có màn hình nào cả.
+   *
+   * Và `conversationId` được **truyền vào** chứ không moi ra từ màn hình, vì một cái bàn tay máy
+   * mở là một cái bàn **không có phòng**. Một cái bàn có một dòng mời trong phòng nó được mở ra;
+   * tay máy thì không ở trong phòng nào, nên nó không có chỗ để đăng cái dòng ấy. Bàn ấy chỉ vào
+   * được **từ danh sách thế giới** — `openTables()` không đọc `conversationId`, `endGame` chịu
+   * được `invitationId` rỗng — và đó là một cái giá chấp nhận được để cái màn hình đầu tiên của
+   * người mới không còn rỗng.
+   */
+  function newGame(who, size, stake, kind = 'tienlen', conversationId = null) {
     const game = {
       id: `g${++named}`,
       // Which game is being played at it. Everything about a table that is not the rules — who
@@ -1992,13 +2115,20 @@ export async function run(token, { signal, api = API } = {}) {
       kind,
       // Where it was opened, which is where its one line in a room lives. The people at it can
       // be anywhere.
-      conversationId: screen.conversationId,
+      conversationId,
       state: 'lobby',
-      host: { userId: screen.userId, displayName: screen.displayName },
+      host: { userId: who.userId, displayName: who.displayName },
       size,
       stake,
       solo: false,
-      seats: [{ userId: screen.userId, displayName: screen.displayName, bot: false }],
+      seats: [{
+        userId: who.userId,
+        displayName: who.displayName,
+        bot: false,
+        house: !!who.house,
+        // Y như `sitDown`: mất ba trường này là mất cả thang bậc, trong im lặng.
+        ...(who.house ? { level: who.level, pace: who.pace, nerve: who.nerve } : {}),
+      }],
       hands: null,
       turn: null,
       pile: null,
@@ -2291,6 +2421,55 @@ export async function run(token, { signal, api = API } = {}) {
     game.finished = [];
   }
 
+  /**
+   * Nghĩ, rồi mới đi.
+   *
+   * **Máy đồ đạc nghĩ đúng 2.100 mili giây, mọi lần.** Ở bàn đấu máy thì không sao — ai cũng biết
+   * mình đang đánh với máy. Ở bàn chế độ người thì một cái ghế trả lời đều tăm tắp như nhịp
+   * metronome là cái ghế đầu tiên người ta nhận ra.
+   *
+   * Nên tay máy nghĩ theo `thinkFor`: lệch phải, lâu hơn khi nước khó, và một lần trong hai mươi
+   * thì đi đâu mất tới hai chục giây — vì bàn thật nào cũng có người lơ đãng, và một cái ghế
+   * **chưa bao giờ** chạm tới cái đồng hồ ba mươi giây là một cái ghế không có ai ngồi.
+   *
+   * `thinkUntil` xuống ngay đây, và đó không phải trang trí: `sweep` đang giật lại lượt của bất
+   * cứ ghế nào do nhà đi mà ngồi im quá `THINK_MS * 3` — sáu giây. Một con đang nghĩ mười tám
+   * giây mà không ai nói cho `sweep` biết là một con bị cướp nước ngay giữa lúc nghĩ, ba lần một
+   * lượt.
+   */
+  async function think(game, seat, what) {
+    const one = game.seats[seat];
+    if (!one?.house) { await wait(THINK_MS); return; }
+
+    // Lưới an toàn, và nó ở đây vì cái lỗi trên đã đi qua đúng chỗ này mà không ai thấy: một
+    // `setTimeout(NaN)` chạy ngay lập tức, nên cái bàn vẫn chạy — chỉ là nó thôi đánh giống
+    // người, và không có gì đỏ lên cả.
+    const ms = house.thinkFor(one, what);
+    if (!Number.isFinite(ms)) {
+      console.error(`nhịp nghĩ hỏng ở ghế ${one.displayName} (${one.level ?? 'không mức'})`);
+      await wait(THINK_MS);
+      return;
+    }
+    game.thinkUntil = Date.now() + ms;
+    await wait(ms);
+    game.thinkUntil = 0;
+  }
+
+  /// Con này lấy nước tốt thứ mấy. Máy đồ đạc thì luôn là nước tốt nhất — nó vẫn là cái máy hôm
+  /// qua, và chặng này không đổi một ván đấu máy nào.
+  ///
+  /// Khai báo hàm, không phải `const`. Chỗ này nằm **dưới** cái vòng lặp không bao giờ kết thúc,
+  /// và một `const` dưới đó ở trong vùng chết suốt đời tiến trình. Có một cái test canh đúng câu
+  /// ấy và nó vừa bắt được tôi.
+  function slackOf(one) {
+    return one?.house ? (house.TIERS[one.level]?.slack ?? 0) : 0;
+  }
+
+  /// Và nhìn xa mấy nước, ở hai bàn cờ.
+  function depthOf(one) {
+    return one?.house ? (house.TIERS[one.level]?.depth ?? 3) : 3;
+  }
+
   /// Ghế nào đang tới lượt. Không giữ riêng — nó **là** lượt của thế cờ, và một bản sao thứ hai
   /// của cùng một sự thật là một bản sao có ngày lệch.
   function seatToPlay(game) {
@@ -2428,10 +2607,14 @@ export async function run(token, { signal, api = API } = {}) {
         const seat = seatToPlay(game);
         if (seat === null || !driven(game.seats[seat])) return;
 
-        await wait(BOARD_THINK_MS);
+        if (game.seats[seat]?.house) {
+          await think(game, seat, { choices: 8, cards: 8 });
+        } else {
+          await wait(BOARD_THINK_MS);
+        }
         if (game.state !== 'playing' || seatToPlay(game) !== seat) return;
 
-        const move = BOARDS[game.kind].choose(game.pos);
+        const move = BOARDS[game.kind].choose(game.pos, depthOf(game.seats[seat]));
         if (!move) return;
         applyBoardMove(game, seat, move);
         await pushGame(game);
@@ -2785,7 +2968,11 @@ export async function run(token, { signal, api = API } = {}) {
         if (seat === null || !driven(game.seats[seat])) return;
 
         if (game.kind === 'phom') {
-          await wait(PHOM_THINK_MS);
+          if (game.seats[seat]?.house) {
+            await think(game, seat, { choices: 4, cards: game.hands[seat].length });
+          } else {
+            await wait(PHOM_THINK_MS);
+          }
           if (game.state !== 'playing' || game.turn !== seat) return;
 
           if (game.step === 'take') {
@@ -2799,7 +2986,11 @@ export async function run(token, { signal, api = API } = {}) {
             // the bãi looks like it came from nowhere.
             if (game.state === 'playing') {
               await pushGame(game);
-              await wait(PHOM_THINK_MS);
+              if (game.seats[seat]?.house) {
+                await think(game, seat, { choices: 3, cards: game.hands[seat].length });
+              } else {
+                await wait(PHOM_THINK_MS);
+              }
               if (game.state !== 'playing' || game.turn !== seat) return;
             }
           }
@@ -2818,7 +3009,11 @@ export async function run(token, { signal, api = API } = {}) {
           continue;
         }
 
-        await wait(THINK_MS);
+        await think(game, seat, {
+          choices: game.hands[seat].length,
+          cards: game.hands[seat].length,
+          first: !game.pile,
+        });
         // Something may have moved while it thought — a person left, the table ended, the sweep
         // took the turn. Whatever it worked out is about a table that is no longer this one.
         if (game.state !== 'playing' || game.turn !== seat) return;
@@ -2827,6 +3022,7 @@ export async function run(token, { signal, api = API } = {}) {
           lowest: lowestElsewhere(game.hands, seat),
           mustInclude: game.first ? game.opensWith : null,
           seen: game.seen,
+          slack: slackOf(game.seats[seat]),
         });
 
         if (cards) {
@@ -3392,6 +3588,266 @@ export async function run(token, { signal, api = API } = {}) {
       .map((screen) => pushTo(screen)));
   }
 
+  // ---- nhóm tay máy ---------------------------------------------------------------------------
+  //
+  // Phần **thi hành**. Mọi quyết định — ai thức, ngồi bàn nào, nghĩ bao lâu, ván nữa hay về —
+  // nằm ở `regulars.mjs`, thuần và kiểm được bằng một phép gọi hàm. Ở đây chỉ có việc gọi ba cửa
+  // vào bàn và đếm đồng hồ.
+
+  /// Cả pot: tổng ví của nhóm.
+  function potOf() {
+    let all = 0;
+    for (const one of house.roster()) all += scores.people[one.userId]?.gold ?? 0;
+    return all;
+  }
+
+  /**
+   * Gieo dòng sổ cho cả nhóm, **một lần mỗi con**.
+   *
+   * Bằng tay chứ không qua `rowFor`, và đó là cả điểm: `rowFor` phát vốn ban đầu cho mọi id lạ
+   * nó gặp, nên để nó tự đẻ ra hai mươi bốn dòng là mở một cái vòi ở chỗ không ai nghĩ là có
+   * vòi. Ở đây con số là `SEED_EACH` và nó **ra từ quyết định của người vận hành**, có một dòng
+   * log ghi lại.
+   *
+   * Chạy được nhiều lần mà không phát hai lần: đã có dòng thì thôi. Thêm con thứ hai mươi lăm
+   * thì đúng con ấy được gieo, hai mươi bốn con cũ giữ nguyên ví.
+   */
+  function seedHouse() {
+    let born = 0;
+    let given = 0;
+    for (const one of house.roster()) {
+      if (scores.people[one.userId]) {
+        // Tên có thể đổi giữa hai lần deploy; ví thì không.
+        scores.people[one.userId].name = one.displayName;
+        scores.people[one.userId].house = true;
+        continue;
+      }
+      scores.people[one.userId] = {
+        name: one.displayName, gold: house.SEED_EACH, started: true, house: true,
+        games: 0, first: 0, last: 0, claimed: '', adsDay: '', ads: 0, gave: 0,
+      };
+      born++;
+      given += house.SEED_EACH;
+    }
+    if (born) {
+      saveScores();
+      console.log(`gieo ${born} tay máy, ${gold(given)} vàng vào pot`);
+    }
+    return born;
+  }
+
+  /**
+   * Trần một cái ví, và phần vượt chảy ngược vào nhóm.
+   *
+   * Vì tay máy lên **bảng vàng chung**, một con mức cao đánh cả ngày sẽ leo lên đầu bảng rồi ở
+   * đó — và một cái bảng vàng do máy chiếm đầu là cái bảng không ai còn muốn leo, kể cả khi nó
+   * có nhãn.
+   *
+   * Phần vượt **không bị xoá**: `spill` là tổng bằng không và có test canh đúng câu ấy. Pot vẫn
+   * đóng, không một đồng nào sinh ra hay mất đi.
+   */
+  function capHouse() {
+    const rows = house.roster()
+      .map((one) => ({ userId: one.userId, gold: scores.people[one.userId]?.gold ?? 0 }));
+    const moved = house.spill(rows, house.CAP_EACH);
+    if (!moved.length) return;
+    for (const one of moved) {
+      const row = scores.people[one.userId];
+      if (row) row.gold += one.got;
+    }
+    saveScores();
+  }
+
+  /// Bàn nào đang chạy mà do nhà mở. Trần của nó là CPU, không phải tiền — bàn toàn tay máy là
+  /// tổng bằng không **trong chính cái pot**, không một đồng nào ra khỏi nhóm.
+  function houseTables() {
+    return [...games.values()].filter((game) => game.state === 'playing'
+      && game.seats.some((one) => one.house)).length;
+  }
+
+  /// Con nào đang rảnh, trong số đang thức.
+  function idleHouse(now) {
+    return house.awake(now, house.roster(), potOf())
+      .filter((one) => !seatedAt(one.userId))
+      .filter((one) => (scores.people[one.userId]?.gold ?? 0) >= MIN_STAKE);
+  }
+
+  /**
+   * Một nhịp của cả nhóm.
+   *
+   * Trên đồng hồ riêng chứ không nằm trong `sweep`: `sweep` năm giây một lần và lo việc dọn bàn
+   * chết, còn chỗ này lo việc người ngồi xuống — hai nhịp khác nhau, và nhập lại thì cái nào
+   * chậm sẽ kéo cái kia.
+   *
+   * Có khoá. Nó `await` ở mấy chỗ, và hai nhịp chồng lên nhau là hai lần cùng một con ngồi xuống
+   * hai cái bàn.
+   */
+  async function houseBeat() {
+    if (housing || !house.on() || !house.count()) return;
+    housing = true;
+    try {
+      const now = Date.now();
+      const pot = potOf();
+      if (!house.health(pot, now).open) return;
+
+      // Ván nữa, cho những con đã tới giờ. Trước hết, vì một cái bàn đang treo đợi là thứ có
+      // người thật ngồi nhìn.
+      for (const [userId, when] of [...waiting]) {
+        if (now < when) continue;
+        waiting.delete(userId);
+        const game = seatedAt(userId);
+        const seat = game ? seatOf(game, userId) : null;
+        if (!game || seat === null || game.state !== 'over') continue;
+
+        const one = house.roster().find((who) => who.userId === userId);
+        const row = rowFor(userId);
+        if (!one) continue;
+
+        if (row.gold < game.stake || house.again(one, { hands: game.round ?? 1 }) === 'leave') {
+          await standUp(game, one, seat);
+          continue;
+        }
+        game.ready.add(userId);
+        const people = game.seats.filter((seated) => !seated.bot && !seated.away).length;
+        if (game.ready.size >= people) {
+          game.seats = game.seats.filter((seated) => !seated.away);
+          if (game.seats.length < 2 && !game.solo) {
+            await endGame(game, 'a rematch with nobody left to play');
+          } else {
+            // Y như trên: một ván mới ở bàn toàn tay máy chơi trọn ván trước khi trả về.
+            letGo(startGame(game));
+          }
+        } else {
+          await pushGame(game);
+        }
+      }
+
+      // Những con vừa xong một ván, hẹn giờ bấm. Không ai bấm ngay lúc màn hình vừa hiện.
+      for (const game of games.values()) {
+        if (game.state !== 'over') continue;
+        for (const one of game.seats) {
+          if (!one.house || one.away) continue;
+          if (!waiting.has(one.userId)) {
+            waiting.set(one.userId, Date.now() + house.againAfter(one));
+          }
+        }
+      }
+
+      // Trần ví, mỗi nhịp. Rẻ, và làm ở đây thì không có chỗ nào trong ngày một con vượt trần mà
+      // bảng vàng kịp nhìn thấy.
+      capHouse();
+
+      const free = idleHouse(now);
+      if (!free.length) return;
+
+      // Chỉ bàn bài. Hai cái bát là chuyện khác hẳn — ở đó không có lượt, không có ghế cố định,
+      // và mỗi đồng tay máy đặt vào là 7,87% bốc hơi khỏi pot mà không ai được. Để sau, và quyết
+      // sau khi nhìn pot chạy thật vài hôm.
+      const cards = openTables()
+        .filter((table) => table.kind === 'tienlen' || table.kind === 'phom');
+
+      /**
+       * **Bàn có người thật trước, luôn luôn.**
+       *
+       * Cả nhóm này sinh ra vì một câu: *cái bàn tôi mở không có ai vào*. Một con tay máy đứng
+       * trước hai cái bàn — một của người, một của đồng loại — mà chọn cái của đồng loại thì nó
+       * vừa làm đúng cái việc nó được sinh ra để khỏi phải xảy ra.
+       */
+      const mine = (table) => {
+        const game = games.get(table.id);
+        return !!game && game.seats.some((one) => !one.house && !one.bot);
+      };
+      /**
+       * **Có bàn của người thì chỉ nhìn bàn của người.** Không phải xếp trước — là thứ duy nhất
+       * được nhìn.
+       *
+       * Bản đầu chỉ xếp bàn có người lên đầu danh sách rồi đưa cả danh sách sang `wants`, mà
+       * `wants` thì **tự xếp lại** theo bàn nào sắp đủ người — nên cái thứ tự ấy bị xoá sạch, và
+       * một cái bàn hai ghế của đồng loại (còn thiếu một) bao giờ cũng thắng cái bàn bốn ghế của
+       * người thật (còn thiếu ba). Hai phép xếp chồng lên nhau, phép sau thắng, và cái thua là
+       * đúng cái quan trọng hơn.
+       */
+      const withPeople = cards.filter(mine);
+      const tables = withPeople.length ? withPeople : cards;
+
+      /**
+       * Và luôn để lại vài con rảnh.
+       *
+       * Không có dòng này thì nhóm ngồi kín bàn của chính nó trong vài giây đầu — đo được ở bộ
+       * test: sáu con thức, sáu con ngồi hết, rồi người thật mở bàn và **không còn ai để vào**.
+       * `WAITING` canh số bàn *đang chờ*, mà một cái bàn đầy thì rời khỏi danh sách ấy, nên nó
+       * không canh được chuyện này.
+       *
+       * Cái để dành chỉ chặn việc ngồi vào **bàn của đồng loại**. Bàn có người thật thì bao giờ
+       * cũng vào được: giữ chỗ để rồi không dùng vào đúng việc phải dùng là giữ chỗ vô nghĩa.
+       */
+      const spare = Math.min(2, Math.max(0, free.length - 1));
+
+      /**
+       * Vài con một nhịp, không phải cả nhóm.
+       *
+       * Hai mươi con cùng ngồi xuống trong một khung hình là hai mươi con mà **không ai tìm
+       * thấy** cái bàn cả — một cái bàn vừa lên danh sách đã đầy ngay đọc ra là một cái bàn được
+       * lấp, không phải một cái bàn có người đến.
+       *
+       * Nhưng một con một nhịp thì một bàn bốn ghế mất cả phút mới đủ người, và trong cả phút ấy
+       * người thật nhìn thấy một cái bàn đứng im. Ba là chỗ ở giữa.
+       */
+      // Ai đã tới giờ ngồi thì ngồi. Trước hết, vì đó là việc đã quyết rồi.
+      for (const [userId, plan] of [...sitting]) {
+        if (now < plan.at) continue;
+        sitting.delete(userId);
+        const game = games.get(plan.gameId);
+        const one = house.roster().find((who) => who.userId === userId);
+        if (!game || !one || seatedAt(userId)) continue;
+        letGo(sitDown(game, one));
+      }
+
+      let left = free.length - sitting.size;
+      // Sáu con một nhịp, không phải ba. Ba là đủ khi mỗi nhịp `await` một quãng chờ; giờ quãng
+      // ấy được hẹn giờ nên một nhịp chỉ còn là mấy phép tính, và ba con một nhịp ba giây là một
+      // cái bàn bốn ghế đợi cả phút.
+      for (const one of free.slice(0, 6)) {
+        if (seatedAt(one.userId) || sitting.has(one.userId)) continue;
+        const row = rowFor(one.userId);
+
+        // Con này được nhìn những bàn nào: hết, hay chỉ những bàn có người thật.
+        const open = left > spare ? tables : tables.filter(mine);
+
+        const wants = house.wants(one, open, row.gold);
+        if (wants) {
+          if (!games.has(wants.gameId)) continue;
+          // Ghi xuống ý định rồi đi tiếp. Không `await` ở đây: cái quãng chờ ấy là của **một
+          // con**, còn cái vòng này là của **cả nhóm**.
+          sitting.set(one.userId, { gameId: wants.gameId, at: now + wants.afterMs });
+          left--;
+          continue;
+        }
+
+        // **Có bàn ngồi được mà lần này không ngồi thì đứng yên**, đừng đi mở bàn khác.
+        //
+        // Không có dòng này thì sáu con thức sẽ lần lượt bỏ lượt rồi mỗi con mở một cái bàn của
+        // riêng nó, và cái bàn người thật vừa mở đứng đó không ai vào — đúng cái thứ nhóm này
+        // sinh ra để chữa, làm ngược lại. Đo được: năm cái bàn trong tám giây.
+        if (house.fits(one, open, row.gold).length) continue;
+
+        // Không có bàn nào ngồi được thì mở một cái. Bàn không phòng — xem `newGame`.
+        const opening = house.opens(one, tables, row.gold, Math.random,
+          houseTables(), free.length);
+        if (!opening) continue;
+        const table = newGame(one, opening.size, opening.stake, opening.kind, null);
+        console.log(`${one.displayName} mở bàn ${opening.kind} ${opening.size} ghế`
+          + ` · ${gold(opening.stake)} · ${table.id}`);
+        await pushLobbies();
+        break;
+      }
+    } catch (problem) {
+      console.error(`nhóm tay máy: ${String(problem)}`);
+    } finally {
+      housing = false;
+    }
+  }
+
   /**
    * Moves a table on when nobody else will.
    *
@@ -3446,6 +3902,7 @@ export async function run(token, { signal, api = API } = {}) {
         const waiting = seatToPlay(game);
         if (waiting === null) continue;
         if (driven(game.seats[waiting])) {
+          if (game.thinkUntil && Date.now() < game.thinkUntil) continue;
           if (idle > BOARD_THINK_MS * 4) await boardBotTurn(game);
           continue;
         }
@@ -3465,7 +3922,12 @@ export async function run(token, { signal, api = API } = {}) {
 
         // A machine whose beat was lost — the process was busy, a push failed, an await landed
         // after the table had moved. Started again rather than waited on.
+        //
+        // `thinkUntil` là chỗ một tay máy nói "tôi đang nghĩ, và tôi nghĩ tới lúc ấy". Không có
+        // nó thì mọi lượt nghĩ dài hơn sáu giây đều bị chỗ này giật ra — mà nghĩ lâu là cả điểm
+        // của việc đánh giống người.
         if (driven(game.seats[seat])) {
+          if (game.thinkUntil && Date.now() < game.thinkUntil) continue;
           if (idle > THINK_MS * 3) await maybeBotTurn(game);
           continue;
         }

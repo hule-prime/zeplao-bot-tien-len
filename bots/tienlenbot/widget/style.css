@@ -448,6 +448,22 @@ body {
   cursor: pointer;
 }
 
+/* Cái dấu nói một cái tên trên bảng là máy.
+   Nhỏ và nhạt, vì nó là một chú thích chứ không phải một lời buộc tội — và nó đứng **sau** cái
+   tên, để cái người ta đọc trước vẫn là cái tên. */
+.row-house {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(233, 196, 106, .16);
+  border: 1px solid rgba(233, 196, 106, .3);
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  vertical-align: 1px;
+}
+
 .row-names {
   flex: 1;
   min-width: 0;

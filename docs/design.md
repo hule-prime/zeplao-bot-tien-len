@@ -1009,11 +1009,47 @@ cả lý do không viết một bản thứ hai cho tay máy: một bản sao s�
 chối, và ba cái quên ấy lần lượt là một tay máy ngồi hai bàn, một tay máy đánh bằng vàng nó không
 có, và một cái bàn năm ghế.
 
-### Cái này **chưa** làm gì cả
+### Nhóm tay máy, và bốn chỗ nó suýt hỏng
 
-Không có chỗ nào đặt `house: true`. Không có tay máy nào tồn tại. Mọi ghế vẫn `house: false`, nên
-`driven` trả lời y hệt `bot` và cả con bot chạy y như hôm qua — có chủ ý: nếu chặng sau phải lùi
-lại thì phần này vẫn ở lại được, vì nó chỉ làm code nói đúng hơn cái nó vốn làm.
+`regulars.mjs` là phần **quyết định** — ai thức, ngồi bàn nào, nghĩ bao lâu, ván nữa hay về — và
+nó thuần y như `rules/`. `houseBeat` trong `tienlenbot.mjs` là phần **thi hành**, không có một
+quyết định nào. Số con, mức gieo, sàn pot, nhịp, tốc độ: tất cả là biến môi trường, vì "nuôi bao
+nhiêu con" là một quyết định vận hành, và một quyết định vận hành mà phải deploy mới đổi được là
+một quyết định người ta thôi không đổi nữa.
+
+Bốn chỗ dưới đây đều **chạy được** mà sai, và không chỗ nào làm cái gì đỏ lên. Ghi ra vì cả bốn
+đều thuộc loại sẽ gặp lại.
+
+**Ghế đánh rơi mất mức.** `sitDown` dựng ghế từ `who`, và bản đầu chỉ chép `house` sang. Mất
+`level`, `pace`, `nerve` — nên `TIERS[undefined]` rơi về mức tốt nhất cho **tất cả** (thang bậc
+im lặng thành vô nghĩa) và `thinkFor` nhân với một `pace` không tồn tại nên trả `NaN`. Thứ duy
+nhất kêu lên là một dòng `TimeoutNaNWarning` của Node. Cái bàn vẫn chạy.
+
+**Rồi bản sửa đánh rơi `house`.** Sửa chỗ trên, và cái vá nuốt mất chính dòng `house: !!who.house`
+— nên `driven()` trả `false`, `maybeBotTurn` thoát ngay, và **cái bàn đứng im hoàn toàn**: bốn
+ghế còn nguyên mười ba lá, lượt đứng ở ghế hai, mãi mãi. Bài học không phải "cẩn thận hơn" mà là:
+*một cái vá thay cả khối thì phải đọc lại cả khối*.
+
+**Vòng điều phối đợi hết một ván bài.** `sitDown` gọi `startGame` khi ghế cuối được lấp, và
+`startGame` kết thúc bằng `await maybeBotTurn(game)` — cái vòng đi hộ mọi ghế do nhà cầm cho tới
+khi tới lượt một người thật. Ở bàn **toàn tay máy** thì không bao giờ tới lượt ai cả: nó chơi
+trọn ván rồi mới trả về. Chuyện ấy xưa nay vô hại vì người gọi luôn là một người vừa bấm nút.
+Đo được: bốn nhịp trong ba mươi lăm giây, bàn thứ hai không bao giờ được mở. Sửa bằng cách **thả
+tay** (`letGo`) — an toàn, vì mọi phép kiểm trong `sitDown` chạy thẳng một mạch trước cái `await`
+đầu tiên.
+
+**Hai phép xếp chồng lên nhau, phép sau thắng.** Vòng điều phối xếp bàn có người thật lên đầu,
+rồi đưa cả danh sách sang `wants` — mà `wants` **tự xếp lại** theo bàn nào sắp đủ người. Cái thứ
+tự kia bị xoá sạch, và một bàn hai ghế của đồng loại bao giờ cũng thắng một bàn bốn ghế của người
+thật. Sửa: bàn của người không phải *xếp trước*, mà là thứ **duy nhất** được nhìn khi có.
+
+### Và một câu về cuốn sổ, cho người viết test
+
+**Người về nhất được trả ngay lúc về nhất**, người thua trả khi họ về. Nên **giữa chừng một ván,
+cuốn sổ đúng là lệch** — cộng cả sổ lúc ấy thì đọc ra thành "vàng sinh ra từ không khí", và một
+buổi chiều đi tìm một cái lỗi không có thật bắt đầu như thế. Cột `games` chỉ nhích lên khi cả ván
+đã tính xong, nên nó là cái mốc nói "ván này đã đóng sổ". Cộng thêm `saveScores` hoãn hai giây,
+nên cái file còn đi sau cái ví trong bộ nhớ thêm một quãng nữa.
 
 ## Những chỗ từng sai
 

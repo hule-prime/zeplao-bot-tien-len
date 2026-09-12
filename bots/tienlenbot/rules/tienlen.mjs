@@ -542,8 +542,18 @@ export function costOf(move, hand, opts = {}) {
  *
  * Not a search over the game. Tiến lên rewards cutting your own hand up well and spending the
  * big cards on the right round, and both of those are answerable from one side of the table.
+ *
+ * `slack` là **lấy nước tốt thứ mấy**, và nó là cả cái thang bậc của nhóm tay máy.
+ *
+ * Mọi nước đi được đã xếp sẵn theo giá ở ngay dưới, nên "đánh dở hơn" không cần một con máy thứ
+ * hai — nó là lùi xuống vài bậc trong đúng cái danh sách ấy. Và đó cũng là cách một người đánh
+ * dở thật sự đánh dở: không phải đi nước điên, mà là **bỏ lỡ nước hay nhất**. Một con máy đánh
+ * dở bằng cách đi bừa thì đọc ra là hỏng, không đọc ra là kém.
+ *
+ * `slack = 0` là nguyên bản, và mọi chỗ gọi cũ đều không truyền gì cả.
  */
-export function chooseMove(hand, pile, { lowest = 13, mustInclude = null, seen = null } = {}) {
+export function chooseMove(hand, pile,
+  { lowest = 13, mustInclude = null, seen = null, slack = 0 } = {}) {
   let moves = movesFrom(hand).filter((move) => beats(move.shape, pile));
 
   if (mustInclude !== null) {
@@ -561,15 +571,21 @@ export function chooseMove(hand, pile, { lowest = 13, mustInclude = null, seen =
     .map((move) => ({ move, cost: costOf(move, hand, { plan, seen, pile, lowest }) }))
     .sort((a, b) => a.cost - b.cost);
 
-  const cheapest = scored[0];
+  /// Lùi xuống `slack` bậc, nhưng không bao giờ lùi ra khỏi danh sách.
+  const nth = (list) => list[Math.min(slack, list.length - 1)];
+
+  const cheapest = nth(scored);
 
   if (!pile) {
     // Leading. A bomb led into an empty table cuts nothing — it is four cards traded for one
     // round — so it is never the opening unless it is also the way out, which was answered
     // above, or unless somebody is one card from ending it.
     if (lowest <= 1) return cheapest.move.cards;
-    const ordinary = scored.find(({ move }) => !isBomb(move.shape));
-    return (ordinary ?? cheapest).move.cards;
+    // Lùi bậc **trong số những nước không phải bom**, chứ không lùi bậc rồi mới lọc bom: lọc
+    // sau thì một con mức thấp cầm bom sẽ rơi đúng vào cái bom, và dẫn bằng bom không phải là
+    // đánh dở — nó là đi một nước không ai đi, tức là đọc ra thành hỏng.
+    const ordinary = scored.filter(({ move }) => !isBomb(move.shape));
+    return (ordinary.length ? nth(ordinary) : cheapest).move.cards;
   }
 
   // Following, and able to. Whether it is worth it is the only question left.

@@ -1943,6 +1943,15 @@ function adsTick() {
   if (take) take.disabled = left > 0;
 }
 
+/// Cái dấu nhỏ cạnh một cái tên trên bảng. Một chỗ, vì hai cái bảng cùng dùng — và hai cái dấu
+/// khác nhau cho cùng một thứ là hai cái dấu người ta phải học hai lần.
+function mark(text) {
+  const tag = document.createElement('span');
+  tag.className = 'row-house';
+  tag.textContent = text;
+  return tag;
+}
+
 /// Đổi giữa hai cái bảng. Cùng bộ áo với hai cái tab của sòng bầu cua, vì cùng một việc.
 function boardTabs() {
   const tabs = document.createElement('nav');
@@ -2015,6 +2024,10 @@ function drawMerit(box) {
     const name = document.createElement('span');
     name.className = 'row-names';
     name.textContent = person.name || 'Ai đó';
+    // Cùng cái dấu với bảng vàng. Tay máy không phát công đức, nên hôm nay dòng này không bao
+    // giờ chạy — nhưng một cái bảng chịu được nó là một cái bảng không nói dối vào cái ngày ai
+    // đó quyết định cho nhóm ấy phát tiền.
+    if (person.house) name.append(mark('máy'));
     // Điểm, không kèm số vàng đã phát. Hai con số mà một cái chia ra là cái kia thì cái thứ hai
     // chỉ làm cái thứ nhất khó đọc hơn — vàng đã phát nằm ở lịch sử ngay bên dưới, từng lần một.
     const score = document.createElement('span');
@@ -2084,6 +2097,16 @@ function drawBrowse() {
       const name = document.createElement('span');
       name.className = 'row-names';
       name.textContent = person.name || 'Ai đó';
+      // Máy thì nói là máy, ngay cạnh cái tên.
+      //
+      // Sòng này có một nhóm người chơi do nhà chạy — có ví thật, cược thật, ăn thua thật — và
+      // chuyện ấy đã được nói ra công khai. Nhưng **bảng vàng là thứ duy nhất trong cả cái sòng
+      // này người ta tin**, và một cái tên máy đứng trên đó mà không nói nó là máy thì cái bảng
+      // ấy nói dối, dù bên ngoài có nói thật tới đâu.
+      //
+      // Ở bàn chơi thì không có dấu này: ở đó nó là một người ngồi xuống. Chỗ để công bố là chỗ
+      // để so bì, không phải chỗ để chơi.
+      if (person.house) name.append(mark('máy'));
       // Gold and nothing else. How many hands it took is a different question, and a column
       // nobody is ranked by is a column that only makes the one they are ranked by harder to
       // read down the page.
