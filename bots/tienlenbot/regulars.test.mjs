@@ -28,7 +28,7 @@ import {
   SEED_EACH, CAP_EACH, FLOOR, spill,
   hourIn, health, awake,
   ceiling, fits, wants, opens, maxTables, waiting,
-  SPEED, thinkFor, again, againAfter, today,
+  SPEED, thinkFor, again, againAfter, today, KINDS,
 } from './regulars.mjs';
 import { MACHINES, TURN_MS } from './rules/tienlen.mjs';
 import { MIN_STAKE, dayIn } from './economy.mjs';
@@ -761,7 +761,11 @@ test('bàn nó mở không bao giờ to hơn trần hay to hơn ví', () => {
         assert.ok(open.stake <= ceiling(one, gold), `mở bàn ${open.stake} quá trần của ${one.userId}`);
         assert.ok(open.stake <= gold, `mở bàn ${open.stake} với ${gold} vàng trong ví`);
         assert.ok([2, 4].includes(open.size), 'bàn ba ghế không có trong sòng này');
-        assert.ok(['tienlen', 'phom'].includes(open.kind));
+        // Bốn trò, không phải hai: hai bàn cờ đã được mở ra cho nhóm. Bàn cờ thì luôn hai ghế —
+    // đó là cả cái bàn cờ — nên chỗ này canh luôn câu ấy.
+    assert.ok(KINDS.map(([kind]) => kind).includes(open.kind), `trò lạ: ${open.kind}`);
+    if (open.kind === 'chess' || open.kind === 'xiangqi') assert.equal(open.size, 2);
+    assert.ok(['tienlen', 'phom', 'chess', 'xiangqi'].includes(open.kind));
       }
     }
   }

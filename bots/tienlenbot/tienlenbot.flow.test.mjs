@@ -2300,9 +2300,13 @@ test('công đức chia cho người, không chia cho máy', async () => {
   }, { c1: ['u1'], c2: ['u2'] }), { still: true });
 });
 
-test('bảng vàng nói ra hàng nào là máy', async () => {
-  // Bảng vàng là thứ duy nhất trong cả cái sòng này người ta tin. Một cái tên máy đứng trên đó mà
-  // không nói nó là máy thì cái bảng ấy nói dối, dù bên ngoài có nói thật tới đâu.
+test('bảng vàng biết hàng nào là máy, dù không vẽ nó ra', async () => {
+  // Cái dấu "máy" cạnh tên **đã bỏ** — chủ sòng quyết thế, và chuyện máy vào chơi đã nói ra công
+  // khai từ trước nên nó không phải chỗ duy nhất để nói.
+  //
+  // Nhưng cái cờ vẫn đi kèm mỗi hàng, và cái test này vẫn canh nó, vì cột ấy là thứ trả lời được
+  // câu "nhà đang lãi hay lỗ" mà không phải đi tra từng id — và vào cái ngày ai đó muốn vẽ nó ra
+  // lần nữa thì thứ phải làm là một dòng ở trang, không phải một vòng đi sửa lại cả đường dây.
   ledger();
   await withHouse(6, () => withBot(async (app) => {
     app.asks('u1', 'c1');

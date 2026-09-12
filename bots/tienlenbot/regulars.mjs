@@ -62,7 +62,13 @@ export const on = () => process.env.TIENLEN_HOUSE !== '0';
 export const TIERS = {
   'so-cap': { name: 'Sơ cấp', slack: 2, depth: 1, nodes: 6_000 },
   kha: { name: 'Khá', slack: 1, depth: 3, nodes: 60_000 },
-  sieu: { name: 'Siêu máy tính', slack: 0, depth: 5, nodes: 400_000 },
+  // Bốn, không phải sáu.
+  //
+  // Con bot này **chạy một luồng** và phục vụ mọi cái bàn khác trên cùng luồng ấy — `search.mjs`
+  // đã nói thẳng câu ấy từ đầu: *"một lượt nghĩ dài là mọi bàn khác đứng im trong ngần ấy"*. Độ
+  // sâu sáu tới tám là một đối thủ thật sự khó, và nó là việc của `worker_threads`, không phải
+  // của chỗ này. Bốn thì hơn hẳn ba mà vẫn nằm trong ngân sách một lượt.
+  sieu: { name: 'Siêu máy tính', slack: 0, depth: 4, nodes: 120_000 },
 };
 
 export const LEVELS = Object.keys(TIERS);
@@ -88,16 +94,61 @@ export const LEVELS = Object.keys(TIERS);
  * ở số tên có — thà ít hơn con số xin còn hơn hai con trùng tên, hay một cái tên có đánh số đằng
  * sau, thứ mà nhìn một cái là biết.
  */
-const NAMES = [
-  'Hùng', 'Mai', 'Quân', 'Linh', 'Thắng', 'Trang', 'Dũng', 'Hà',
-  'Nam', 'Vy', 'Khoa', 'Thu', 'Bảo', 'Ngọc', 'Sơn', 'Yến',
-  'Tuấn', 'Phương', 'Đạt', 'Nhung', 'Hải', 'Loan', 'Kiên', 'Thảo',
-  'Long', 'Huyền', 'Phúc', 'Hạnh', 'Tùng', 'Nga', 'Vinh', 'Diệp',
-  'Cường', 'Xuân', 'Hiếu', 'Oanh', 'Trung', 'Lan', 'Tâm', 'Chi',
-  'Thành', 'Dương', 'Lâm', 'Quyên', 'Hoàng', 'Tú', 'Nghĩa', 'Hiền',
-  'Duy', 'Ánh', 'Minh Anh', 'Bích', 'Toàn', 'Giang', 'Việt', 'Thuý',
-  'Đức', 'Nhi', 'Khánh', 'Uyên', 'Lộc', 'Trâm', 'Phong', 'Tuyết',
+/**
+ * Ai trong nhóm: **một khoá bền, và một cái tên đổi được**.
+ *
+ * Hai cột chứ không một, và đó là cả điểm. Bản đầu suy `userId` ra thẳng từ cái tên — nên đổi
+ * tên là đẻ ra một dòng sổ mới và bỏ lại cái ví cũ **mồ côi**: hai mươi bốn dòng, bảy triệu hai
+ * nằm lại trong sổ mà không ai đứng tên, rồi nhóm được gieo lần nữa. Tức là in tiền, bằng một
+ * thao tác đọc ra như chuyện sửa chính tả.
+ *
+ * Khoá của hai mươi bốn con đầu **giữ nguyên** cái slug chúng đã mang từ lần gieo đầu tiên
+ * (`house:hung`, `house:mai`, …), vì đó là cái đang nằm trong sổ trên server. Chúng đổi tên hiển
+ * thị, không đổi ví.
+ *
+ * Còn cái tên thì phải đọc ra **như tên người ta tự đặt trên một cái app chat**, chứ không phải
+ * như một danh sách do ai đó ngồi liệt kê: có tên đầy đủ, có tên cụt, có nickname, có tên viết
+ * thường không dấu, có tên kèm năm sinh, có tên trêu. Hai mươi bốn cái tên đơn âm xếp cạnh nhau
+ * đọc ra là một danh sách — và một danh sách thì nhìn một cái là biết.
+ */
+const PEOPLE = [
+  // Hai mươi bốn khoá đầu: đã có ví trên server, không được đổi.
+  ['hung', 'Hùng Kều'],        ['mai', 'mai chi'],
+  ['quan', 'Quân Ròm'],        ['linh', 'Linh 2k1'],
+  ['thang', 'Thắng Bụi'],      ['trang', 'Trang Trang'],
+  ['dung', 'dũng nè'],         ['ha', 'Hà My'],
+  ['nam', 'Nam Lì'],           ['vy', 'Vỹ Kòi'],
+  ['khoa', 'Khoa Nguyễn'],     ['thu', 'Thu Ba'],
+  ['bao', 'Bảo Bối'],          ['ngoc', 'ngocanh98'],
+  ['son', 'Sơn Ca'],           ['yen', 'Yến Nhi'],
+  ['tuan', 'Tuấn Anh'],        ['phuong', 'Phương Anh'],
+  ['dat', 'Đạt Còi'],          ['nhung', 'nhung xinh'],
+  ['hai', 'Hải Bánh'],         ['loan', 'Loan Xù'],
+  ['kien', 'Kiên Đại Ca'],     ['thao', 'Thảo Mèo'],
+  // Từ đây trở đi là con mới, khoá đặt sao cũng được.
+  ['long', 'Long Ken'],        ['huyen', 'huyền trang'],
+  ['phuc', 'Phúc Bụng Bự'],    ['hanh', 'Hạnh Nhân'],
+  ['tung', 'Tùng Sói'],        ['nga', 'Nga My'],
+  ['vinh', 'Vinh 97'],         ['diep', 'Điệp Viên'],
+  ['cuong', 'Cường Đô La'],    ['xuan', 'xuân xoăn'],
+  ['hieu', 'Hiếu PC'],         ['oanh', 'Oanh Vàng'],
+  ['trung', 'Trung Ruồi'],     ['lan', 'Lan Ngọc'],
+  ['tam', 'Tâm Sự'],           ['chi', 'Chi Pu Fan'],
+  ['thanh', 'Thành Đạt'],      ['duong', 'dương qua'],
+  ['lam', 'Lâm Tây'],          ['quyen', 'Quyên Béo'],
+  ['hoang', 'Hoàng Tử Ếch'],   ['tu', 'Tú Xì'],
+  ['nghia', 'Nghĩa Địa'],      ['hien', 'Hiền Khô'],
+  ['duy', 'Duy Mạnh'],         ['anh', 'Ánh Dương'],
+  ['minhanh', 'Minh Anh'],     ['bich', 'bích ngọc'],
+  ['toan', 'Toàn Thắng'],      ['giang', 'Giang Còi'],
+  ['viet', 'Việt Cận'],        ['thuy', 'Thuý Kiều'],
+  ['duc', 'Đức Bo'],           ['nhi', 'Nhi Nhí'],
+  ['khanh', 'Khánh Skill'],    ['uyen', 'uyên uyên'],
+  ['loc', 'Lộc Phát'],         ['tram', 'Trâm Anh'],
+  ['phong', 'Phong Trần'],     ['tuyet', 'Tuyết Rơi'],
 ];
+
+const NAMES = PEOPLE.map(([, name]) => name);
 
 /// Bỏ dấu, để `house:hùng` không thành một cái id có dấu tiếng Việt trong đường dẫn và trong log.
 const slugOf = (name) => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -146,8 +197,9 @@ const SPREAD = [
  * không bốc ngẫu nhiên — một người quen thì tuần sau vẫn là người ấy, và một cái test bốc lại
  * mỗi lần chạy là một cái test không canh được gì.
  */
-const ALL = NAMES.map((name, at) => ({
-  userId: `house:${slugOf(name)}`,
+const ALL = PEOPLE.map(([key, name], at) => ({
+  // Khoá, không phải cái tên. Đổi tên là chuyện của hiển thị; đổi khoá là bỏ một cái ví.
+  userId: `house:${key}`,
   displayName: name,
   level: SPREAD[at % SPREAD.length],
   house: true,
@@ -499,11 +551,45 @@ export function opens(one, tables, gold, rng = Math.random, running = 0, free = 
   const room = Math.min(4, free + 1);
   if (room < 2) return null;
 
+  /**
+   * Trò nào. **Cả bốn**, không riêng tiến lên.
+   *
+   * Bàn cờ chỉ có hai ghế, nên nó không hỏi tới `room` — nhưng vẫn cần ít nhất hai người, và
+   * `room < 2` đã chặn ở trên.
+   */
+  const kind = pickKind(rng);
+  if (kind === 'chess' || kind === 'xiangqi') {
+    return { size: 2, stake: stakes[Math.floor(rng() * stakes.length)], kind };
+  }
+
   return {
     size: rng() < 0.55 ? 2 : Math.min(4, room),
     stake: stakes[Math.floor(rng() * stakes.length)],
-    kind: rng() < 0.75 ? 'tienlen' : 'phom',
+    kind,
   };
+}
+
+/**
+ * Bàn nào được mở nhiều hơn bàn nào.
+ *
+ * Tiến lên nhiều nhất vì nó là trò của cái sòng này; hai bàn cờ ít hơn vì một ván cờ dài hơn một
+ * ván bài rất nhiều — sáu mươi giây một nước ở đời thật — nên một cái bàn cờ chiếm hai con trong
+ * cả chục phút, và mở nhiều thì cả nhóm ngồi im ở mấy bàn cờ.
+ */
+export const KINDS = [
+  ['tienlen', 0.44],
+  ['phom', 0.28],
+  ['chess', 0.16],
+  ['xiangqi', 0.12],
+];
+
+export function pickKind(rng = Math.random) {
+  let at = rng();
+  for (const [kind, share] of KINDS) {
+    if (at < share) return kind;
+    at -= share;
+  }
+  return 'tienlen';
 }
 
 // ---- nhịp người -------------------------------------------------------------------------------
